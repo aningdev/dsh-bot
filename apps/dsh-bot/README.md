@@ -56,26 +56,18 @@ To develop a Electron app, you probably will need some UI, test, formatter, styl
 
 ## How to use
 
-Requires Node.js 22.17.0 or newer and Bun. Main process changes automatically restart the app during development.
+Use the Node.js and pnpm versions declared in the repository root `package.json`. This application has an independent pnpm workspace and lockfile. Its hoisted dependency layout supports Electron Forge without changing the upstream workspace layout. Run the following commands from the repository root.
 
-1. Clone this repository
+1. Install application dependencies:
 
 ```bash
-git clone https://github.com/LuanRoger/dah-bot.git
+pnpm --dir apps/dsh-bot install --frozen-lockfile
 ```
 
-Or use it as a template on GitHub
-
-2. Install dependencies
+2. Run the app from the repository root:
 
 ```bash
-bun install
-```
-
-3. Run the app
-
-```bash
-bun run start
+pnpm --dir apps/dsh-bot run start
 ```
 
 Now you can go directly to `/src/routes/index.tsx` and modify the app as you want.
@@ -87,11 +79,9 @@ Now you can go directly to `/src/routes/index.tsx` and modify the app as you wan
 Vite Plus configures linting, formatting, and unit tests in [`vite.config.ts`](./vite.config.ts). Electron Forge uses the separate main, preload, and renderer Vite configs.
 
 ```bash
-bun run check       # Check formatting, lint, and types
-bun run fix         # Apply formatting and lint fixes
-bun run typecheck   # Check TypeScript only
-bun run test        # Run unit tests once
-bun run test:watch  # Watch unit tests
+pnpm --dir apps/dsh-bot run check       # Check and fix formatting, lint, and types
+pnpm --dir apps/dsh-bot run test        # Run unit tests once
+pnpm --dir apps/dsh-bot run test:watch  # Watch unit tests
 ```
 
 ## Auto update

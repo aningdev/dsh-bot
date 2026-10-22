@@ -2,6 +2,10 @@
   "name": "dah-bot",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "description": "Electron Forge with shadcn-ui (Vite + Typescript)",
   "license": "MIT",
   "author": "ROG <zhuxining@outlook.com>",

@@ -2,6 +2,10 @@
 
 DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.
 
+## dsh-bot 开发与上游同步
+
+本项目基于 DeepSeek Harness 开发 `apps/dsh-bot` 应用。为便于持续同步上游更新，尽量将应用代码、配置和依赖变更集中在 `apps/dsh-bot/`，减少对上游已有代码和公共配置的修改。具体开发规范见 [apps/dsh-bot/AGENTS.md](apps/dsh-bot/AGENTS.md)。
+
 ## Pre-stable APIs and released Session data
 
 Public APIs are pre-stable; update every consumer. Follow [version/status](docs/session-format-status.md) and [type acknowledgements](docs/cookbook/reviewing-persistence-type-changes.md). [Adjacent migration](.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.md) may add a version-named successor but never move, overwrite, or delete committed generations; predecessors imply neither fallback nor downgrade support. SQLite uses monotonic `SCHEMA_VERSION`.

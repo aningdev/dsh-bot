@@ -12,7 +12,7 @@ jobs:
       - name: Checkout git repo
         uses: actions/checkout@v6
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v4
 
       - name: Install Node
         uses: actions/setup-node@v6
@@ -20,9 +20,9 @@ jobs:
           node-version: 24
 
       - name: Install and build
-        run: bun install --frozen-lockfile
+        run: pnpm --dir apps/dsh-bot install --frozen-lockfile
 
       - name: Publish Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun run release
+        run: pnpm --dir apps/dsh-bot run release
