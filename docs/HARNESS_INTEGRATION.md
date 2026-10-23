@@ -14,13 +14,13 @@
 
 Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由应用 Cordis 插件的 effect 管理。进程服务继续由 profile 装配；需要服务隔离的预设提供者与消费者遵循上游同一 isolation group 的要求。Bot 名下的配置独立不等于所有服务都在进程内独立。
 
-[AgentPresetRegistry.register](../../references/deepseek-harness/packages/preset/agent-preset-registry/src/index.ts) 接受配置并返回释放函数，重复标识会被拒绝。[mount](../../references/deepseek-harness/packages/preset/agent-preset-registry/src/index.ts) 将未发布 Agent 绑定到当前版本；旧 Agent 保留旧版本，注销声明也不直接撤销其已有绑定。修改 Bot 因而不能只覆盖预设声明。
+[AgentPresetRegistry.register](../references/deepseek-harness/packages/preset/agent-preset-registry/src/index.ts) 接受配置并返回释放函数，重复标识会被拒绝。[mount](../references/deepseek-harness/packages/preset/agent-preset-registry/src/index.ts) 将未发布 Agent 绑定到当前版本；旧 Agent 保留旧版本，注销声明也不直接撤销其已有绑定。修改 Bot 因而不能只覆盖预设声明。
 
 恢复使用 Bot 保存的配置重新注册其稳定标识，再在 setup 中 mount。模型与参数通过公开 AgentOptions 和需要时的 installModelSelection 配置；后者还负责模型切换提示与下一次请求选择，不能让官方全局默认模型覆盖 Bot 自身选择。
 
 ## 同一 Session 上应用新配置
 
-[AgentRegistry.create/resume](../../references/deepseek-harness/packages/core/agent/src/index.ts) 返回 AgentHandle，只有持有句柄的创建方可以执行完整销毁。ResumeAgentOptions.setup 在发布前装配新的 Agent 作用域；[AgentLoop](../../references/deepseek-harness/packages/core/agent-loop/src/index.ts) 使用 resumeSessionId 打开原持久日志，setup 成功后才发布。
+[AgentRegistry.create/resume](../references/deepseek-harness/packages/core/agent/src/index.ts) 返回 AgentHandle，只有持有句柄的创建方可以执行完整销毁。ResumeAgentOptions.setup 在发布前装配新的 Agent 作用域；[AgentLoop](../references/deepseek-harness/packages/core/agent-loop/src/index.ts) 使用 resumeSessionId 打开原持久日志，setup 成功后才发布。
 
 应用建议的保存流程如下。这个流程是实现方案，配置文件提交、并发与崩溃恢复尚未在应用中实现。
 
@@ -38,9 +38,9 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 ## Remote/API 接入约束
 
-[Session Controller 的 Agent 控制器](../../references/deepseek-harness/packages/api/session-controller/src/agent.ts) 在内部 create/resume 后仅保留 Agent，没有向应用返回 AgentHandle。应用无法先让官方控制器任意创建 Agent，再取得其销毁能力。官方 agentPresets.select 只允许空白 Session，不能用于替换已经产生历史的会话；recompose 的公开说明同样限定为空白 Agent。
+[Session Controller 的 Agent 控制器](../references/deepseek-harness/packages/api/session-controller/src/agent.ts) 在内部 create/resume 后仅保留 Agent，没有向应用返回 AgentHandle。应用无法先让官方控制器任意创建 Agent，再取得其销毁能力。官方 agentPresets.select 只允许空白 Session，不能用于替换已经产生历史的会话；recompose 的公开说明同样限定为空白 Agent。
 
-[历史跟随](../../references/deepseek-harness/packages/api/session-controller/src/history.ts) 对冷会话发送快照后可能触发后台恢复。模型选择接口还会写入官方默认模型，不直接等价于更新 Bot 的独立配置。
+[历史跟随](../references/deepseek-harness/packages/api/session-controller/src/history.ts) 对冷会话发送快照后可能触发后台恢复。模型选择接口还会写入官方默认模型，不直接等价于更新 Bot 的独立配置。
 
 推荐应用 Bot 生命周期插件从首次创建开始持有所有 AgentHandle。复用官方查询、跟随、审批和输入能力时，所有会激活或修改 Bot 的入口都必须受同一个生命周期所有者协调，包括历史跟随触发的冷恢复、文件引用与上传等间接入口。不能只串行化保存按钮，也不能在配置替换窗口直接暴露未受协调的官方接口。
 

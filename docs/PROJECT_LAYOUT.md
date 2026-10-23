@@ -1,14 +1,14 @@
 # dsh-bot 架构与工作区方案
 
-本文件汇总已确认的架构决定，给出依赖方向、进程关系和分阶段实施草案。产品行为以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 为准，术语见 [GLOSSARY.md](./GLOSSARY.md)，上游依据见 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。整体依赖图和实施顺序待最终确认，本文不表示对应实现已经完成。
+本文件汇总已确认的架构决定，给出依赖方向、进程关系和分阶段实施草案。产品行为以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 为准，术语见 [GLOSSARY.md](../GLOSSARY.md)，上游依据见 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。整体依赖图和实施顺序待最终确认，本文不表示对应实现已经完成。
 
 ## 当前工程与上游依赖
 
 当前桌面源码位于 apps/dsh-bot，packages/harness-runtime 管理固定版本 Harness npm 依赖与 CLI。目标桌面目录为 apps/desktop，目录、脚本与现有文档尚未迁移；其余目标工作区随实际实现建立。
 
-产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../../patches/README.md)。
+产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../patches/README.md)。
 
-引擎从 npm 公开入口消费，版本以 [运行时清单](../../packages/harness-runtime/package.json) 为准。直接使用的 DSH 包锁定同一发行版，Cordis/Loader 使用该发行版要求的相容版本；各包 latest 标签不能作为相容依据。需要共享 Host 实例的服务在插件中使用 peerDependencies，并保留构建外部引用。
+引擎从 npm 公开入口消费，版本以 [运行时清单](../packages/harness-runtime/package.json) 为准。直接使用的 DSH 包锁定同一发行版，Cordis/Loader 使用该发行版要求的相容版本；各包 latest 标签不能作为相容依据。需要共享 Host 实例的服务在插件中使用 peerDependencies，并保留构建外部引用。
 
 上游固定在 references/deepseek-harness Git submodule，仅供阅读、调试与兼容性研究，产品构建不从其 src 或 lib 导入。参考指针更新与 npm 引擎升级分别管理。独立工程将上游跟进集中在依赖升级和兼容验证，产品拥有自己的 UI、Bot 规则与交付流程。
 
@@ -50,7 +50,7 @@ flowchart LR
 
 macOS 用用户级 launchd LaunchAgent 管理 Runner，支持异常自动拉起与可选登录自启；主动停止后保持停止，直到再次启动或满足已启用的登录自启条件。桌面先连接已有 Runner，必要时请求启动；退出桌面不停止 Runner，客户端断线不终止已接纳执行。Bot 执行实例属于同一个 Runner，工具等能力仍可按 Harness 自身机制创建子进程。
 
-首版安装包携带可独立运行的后台及所需运行时，用户无需系统 Node、Bun、pnpm 或 dsh。运行时的具体供给、用户级安装位置、版本切换、签名和有序升级停止需要打包原型验证。Runner 自动重启遵守产品恢复规则，不自动重发输入或重复工具。
+首版安装包携带可独立运行的后台及所需运行时，用户无需系统 Node、Bun、pnpm 或 dsh。Runner 运行时随桌面安装包一起更新：升级先有序停止 Runner，替换运行时后由 launchd 重新拉起，进行中的工作按恢复规则处理；不提供独立于桌面的后台升级路径。运行时的具体供给、用户级安装位置、签名和停止时序需要打包原型验证。Runner 自动重启遵守产品恢复规则，不自动重发输入或重复工具。
 
 ## Bot 产品服务的职责
 

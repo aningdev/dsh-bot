@@ -1,6 +1,6 @@
 # dsh-bot
 
-基于 Electron、React 和 TypeScript 的 dsh-bot 桌面工作区，提供原生窗口控件、三栏布局、类型安全的进程通信，以及异步数据和 UI 状态管理。仓库结构与统一入口见 [根 README](../../README.md)，Bot 产品目标见 [产品蓝图](./PRODUCT_BLUEPRINT.md)。
+基于 Electron、React 和 TypeScript 的 dsh-bot 桌面工作区，提供原生窗口控件、三栏布局、类型安全的进程通信，以及异步数据和 UI 状态管理。仓库结构与统一入口见 [根 README](../../README.md)，Bot 产品目标见 [产品蓝图](../../docs/PRODUCT_BLUEPRINT.md)。
 
 ## 技术栈
 
@@ -48,7 +48,7 @@ tests/
 scripts/      构建与验证脚本
 ```
 
-文件路由位于 `src/renderer/routes`，路由插件自动生成 `src/renderer/routeTree.gen.ts`。工程约束见 [`AGENTS.md`](./AGENTS.md)，领域术语见 [`GLOSSARY.md`](./GLOSSARY.md)。
+文件路由位于 `src/renderer/routes`，路由插件自动生成 `src/renderer/routeTree.gen.ts`。工程约束见 [`AGENTS.md`](./AGENTS.md)，领域术语见 [`GLOSSARY.md`](../../GLOSSARY.md)。
 
 TypeScript 使用三份配置：[`tsconfig.json`](./tsconfig.json) 保存公共选项并声明项目引用；[`tsconfig.node.json`](./tsconfig.node.json) 检查 main、preload、工具脚本和测试；[`tsconfig.renderer.json`](./tsconfig.renderer.json) 检查 renderer 与 shared。两个子项目均使用 `noEmit`，不生成声明文件。renderer 通过 `import type` 引用 main router，为 oRPC 推导类型。
 

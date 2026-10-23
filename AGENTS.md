@@ -1,6 +1,6 @@
 # dsh-bot 开发约束
 
-本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)，术语见 [术语表](apps/dsh-bot/GLOSSARY.md)；修改工作区划分、profile、客户端连接或打包前阅读 [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)，修改桌面应用前阅读 [应用约束](apps/dsh-bot/AGENTS.md)。
+本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)，术语见 [术语表](GLOSSARY.md)；修改工作区划分、profile、客户端连接或打包前阅读 [架构与工作区方案](docs/PROJECT_LAYOUT.md)，修改桌面应用前阅读 [应用约束](apps/dsh-bot/AGENTS.md)。
 
 ## 目录归属
 
@@ -9,6 +9,7 @@
 - `references/`：固定提交的上游 Git submodule，只供阅读、调试和兼容性研究，不参与产品安装、构建和发布。
 - `.github/workflows/`：整个产品仓库的检查、测试和发布入口。
 - `patches/`：由 Bun 生成并在根清单声明的第三方兼容补丁，说明保留原因和移除条件。
+- `GLOSSARY.md` 与 `docs/`：领域术语、产品意图、架构决定与接入证据；ADR 放入 `docs/adr/`。
 
 ## 依赖与上游
 
@@ -25,3 +26,17 @@
 - 桌面源码、IPC、安全、打包与测试约束以应用 AGENTS.md 为准。文档描述当前实现，尚未实现的产品要求明确标记。
 - 验证命令以根和所属工作区 package.json 为准；至少执行受影响工作区检查和行为验证。依赖树、工作区或打包变化需要验证成品启动及现有 E2E。
 - 只报告实际执行的检查及其结果；区分本机、其他平台与真实模型尚未验证的部分。
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues in `zhuxining/dsh-bot`, driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles map to the same label strings: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` and one `docs/adr/` cover every app and package. See `docs/agents/domain.md`.

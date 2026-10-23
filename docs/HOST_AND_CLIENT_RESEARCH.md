@@ -4,7 +4,7 @@
 
 ## Harness Host 的职责分层
 
-Host 是承载 Cordis 服务与插件的执行侧环境。host/ 目录中的包主要提供 HTTP(S)、静态前端、目录选择和应用打开等 GUI 宿主能力；完整执行能力由 profile 组合引擎和其他插件提供。Runner 可以通过自己的命名 profile 装配这些能力。来源：[Host 包地图](../../references/deepseek-harness/packages/host/README.md)、[Web 应用组合](../../references/deepseek-harness/packages/bundle/web-app/README.md)。
+Host 是承载 Cordis 服务与插件的执行侧环境。host/ 目录中的包主要提供 HTTP(S)、静态前端、目录选择和应用打开等 GUI 宿主能力；完整执行能力由 profile 组合引擎和其他插件提供。Runner 可以通过自己的命名 profile 装配这些能力。来源：[Host 包地图](../references/deepseek-harness/packages/host/README.md)、[Web 应用组合](../references/deepseek-harness/packages/bundle/web-app/README.md)。
 
 | 层           | 上游实现               | 职责                                             |
 | ------------ | ---------------------- | ------------------------------------------------ |
@@ -14,15 +14,15 @@ Host 是承载 Cordis 服务与插件的执行侧环境。host/ 目录中的包�
 | 应用事件选择 | api-remotes            | 选择并转发 Host 事件、装配客户端 Remote 贡献     |
 | 会话业务     | api-session-controller | Agent 激活、会话操作、历史跟随与流式状态         |
 
-这些层并非只能由官方 UI 使用。Connection 的客户端安装接口可接收自定义 rpc、fetch、流和 WebSocket 工厂；Gateway 的 invoke、stream 接收显式 Peer，与具体物理载体分离。未来 Relay 可以在连接层评估适配，无需改变工具插件的调用机制。来源：[客户端传输选项](../../references/deepseek-harness/packages/client/connection/src/client/index.ts)、[Host Connection](../../references/deepseek-harness/packages/client/connection/src/index.ts)、[Gateway 调用](../../references/deepseek-harness/packages/api/gateway/src/index.ts)、[调用请求类型](../../references/deepseek-harness/packages/api/gateway/src/types.ts)。
+这些层并非只能由官方 UI 使用。Connection 的客户端安装接口可接收自定义 rpc、fetch、流和 WebSocket 工厂；Gateway 的 invoke、stream 接收显式 Peer，与具体物理载体分离。未来 Relay 可以在连接层评估适配，无需改变工具插件的调用机制。来源：[客户端传输选项](../references/deepseek-harness/packages/client/connection/src/client/index.ts)、[Host Connection](../references/deepseek-harness/packages/client/connection/src/index.ts)、[Gateway 调用](../references/deepseek-harness/packages/api/gateway/src/index.ts)、[调用请求类型](../references/deepseek-harness/packages/api/gateway/src/types.ts)。
 
-产品服务也能通过标准插件机制加入这套调用体系：Host 服务继承 TypertRemoteService，用 Remote 声明可调用方法，提供生成的 typert 与 remote 入口，客户端装配相应贡献。独立工程仍需验证公开生成工具、产物和客户端装配，不能直接照搬上游工作区的构建命令。来源：[增加 Remote API](../../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)。
+产品服务也能通过标准插件机制加入这套调用体系：Host 服务继承 TypertRemoteService，用 Remote 声明可调用方法，提供生成的 typert 与 remote 入口，客户端装配相应贡献。独立工程仍需验证公开生成工具、产物和客户端装配，不能直接照搬上游工作区的构建命令。来源：[增加 Remote API](../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)。
 
 ## 复用时仍需解决的两项问题
 
-Session Controller 自己控制 Agent 激活。其恢复路径调用 agents.resume 后只返回 agent；历史 follow 在输出快照后可调用 promote 触发恢复。Bot 配置即时替换需要应用持有 AgentHandle，因此必须验证统一的生命周期协调方式。单纯在接口前增加 Bot ID 映射不足以解决该问题。来源：[Agent 控制器](../../references/deepseek-harness/packages/api/session-controller/src/agent.ts)、[历史跟随](../../references/deepseek-harness/packages/api/session-controller/src/history.ts)、[此前配置接入实验](./HARNESS_INTEGRATION.md)。
+Session Controller 自己控制 Agent 激活。其恢复路径调用 agents.resume 后只返回 agent；历史 follow 在输出快照后可调用 promote 触发恢复。Bot 配置即时替换需要应用持有 AgentHandle，因此必须验证统一的生命周期协调方式。单纯在接口前增加 Bot ID 映射不足以解决该问题。来源：[Agent 控制器](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)、[历史跟随](../references/deepseek-harness/packages/api/session-controller/src/history.ts)、[此前配置接入实验](./HARNESS_INTEGRATION.md)。
 
-官方客户端 npm 入口并非全部是可直接由 Vite 引用的浏览器 ESM。Connection 的 client 条件导出在 Node 下指向独立 ESM，在浏览器下指向模块工厂；官方客户端模块系统负责装载和物化工厂。api-remotes 还装配许多官方产品命名空间。自有 React 界面应验证所需客户端运行时及生成贡献的最小组合，不能假设导入整个 api-remotes 就得到轻量的普通浏览器 SDK。来源：[Connection 发布入口](../../references/deepseek-harness/packages/client/connection/package.json)、[客户端模块系统](../../references/deepseek-harness/docs/subsystems/client-modules.md)、[官方 Remote 客户端装配](../../references/deepseek-harness/packages/api/remotes/src/client/index.ts)。
+官方客户端 npm 入口并非全部是可直接由 Vite 引用的浏览器 ESM。Connection 的 client 条件导出在 Node 下指向独立 ESM，在浏览器下指向模块工厂；官方客户端模块系统负责装载和物化工厂。api-remotes 还装配许多官方产品命名空间。自有 React 界面应验证所需客户端运行时及生成贡献的最小组合，不能假设导入整个 api-remotes 就得到轻量的普通浏览器 SDK。来源：[Connection 发布入口](../references/deepseek-harness/packages/client/connection/package.json)、[客户端模块系统](../references/deepseek-harness/docs/subsystems/client-modules.md)、[官方 Remote 客户端装配](../references/deepseek-harness/packages/api/remotes/src/client/index.ts)。
 
 已确认的 Q6 方向是：Runner 使用 Harness Host 的标准服务与 Remote 体系，产品插件补充 Bot 管理和必要协调；上游已有操作与事件逐项复用。服务实现、Remote 声明及生成贡献由所属产品插件共同维护。生命周期与浏览器产物接入仍需要原型验证。
 
@@ -32,7 +32,7 @@ PWA 可以用浏览器 WebSocket 连接远端 WSS Relay，Runner 主动连接同
 
 WSS 保护客户端到 Relay 的连接，客户端与 Runner 之间的端到端加密需要额外的已认证会话协议。Web Crypto 在安全上下文提供加密和密钥派生能力，但浏览器 API 的存在不等于已经解决配对、对端身份验证、密钥保管或重放保护；具体协议尚未选定。来源：[Crypto.subtle](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/subtle)、[密钥派生](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey)。
 
-官方 HTTP 载体使用签名 Cookie、同源 Host/Origin 校验和进程 token 交换；它不是将地址替换成 Relay 后就能透明使用的端到端加密通道。浏览器 WebSocket 构造参数只有地址和子协议，不能照搬 Electron main 注入任意认证请求头的做法。Relay 接入需要浏览器兼容的认证握手，并将已认证身份在 Runner 中映射到受控 Peer。来源：[Connection 认证说明](../../references/deepseek-harness/packages/client/connection/README.md)、[官方桌面 WebSocket 请求头注入](../../references/deepseek-harness/apps/desktop/src/main.ts)、[WebSocket 构造参数](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket)。
+官方 HTTP 载体使用签名 Cookie、同源 Host/Origin 校验和进程 token 交换；它不是将地址替换成 Relay 后就能透明使用的端到端加密通道。浏览器 WebSocket 构造参数只有地址和子协议，不能照搬 Electron main 注入任意认证请求头的做法。Relay 接入需要浏览器兼容的认证握手，并将已认证身份在 Runner 中映射到受控 Peer。来源：[Connection 认证说明](../references/deepseek-harness/packages/client/connection/README.md)、[官方桌面 WebSocket 请求头注入](../references/deepseek-harness/apps/desktop/src/main.ts)、[WebSocket 构造参数](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket)。
 
 PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终止后台工作；Service Worker 也不提供永久驻留保证。再次打开时应恢复连接并从 Runner 补齐状态，后台通知需要另行评估 Push 等机制。Relay 首次交付仅支持双方在线，不暂存离线业务请求；Runner 已接纳的执行不随客户端断连停止。来源：[PWA 离线与后台操作](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)、[产品蓝图](./PRODUCT_BLUEPRINT.md)。
 
@@ -42,7 +42,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 两者都运行 React DOM，因此聊天、Bot 配置、工具结果、审批和响应式布局可以共享页面源码。共享的是页面实现，桌面与 PWA 仍可拥有独立构建入口、导航外壳和发布产物。这是工程可行性判断，尚未完成迁移。
 
-当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源：[当前 IPC 客户端](./src/renderer/lib/ipc-client.ts)、[当前 app actions](./src/renderer/actions/app.ts)、[桌面开发约束](./AGENTS.md)。
+当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源：[当前 IPC 客户端](../apps/dsh-bot/src/renderer/lib/ipc-client.ts)、[当前 app actions](../apps/dsh-bot/src/renderer/actions/app.ts)、[桌面开发约束](../apps/dsh-bot/AGENTS.md)。
 
 | 可共享页面与逻辑            | 需要平台适配的能力           |
 | --------------------------- | ---------------------------- |
@@ -57,7 +57,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 Expo 官方支持同一项目交付 Web、iOS 和 Android。跨端 UI 复用通常基于 React Native 的 View、Text 等组件，React Native Web 将这些组件用于浏览器。Expo Web 的 PWA 还需要配置 manifest、Service Worker 与缓存策略。来源：[Expo Web](https://docs.expo.dev/workflow/web/)、[Expo PWA](https://docs.expo.dev/guides/progressive-web-apps/)。
 
-当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源：[当前桌面依赖](./package.json)、[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
+当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源：[当前桌面依赖](../apps/dsh-bot/package.json)、[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
 
 | 候选                        | 界面归属                                             | 主要取舍                                                   |
 | --------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- |
@@ -81,9 +81,9 @@ expo-notifications 不支持 Web 通知；PWA 的通知需要单独接入浏览�
 
 ## 远程身份与请求接纳的验证范围
 
-上游 remote-access 已提供按非 owner 身份、资源和方法授权的机制；Gateway 的 forwarded waterfall 回答仍限 owner，Connection 的 exact Fetch 路由也对非 owner 返回拒绝。配对设备的审批和资源读取需要逐项组合验证，并通过标准服务或传输适配补足接入。来源：[Remote access](../../references/deepseek-harness/packages/api/remote-access/README.md)、[Gateway](../../references/deepseek-harness/packages/api/gateway/README.md)、[Connection](../../references/deepseek-harness/packages/client/connection/README.md)。
+上游 remote-access 已提供按非 owner 身份、资源和方法授权的机制；Gateway 的 forwarded waterfall 回答仍限 owner，Connection 的 exact Fetch 路由也对非 owner 返回拒绝。配对设备的审批和资源读取需要逐项组合验证，并通过标准服务或传输适配补足接入。来源：[Remote access](../references/deepseek-harness/packages/api/remote-access/README.md)、[Gateway](../references/deepseek-harness/packages/api/gateway/README.md)、[Connection](../references/deepseek-harness/packages/client/connection/README.md)。
 
-现有 SessionPromptRequest 带客户端生成的 requestId，prompt 会检查 inbox 与历史中的相同请求标识；返回的 accepted 表达 Agent inbox 接纳。这个接口可作为消息去重的复用基础，尚未据此验证并发提交、进程崩溃和持久恢复的完整保证。来源：[请求与回执类型](../../references/deepseek-harness/packages/api/session-controller/src/types.ts)、[输入接纳与去重实现](../../references/deepseek-harness/packages/api/session-controller/src/commands.ts)。
+现有 SessionPromptRequest 带客户端生成的 requestId，prompt 会检查 inbox 与历史中的相同请求标识；返回的 accepted 表达 Agent inbox 接纳。这个接口可作为消息去重的复用基础，尚未据此验证并发提交、进程崩溃和持久恢复的完整保证。来源：[请求与回执类型](../references/deepseek-harness/packages/api/session-controller/src/types.ts)、[输入接纳与去重实现](../references/deepseek-harness/packages/api/session-controller/src/commands.ts)。
 
 ## 对工作区划分的影响
 

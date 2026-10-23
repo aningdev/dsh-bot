@@ -1,6 +1,6 @@
 # dsh-bot
 
-由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含 Electron 桌面应用与固定版本的 Harness npm 运行时；独立 Bot 后台和移动客户端尚未实现，目标见 [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)。
+由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含 Electron 桌面应用与固定版本的 Harness npm 运行时；独立 Bot 后台和移动客户端尚未实现，目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)。
 
 ## 工作区
 
@@ -10,7 +10,7 @@
 | [packages/harness-runtime](packages/harness-runtime/README.md) | 固定版本的 Harness npm 依赖与 CLI 入口 |
 | [references/deepseek-harness](references/README.md)            | 官方源码 Git submodule，仅作参考       |
 
-目标工作区、进程关系与实施顺序见 [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)。共享包放在 `packages/`，有实际消费者或独立装配需求时提取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
+目标工作区、进程关系与实施顺序见 [架构与工作区方案](docs/PROJECT_LAYOUT.md)。共享包放在 `packages/`，有实际消费者或独立装配需求时提取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
 
 ## 开发
 
@@ -56,7 +56,10 @@ git submodule update --init references/deepseek-harness
 
 ## 产品与接入设计
 
-- [领域术语](apps/dsh-bot/GLOSSARY.md)
-- [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)
-- [Harness 配置接入探索](apps/dsh-bot/HARNESS_INTEGRATION.md)
-- [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)
+- [领域术语](GLOSSARY.md)
+- [产品蓝图](docs/PRODUCT_BLUEPRINT.md)
+- [架构与工作区方案](docs/PROJECT_LAYOUT.md)
+- [Harness 配置接入探索](docs/HARNESS_INTEGRATION.md)
+- [Host 与客户端调研](docs/HOST_AND_CLIENT_RESEARCH.md)
+- 架构决定：[ADR](docs/adr/)
+- 工程约定：[Agent skills 配置](docs/agents/)
