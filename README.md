@@ -1,77 +1,60 @@
-# DeepSeek Harness
+# dsh-bot
 
-English | [中文](README.zh.md)
+由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含 Electron 桌面应用与固定版本的 Harness npm 运行时；独立 Bot 后台和移动客户端尚未实现，目标见 [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)。
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+## 工作区
 
-It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
+| 路径                                                           | 职责                                   |
+| -------------------------------------------------------------- | -------------------------------------- |
+| [apps/dsh-bot](apps/dsh-bot/README.md)                         | Electron 桌面界面、原生能力与现有 IPC  |
+| [packages/harness-runtime](packages/harness-runtime/README.md) | 固定版本的 Harness npm 依赖与 CLI 入口 |
+| [references/deepseek-harness](references/README.md)            | 官方源码 Git submodule，仅作参考       |
 
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+后续移动客户端作为 `apps/` 下的独立工作区加入。共享包放在 `packages/`，有实际消费者时再抽取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
 
-## Developer preview
+## 开发
 
-DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
-
-Review the [safety notice](SAFETY.md) before running the project.
-
-## Run
-
-### Run from `npm`
-
-Install `Node.js`, then run:
+使用 [`.node-version`](.node-version) 指定的 Node.js 与当前稳定版 Bun，在仓库根目录执行：
 
 ```sh
-npx @deepseek-ai/dsh web
+bun install --frozen-lockfile
+bun run dev
 ```
 
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
-
-### Run from source
-
-To run from a repository checkout:
+依赖只在根目录统一安装并由根 `bun.lock` 锁定。Bun 用于依赖和脚本管理，桌面运行时仍为 Electron；`bunfig.toml` 使用 hoisted 安装。Forge 8 的 Bun 锁文件识别兼容补丁由 Bun 自动应用，原因与移除条件见 [patches/README.md](patches/README.md)。
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
+bun run check
+bun run test:unit
+bun run package
+bun run test:e2e
+bun run test:smoke
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+`test:e2e` 会先构建桌面产物，`test:smoke` 检查当前产物；完整验证用 `bun run test:all`。桌面详情、签名与发布说明见 [应用 README](apps/dsh-bot/README.md)。
 
-## Community and support
+## Harness 运行时
 
-- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/4MrtZUhpxg">DeepSeek Harness Discord community</a>.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
-
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
-
-`pnpm run dev:web` builds, serves, and rebuilds client bundles on source edits in one terminal, and `make help` lists the matching Make targets for Web and Desktop; the guide's application commands section owns the full table.
-
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## Citation
-
-```bibtex
-@misc{deepseek-harness2026,
-  title={DeepSeek Harness: Everything is a Plugin},
-  author={DeepSeek-AI},
-  year={2026},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/deepseek-ai/deepseek-harness}},
-}
+```sh
+bun run harness --version
+bun run harness --help
 ```
 
-## License
+`packages/harness-runtime/package.json` 是引擎版本的权威来源。引擎与插件通过 npm 公开入口消费，应用自定义能力通过插件、bundle 和命名 profile 组合；仓库中的参考源码不替代安装依赖。当前 CLI 可用不代表独立 Bot 后台已接入。
 
-[MIT](LICENSE)
+## 参考源码
 
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+克隆产品本身无需下载参考子模块；需要阅读上游源码时执行：
+
+```sh
+git submodule update --init references/deepseek-harness
+```
+
+子模块固定到提交，更新方式与职责见 [references/README.md](references/README.md)。产品的 Git 历史保留迁移前的记录，当前工作树只维护应用、运行时工作区与参考指针。
+
+## 产品与接入设计
+
+- [领域术语](apps/dsh-bot/GLOSSARY.md)
+- [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)
+- [Harness 配置接入探索](apps/dsh-bot/HARNESS_INTEGRATION.md)
+- [工程与依赖决策](apps/dsh-bot/PROJECT_LAYOUT.md)

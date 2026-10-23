@@ -32,7 +32,7 @@ beforeEach(async () => {
     })),
   )
   native.set.mockImplementation(
-    async mode => mode === 'dark' || (mode === 'system' && systemDark),
+    async (mode) => mode === 'dark' || (mode === 'system' && systemDark),
   )
   theme = await import('@/renderer/actions/theme')
 })
@@ -74,7 +74,7 @@ test('stops following the system when disposed', async () => {
   expect(document.documentElement).not.toHaveClass('dark')
 })
 test('a user choice wins when startup restoration is still pending', async () => {
-  const started = Promise.withResolvers<undefined>()
+  const started = Promise.withResolvers<void>()
   const gate = Promise.withResolvers<boolean>()
   native.set.mockImplementationOnce(() => {
     started.resolve()
@@ -111,7 +111,7 @@ test('storage failures do not prevent restoring or changing appearance', async (
   expect(document.documentElement).not.toHaveClass('dark')
 })
 test('an aborted startup does not commit its late response', async () => {
-  const started = Promise.withResolvers<undefined>()
+  const started = Promise.withResolvers<void>()
   const gate = Promise.withResolvers<boolean>()
   native.set.mockImplementationOnce(() => {
     started.resolve()
@@ -121,7 +121,7 @@ test('an aborted startup does not commit its late response', async () => {
   await started.promise
   stop()
   gate.resolve(true)
-  await new Promise(resolve => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
   expect(localStorage.getItem('theme')).toBeNull()
   expect(document.documentElement).not.toHaveClass('dark')
 })

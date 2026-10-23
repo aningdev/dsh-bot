@@ -43,8 +43,8 @@ export default function BaseLayout({
     onResize: resizeRight,
   } = useCollapsiblePanel()
   const windowState = useWindowState()
-  const windowLayout = useWindowLayoutStore(state => state.layout)
-  const setWindowLayout = useWindowLayoutStore(state => state.setLayout)
+  const windowLayout = useWindowLayoutStore((state) => state.layout)
+  const setWindowLayout = useWindowLayoutStore((state) => state.setLayout)
 
   const layout = getTitleBarLayout(windowState?.platform ?? 'win32')
   const style = {

@@ -51,8 +51,8 @@
 - 三份 tsconfig、`noEmit`、不恢复声明文件构建链；renderer 需要 main 类型时用 `import type`。
 - 新增顶层源码目录时同步 tsconfig 的 `include` 与 lint 规则；preload 产物名必须与窗口加载路径一致。
 - 应用名、appId 与仓库身份只在 [`src/shared/app-config.ts`](./src/shared/app-config.ts) 定义。
-- Bun 只用于依赖管理与脚本，不固定版本；运行时包进 `dependencies`，构建、测试与 CLI 进 `devDependencies`。
-- 用 `bun install --frozen-lockfile` 安装，不手改 `bun.lock`。
+- Bun 只用于依赖管理与脚本，不固定版本；从仓库根目录统一安装，只维护根 `bun.lock`。运行时包进当前工作区的 `dependencies`，构建、测试与 CLI 进 `devDependencies`，版本覆盖与安装脚本信任在根 `package.json` 管理。
+- 在根目录用 `bun install --frozen-lockfile` 安装，不手改锁文件，不在应用目录生成独立锁文件。Harness 从 npm 工作区依赖消费，`references/` 不参与应用构建。
 
 ### 测试
 

@@ -1,8 +1,8 @@
-import * as React from 'react'
 import { mergeProps } from '@base-ui/react/merge-props'
 import { useRender } from '@base-ui/react/use-render'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from 'cn'
+import * as React from 'react'
 
 import { Button } from '@/renderer/components/ui/button'
 
@@ -77,10 +77,7 @@ function AttachmentMedia({
   )
 }
 
-function AttachmentContent({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function AttachmentContent({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="attachment-content"
@@ -93,10 +90,7 @@ function AttachmentContent({
   )
 }
 
-function AttachmentTitle({
-  className,
-  ...props
-}: React.ComponentProps<'span'>) {
+function AttachmentTitle({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="attachment-title"
@@ -109,10 +103,7 @@ function AttachmentTitle({
   )
 }
 
-function AttachmentDescription({
-  className,
-  ...props
-}: React.ComponentProps<'span'>) {
+function AttachmentDescription({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="attachment-description"
@@ -126,10 +117,7 @@ function AttachmentDescription({
   )
 }
 
-function AttachmentActions({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function AttachmentActions({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="attachment-actions"

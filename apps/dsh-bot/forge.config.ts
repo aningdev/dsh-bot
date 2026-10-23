@@ -1,13 +1,13 @@
-import { MakerDeb } from "@electron-forge/maker-deb";
-import { MakerRpm } from "@electron-forge/maker-rpm";
-import { MakerSquirrel } from "@electron-forge/maker-squirrel";
-import { MakerZIP } from "@electron-forge/maker-zip";
-import { FusesPlugin } from "@electron-forge/plugin-fuses";
-import { VitePlugin } from "@electron-forge/plugin-vite";
-import type { ForgeConfig } from "@electron-forge/shared-types";
-import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { MakerDeb } from '@electron-forge/maker-deb'
+import { MakerRpm } from '@electron-forge/maker-rpm'
+import { MakerSquirrel } from '@electron-forge/maker-squirrel'
+import { MakerZIP } from '@electron-forge/maker-zip'
+import { FusesPlugin } from '@electron-forge/plugin-fuses'
+import { VitePlugin } from '@electron-forge/plugin-vite'
+import type { ForgeConfig } from '@electron-forge/shared-types'
+import { FuseV1Options, FuseVersion } from '@electron/fuses'
 
-import { APP_CONFIG } from "./src/shared/app-config";
+import { APP_CONFIG } from './src/shared/app-config'
 
 const config: ForgeConfig = {
   makers: [
@@ -15,7 +15,7 @@ const config: ForgeConfig = {
       certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
       certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
     }),
-    new MakerZIP({}, ["darwin"]),
+    new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),
   ],
@@ -39,20 +39,20 @@ const config: ForgeConfig = {
       hotRestart: true,
       build: [
         {
-          config: "vite.main.config.mts",
-          entry: "src/main/index.ts",
-          target: "main",
+          config: 'vite.main.config.mts',
+          entry: 'src/main/index.ts',
+          target: 'main',
         },
         {
-          config: "vite.preload.config.mts",
-          entry: "src/preload/index.ts",
-          target: "preload",
+          config: 'vite.preload.config.mts',
+          entry: 'src/preload/index.ts',
+          target: 'preload',
         },
       ],
       renderer: [
         {
-          config: "vite.renderer.config.mts",
-          name: "main_window",
+          config: 'vite.renderer.config.mts',
+          name: 'main_window',
         },
       ],
     }),
@@ -78,10 +78,10 @@ const config: ForgeConfig = {
        * Publish release on GitHub as draft.
        * Remember to manually publish it on GitHub website after verifying everything is correct.
        */
-      name: "@electron-forge/publisher-github",
+      name: '@electron-forge/publisher-github',
     },
   ],
   rebuildConfig: {},
-};
+}
 
-export default config;
+export default config

@@ -1,6 +1,6 @@
 # dsh-bot
 
-基于 Electron、React 和 TypeScript 的桌面应用模板，提供原生窗口控件、三栏布局、类型安全的进程通信，以及异步数据和 UI 状态管理。
+基于 Electron、React 和 TypeScript 的 dsh-bot 桌面工作区，提供原生窗口控件、三栏布局、类型安全的进程通信，以及异步数据和 UI 状态管理。仓库结构与统一入口见 [根 README](../../README.md)，Bot 产品目标见 [产品蓝图](./PRODUCT_BLUEPRINT.md)。
 
 ## 技术栈
 
@@ -17,16 +17,18 @@ React Compiler 已通过 React Vite 插件启用。Vite Plus 使用 Oxlint 和 O
 
 ## 快速开始
 
-使用 [`.node-version`](./.node-version) 指定的 Node.js 版本；支持范围见 `package.json` 的 `engines`。安装当前稳定版 Bun，用于依赖管理和执行脚本。应用运行时不依赖 Bun。
+使用根 [`.node-version`](../../.node-version) 指定的 Node.js 版本；支持范围见 `package.json` 的 `engines`。安装当前稳定版 Bun，用于依赖管理和执行脚本。应用运行时不依赖 Bun。
 
-可以直接使用 GitHub 的模板功能创建仓库，也可以克隆本项目：
+在仓库根目录安装依赖并启动桌面工作区：
 
 ```bash
 git clone https://github.com/zhuxining/dsh-bot.git
 cd dsh-bot
 bun install --frozen-lockfile
-bun run start
+bun run dev
 ```
+
+只维护根 `bun.lock`，不要在本应用目录单独安装依赖或创建锁文件。下文的应用专属命令在 `apps/dsh-bot` 中执行；根目录也提供 `package`、`check`、`test:unit`、`test:e2e` 与 `test:smoke` 转发入口。
 
 从 [`src/renderer/routes/index.tsx`](./src/renderer/routes/index.tsx) 开始修改首页。不需要第二个示例页面时，可以删除 [`src/renderer/routes/second.tsx`](./src/renderer/routes/second.tsx)。开发期间修改 main 进程代码会自动重启应用。
 
@@ -97,7 +99,7 @@ bun run test:smoke
 
 E2E 通过 [`launchTestApp`](./tests/e2e/fixtures.ts) 启动应用，使用隔离的临时 profile，启用沙箱，并关闭 Playwright 的主题模拟。重启持久化场景复用 profile，关闭使用它的实例后再删除目录，避免 Windows 文件锁导致清理失败。
 
-[testing.yaml](./.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行测试，并上传 Playwright 报告；[check.yaml](./.github/workflows/check.yaml) 执行代码检查。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
+[testing.yaml](../../.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行测试，并上传 Playwright 报告；[check.yaml](../../.github/workflows/check.yaml) 执行代码检查。工作流从根目录安装与运行，参考子模块不参与构建。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
 
 ## 进程通信与安全
 
@@ -193,7 +195,7 @@ bun run release  # 通过 Forge 构建并发布到 GitHub 草稿 Release
 
 本地发布时，提供对 `src/shared/app-config.ts` 中目标仓库具有 Release 写入权限的 `GITHUB_TOKEN`。发布版本来自 `package.json`。
 
-手动触发的 [release 工作流](./.github/workflows/release.yaml) 在 Linux、macOS、Windows 上构建并验证产物，然后发布到 GitHub 草稿 Release。工作流通过 `workflow_dispatch` 启动，不使用 tag 触发。检查草稿和产物后，再正式发布。
+手动触发的 [release 工作流](../../.github/workflows/release.yaml) 在 Linux、macOS、Windows 上构建并验证产物，然后发布到 GitHub 草稿 Release。工作流通过 `workflow_dispatch` 启动，不使用 tag 触发。检查草稿和产物后，再正式发布。
 
 `forge.config.ts` 通过以下环境变量启用可选签名与公证：
 

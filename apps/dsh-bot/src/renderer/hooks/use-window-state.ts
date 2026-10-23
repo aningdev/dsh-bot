@@ -10,7 +10,7 @@ export function useWindowState() {
     getPlatform()
       .then((platform) => {
         if (!controller.signal.aborted)
-          setState(current => current ?? { platform, isFullScreen: false })
+          setState((current) => current ?? { platform, isFullScreen: false })
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) console.error('Failed to detect platform:', error)

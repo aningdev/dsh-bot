@@ -10,8 +10,8 @@ const COMPONENT_EXTENSION = '.tsx'
 async function getComponentsNames(uiPath?: string) {
   const files = await readdir(uiPath ?? DEFAULT_UI_PATH)
 
-  const componentsFilesName = files.filter(fileName => fileName.endsWith(COMPONENT_EXTENSION))
-  const rawComponentNames = componentsFilesName.map(fileName =>
+  const componentsFilesName = files.filter((fileName) => fileName.endsWith(COMPONENT_EXTENSION))
+  const rawComponentNames = componentsFilesName.map((fileName) =>
     fileName.replace(COMPONENT_EXTENSION, ''),
   )
 

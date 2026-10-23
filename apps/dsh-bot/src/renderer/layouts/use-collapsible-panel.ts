@@ -13,6 +13,6 @@ export function useCollapsiblePanel() {
     if (nextOpen) panel.expand()
     else panel.collapse()
   }
-  const onResize: NonNullable<PanelProps['onResize']> = size => setOpen(size.asPercentage > 0)
+  const onResize: NonNullable<PanelProps['onResize']> = (size) => setOpen(size.asPercentage > 0)
   return { panelRef, open, toggle, onResize }
 }

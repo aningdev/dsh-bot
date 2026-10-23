@@ -11,9 +11,9 @@ interface WindowLayoutState {
 
 export const useWindowLayoutStore = create<WindowLayoutState>()(
   persist(
-    set => ({
+    (set) => ({
       layout: null,
-      setLayout: layout => set({ layout }),
+      setLayout: (layout) => set({ layout }),
     }),
     {
       name: LOCAL_STORAGE_KEYS.WINDOW_LAYOUT,

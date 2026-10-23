@@ -1,11 +1,11 @@
 'use client'
 
-import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from 'cn'
+import { CheckIcon, CopyIcon } from 'lucide-react'
+import * as React from 'react'
 
 import { Button } from '@/renderer/components/ui/button'
-import { CheckIcon, CopyIcon } from 'lucide-react'
 
 const codeBlockVariants = cva(
   'group/code-block relative flex w-full min-w-0 flex-col overflow-hidden rounded-lg text-sm has-[>[data-slot=code-block-content]:focus-visible]:ring-3 has-[>[data-slot=code-block-content]:focus-visible]:ring-ring/50 data-[size=sm]:text-xs',
@@ -14,8 +14,7 @@ const codeBlockVariants = cva(
       variant: {
         default:
           'border border-input text-foreground has-[>[data-slot=code-block-content]:focus-visible]:border-ring dark:bg-input/30',
-        destructive:
-          'border border-destructive/30 text-destructive dark:border-destructive/40',
+        destructive: 'border border-destructive/30 text-destructive dark:border-destructive/40',
       },
     },
     defaultVariants: {
@@ -68,10 +67,7 @@ function CodeBlockTitle({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
-function CodeBlockActions({
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
+function CodeBlockActions({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="code-block-actions"
@@ -121,13 +117,7 @@ function CodeBlockCopyButton({
         }}
         {...props}
       >
-        {copied ? (
-          <CheckIcon
-          />
-        ) : (
-          <CopyIcon
-          />
-        )}
+        {copied ? <CheckIcon /> : <CopyIcon />}
       </Button>
       <span aria-live="polite" className="sr-only">
         {copied ? 'Copied' : ''}
@@ -169,11 +159,9 @@ function CodeBlockContent({
       >
         {lineNumbers && typeof children === 'string'
           ? children
-            .replace(/\n$/, '')
-            .split('\n')
-            .map((line, index) => (
-              <CodeBlockLine key={index}>{line}</CodeBlockLine>
-            ))
+              .replace(/\n$/, '')
+              .split('\n')
+              .map((line, index) => <CodeBlockLine key={index}>{line}</CodeBlockLine>)
           : children}
       </code>
     </pre>

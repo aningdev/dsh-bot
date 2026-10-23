@@ -1,26 +1,26 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto'
 
-import tailwindcss from "@tailwindcss/vite";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import tailwindcss from '@tailwindcss/vite'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
-import { sourceAlias } from "./scripts/vite-shared";
+import { sourceAlias } from './scripts/vite-shared'
 
 export default defineConfig(({ command }) => {
-  const nonce = command === "serve" ? randomUUID() : undefined;
+  const nonce = command === 'serve' ? randomUUID() : undefined
   return {
     html: { cspNonce: nonce },
     plugins: [
       tanstackRouter({
-        target: "react",
-        routesDirectory: "./src/renderer/routes",
-        generatedRouteTree: "./src/renderer/routeTree.gen.ts",
+        target: 'react',
+        routesDirectory: './src/renderer/routes',
+        generatedRouteTree: './src/renderer/routeTree.gen.ts',
       }),
       tailwindcss(),
       react({ compiler: true }),
       {
-        name: "development-csp",
+        name: 'development-csp',
         transformIndexHtml(html) {
           return nonce
             ? html
@@ -29,10 +29,10 @@ export default defineConfig(({ command }) => {
                   "connect-src 'self'",
                   "connect-src 'self' ws://localhost:* ws://127.0.0.1:*",
                 )
-            : html;
+            : html
         },
       },
     ],
-    resolve: { alias: sourceAlias, dedupe: ["react", "react-dom"], preserveSymlinks: false },
-  };
-});
+    resolve: { alias: sourceAlias, dedupe: ['react', 'react-dom'], preserveSymlinks: false },
+  }
+})

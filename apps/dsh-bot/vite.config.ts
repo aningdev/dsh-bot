@@ -1,65 +1,65 @@
-import { builtinModules } from "node:module";
+import { builtinModules } from 'node:module'
 
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite-plus";
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite-plus'
 
-import { sourceAlias } from "./scripts/vite-shared";
+import { sourceAlias } from './scripts/vite-shared'
 
 const nativeImports = [
   ...new Set([
     ...builtinModules,
-    ...builtinModules.map((name) => (name.startsWith("node:") ? name : "node:" + name)),
-    "electron",
-    "electron/main",
-    "electron/renderer",
-    "electron/common",
+    ...builtinModules.map((name) => (name.startsWith('node:') ? name : 'node:' + name)),
+    'electron',
+    'electron/main',
+    'electron/renderer',
+    'electron/common',
   ]),
-];
+]
 const ignorePatterns = [
-  "**/routeTree.gen.ts",
-  "**/node_modules/**",
-  "**/.tanstack/**",
-  "**/.vite/**",
-  "**/dist/**",
-  "**/out/**",
-  "coverage/**",
-  "playwright-report/**",
-  "test-results/**",
-];
+  '**/routeTree.gen.ts',
+  '**/node_modules/**',
+  '**/.tanstack/**',
+  '**/.vite/**',
+  '**/dist/**',
+  '**/out/**',
+  'coverage/**',
+  'playwright-report/**',
+  'test-results/**',
+]
 export default defineConfig({
   lint: {
     ignorePatterns,
     jsPlugins: [
-      { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
-      { name: "shadcn", specifier: "@shadcn/lint" },
+      { name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' },
+      { name: 'shadcn', specifier: '@shadcn/lint' },
     ],
-    rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    rules: { 'vite-plus/prefer-vite-plus-imports': 'error' },
     options: { typeAware: true, typeCheck: true },
-    plugins: ["eslint", "typescript", "react", "import", "promise", "node", "vitest"],
+    plugins: ['eslint', 'typescript', 'react', 'import', 'promise', 'node', 'vitest'],
     overrides: [
       {
-        files: ["src/renderer/**"],
+        files: ['src/renderer/**'],
         rules: {
-          "no-restricted-globals": [
-            "error",
-            "process",
-            "Buffer",
-            "require",
-            "module",
-            "exports",
-            "__dirname",
-            "__filename",
-            "global",
+          'no-restricted-globals': [
+            'error',
+            'process',
+            'Buffer',
+            'require',
+            'module',
+            'exports',
+            '__dirname',
+            '__filename',
+            'global',
           ],
-          "no-restricted-imports": [
-            "error",
+          'no-restricted-imports': [
+            'error',
             {
               paths: nativeImports,
               patterns: [
                 {
-                  group: ["@/main/**", "@/preload/**", "**/main/**", "**/preload/**"],
+                  group: ['@/main/**', '@/preload/**', '**/main/**', '**/preload/**'],
                   allowTypeImports: true,
-                  message: "Use the typed IPC client for native capabilities.",
+                  message: 'Use the typed IPC client for native capabilities.',
                 },
               ],
             },
@@ -67,48 +67,48 @@ export default defineConfig({
         },
       },
       {
-        files: ["src/main/**"],
+        files: ['src/main/**'],
         rules: {
-          "no-restricted-imports": [
-            "error",
-            { patterns: ["@/renderer/**", "**/renderer/**", "@/preload/**", "**/preload/**"] },
+          'no-restricted-imports': [
+            'error',
+            { patterns: ['@/renderer/**', '**/renderer/**', '@/preload/**', '**/preload/**'] },
           ],
         },
       },
       {
-        files: ["src/preload/**"],
+        files: ['src/preload/**'],
         rules: {
-          "no-restricted-imports": [
-            "error",
-            { patterns: ["@/renderer/**", "**/renderer/**", "@/main/**", "**/main/**"] },
+          'no-restricted-imports': [
+            'error',
+            { patterns: ['@/renderer/**', '**/renderer/**', '@/main/**', '**/main/**'] },
           ],
         },
       },
       {
-        files: ["src/shared/**"],
+        files: ['src/shared/**'],
         rules: {
-          "no-restricted-globals": [
-            "error",
-            "process",
-            "Buffer",
-            "require",
-            "module",
-            "exports",
-            "__dirname",
-            "__filename",
-            "global",
+          'no-restricted-globals': [
+            'error',
+            'process',
+            'Buffer',
+            'require',
+            'module',
+            'exports',
+            '__dirname',
+            '__filename',
+            'global',
           ],
-          "no-restricted-imports": [
-            "error",
+          'no-restricted-imports': [
+            'error',
             {
               paths: nativeImports,
               patterns: [
-                "@/renderer/**",
-                "@/main/**",
-                "@/preload/**",
-                "**/renderer/**",
-                "**/main/**",
-                "**/preload/**",
+                '@/renderer/**',
+                '@/main/**',
+                '@/preload/**',
+                '**/renderer/**',
+                '**/main/**',
+                '**/preload/**',
               ],
             },
           ],
@@ -118,37 +118,39 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns,
+    semi: false,
+    singleQuote: true,
     sortPackageJson: true,
     sortScripts: true,
     sortImports: true,
     sortTailwindcss: true,
   },
-  staged: { "*.{js,ts,jsx,tsx,vue,svelte,json,jsonc,css,md}": "vp check --fix" },
+  staged: { '*.{js,ts,jsx,tsx,vue,svelte,json,jsonc,css,md}': 'vp check --fix' },
   plugins: [react({ compiler: true })],
   resolve: { alias: sourceAlias },
   test: {
     coverage: {
-      include: ["src/main/**/*.ts", "src/renderer/**/*.{ts,tsx}", "src/shared/**/*.ts"],
-      exclude: ["**/routeTree.gen.ts", "**/components/ui/**"],
-      provider: "v8",
-      reporter: ["text", "json", "html"],
+      include: ['src/main/**/*.ts', 'src/renderer/**/*.{ts,tsx}', 'src/shared/**/*.ts'],
+      exclude: ['**/routeTree.gen.ts', '**/components/ui/**'],
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
     },
-    reporters: ["verbose"],
+    reporters: ['verbose'],
     projects: [
       {
         extends: true,
-        test: { name: "main", include: ["tests/unit/main/**/*.test.ts"], environment: "node" },
+        test: { name: 'main', include: ['tests/unit/main/**/*.test.ts'], environment: 'node' },
       },
       {
         extends: true,
         test: {
-          name: "renderer",
-          include: ["tests/unit/renderer/**/*.test.{ts,tsx}"],
-          environment: "jsdom",
-          setupFiles: ["tests/unit/renderer/setup.ts"],
+          name: 'renderer',
+          include: ['tests/unit/renderer/**/*.test.{ts,tsx}'],
+          environment: 'jsdom',
+          setupFiles: ['tests/unit/renderer/setup.ts'],
           css: true,
         },
       },
     ],
   },
-});
+})

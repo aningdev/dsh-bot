@@ -34,7 +34,7 @@ function createWindow() {
         "typeof require !== 'undefined' || typeof globalThis.process?.versions?.node !== 'undefined'",
       )
       if (hasNode) throw new Error('Unexpected renderer Node privileges')
-      const renderer = app.getAppMetrics().find(entry => entry.pid === contents.getOSProcessId())
+      const renderer = app.getAppMetrics().find((entry) => entry.pid === contents.getOSProcessId())
       if (renderer?.sandboxed === false) throw new Error('Renderer sandbox is disabled')
       console.log('Packaged application and IPC are ready')
       app.exit(0)

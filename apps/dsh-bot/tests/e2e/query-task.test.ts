@@ -71,7 +71,7 @@ test('external link mutations run offline and allow retry after a native failure
     await page.context().setOffline(true)
     const link = page.getByRole('button', { name: 'Documentation', exact: true })
     const failure = page.waitForEvent('console', {
-      predicate: message => message.text().includes('Failed to open external link:'),
+      predicate: (message) => message.text().includes('Failed to open external link:'),
     })
     await link.click()
     await failure

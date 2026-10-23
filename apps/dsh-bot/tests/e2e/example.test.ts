@@ -33,7 +33,7 @@ test('three columns span the viewport and their content fills the available heig
       center: rect('#window-main-panel'),
       right: rect('#window-right-panel'),
       headers: [...document.querySelectorAll('.window-title-bar')].map(
-        element => element.getBoundingClientRect().top,
+        (element) => element.getBoundingClientRect().top,
       ),
       title: rect('#window-main-panel .window-title-bar'),
       content: rect('.window-frame-content'),
@@ -65,7 +65,7 @@ test('native fullscreen adapts both panel buttons and preserves full content hei
   const leftToggle = page.getByRole('button', { name: 'Toggle left panel' })
   const rightToggle = page.getByRole('button', { name: 'Toggle right panel' })
   const rightInset = () =>
-    rightToggle.evaluate(button => innerWidth - button.getBoundingClientRect().right)
+    rightToggle.evaluate((button) => innerWidth - button.getBoundingClientRect().right)
   const expectedRightInset = process.platform === 'win32' ? 150 : 12
   await expect.poll(rightInset).toBeCloseTo(expectedRightInset, 1)
   const normalX = (await leftToggle.boundingBox())!.x
@@ -127,7 +127,7 @@ test('panel buttons share the native traffic light center line', async () => {
     const box = (await button.boundingBox())!
     expect(Math.abs(box.y + box.height / 2 - (header.y + header.height / 2))).toBeLessThan(0.01)
     expect(
-      await button.evaluate(element =>
+      await button.evaluate((element) =>
         getComputedStyle(element).getPropertyValue('-webkit-app-region'),
       ),
     ).toBe('no-drag')
@@ -150,8 +150,7 @@ test('panels collapse independently and restore their resized width', async () =
   const rightToggle = page.getByRole('button', { name: 'Toggle right panel' })
   const leftPanel = page.getByTestId('window-left-panel')
   const rightPanel = page.getByTestId('window-right-panel')
-  const width = async (panel: ReturnType<Page['getByTestId']>) =>
-    (await panel.boundingBox())!.width
+  const width = async (panel: ReturnType<Page['getByTestId']>) => (await panel.boundingBox())!.width
 
   await page.getByRole('separator', { name: 'Resize left panel' }).focus()
   await page.keyboard.press('ArrowRight')
@@ -195,7 +194,7 @@ test('panel buttons do not jump while collapsing or expanding', async () => {
     try {
       for (let toggle = 0; toggle < 2; toggle++) {
         const positions = page.evaluate(
-          label =>
+          (label) =>
             new Promise<number[]>((resolve) => {
               const samples: number[] = []
               const sample = () => {

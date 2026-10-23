@@ -1,12 +1,12 @@
-import * as React from 'react'
 import { cn } from 'cn'
+import { ChevronRightIcon } from 'lucide-react'
+import * as React from 'react'
 
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/renderer/components/ui/collapsible'
-import { ChevronRightIcon } from 'lucide-react'
 
 function Trace({ className, ...props }: React.ComponentProps<'div'>) {
   return (
@@ -65,17 +65,11 @@ function TraceTitle({ className, ...props }: React.ComponentProps<'span'>) {
   )
 }
 
-function TraceDescription({
-  className,
-  ...props
-}: React.ComponentProps<'span'>) {
+function TraceDescription({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       data-slot="trace-description"
-      className={cn(
-        'shrink-0 text-muted-foreground/70 tabular-nums',
-        className,
-      )}
+      className={cn('shrink-0 text-muted-foreground/70 tabular-nums', className)}
       {...props}
     />
   )
@@ -88,11 +82,9 @@ function TraceCollapsible({
   (
     | { open?: undefined }
     | {
-      open: boolean
-      onOpenChange: NonNullable<
-        React.ComponentProps<typeof Collapsible>['onOpenChange']
-      >
-    }
+        open: boolean
+        onOpenChange: NonNullable<React.ComponentProps<typeof Collapsible>['onOpenChange']>
+      }
   )) {
   return (
     <Collapsible
@@ -119,8 +111,7 @@ function TraceCollapsibleTrigger({
     >
       {children}
       <TraceIcon className="transition-transform group-aria-expanded/trace-collapsible-trigger:rotate-90">
-        <ChevronRightIcon
-        />
+        <ChevronRightIcon />
       </TraceIcon>
     </CollapsibleTrigger>
   )

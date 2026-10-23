@@ -25,18 +25,14 @@ describe('desktop capability policy', () => {
   test('requires the registered window and its live main frame', () => {
     const frame = { url: entry, origin: 'null' }
     const contents = { mainFrame: frame }
-    expect(isTrustedIpcSender({ sender: contents, senderFrame: frame }, contents, entry)).toBe(
-      true,
-    )
+    expect(isTrustedIpcSender({ sender: contents, senderFrame: frame }, contents, entry)).toBe(true)
     expect(
       isTrustedIpcSender({ sender: contents, senderFrame: { ...frame } }, contents, entry),
     ).toBe(false)
     expect(
       isTrustedIpcSender({ sender: { mainFrame: frame }, senderFrame: frame }, contents, entry),
     ).toBe(false)
-    expect(isTrustedIpcSender({ sender: contents, senderFrame: null }, contents, entry)).toBe(
-      false,
-    )
+    expect(isTrustedIpcSender({ sender: contents, senderFrame: null }, contents, entry)).toBe(false)
     frame.url = 'file:///app/another.html'
     expect(isTrustedIpcSender({ sender: contents, senderFrame: frame }, contents, entry)).toBe(
       false,

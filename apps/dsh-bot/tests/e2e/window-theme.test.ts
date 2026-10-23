@@ -41,19 +41,19 @@ test('the saved theme is painted even before the application module loads', asyn
   })
   await page.addInitScript(() => {
     new PerformanceObserver((entries) => {
-      if (entries.getEntries().some(entry => entry.name === 'first-paint')) {
+      if (entries.getEntries().some((entry) => entry.name === 'first-paint')) {
         document.documentElement.dataset.firstPaintDark = String(
           document.documentElement.classList.contains('dark'),
         )
       }
     }).observe({ type: 'paint', buffered: true })
   })
-  await page.route('**/assets/*.js', route => route.abort())
+  await page.route('**/assets/*.js', (route) => route.abort())
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-first-paint-dark', 'true')
   await expect(page.locator('#app')).toBeEmpty()
   expect(
-    await page.locator('html').evaluate(element => getComputedStyle(element).backgroundColor),
+    await page.locator('html').evaluate((element) => getComputedStyle(element).backgroundColor),
   ).toMatch(/^(rgb\(10, 10, 10\)|oklch\(0\.145 0 0\))$/)
 })
 
@@ -82,7 +82,7 @@ test('closing destroys the window on macOS and dock activation recreates it', as
   )
   const remaining = await electronApp.evaluate(async ({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0]!
-    const closed = new Promise<void>(resolve => window.once('closed', () => resolve()))
+    const closed = new Promise<void>((resolve) => window.once('closed', () => resolve()))
     window.close()
     await closed
     return BrowserWindow.getAllWindows().length

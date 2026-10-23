@@ -51,7 +51,7 @@ export function createAppWindow() {
   window.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedRendererUrl(url, entryUrl)) event.preventDefault()
   })
-  window.webContents.on('will-attach-webview', event => event.preventDefault())
+  window.webContents.on('will-attach-webview', (event) => event.preventDefault())
   window.once('ready-to-show', () => {
     if (!process.argv.includes('--smoke-test')) window.show()
   })

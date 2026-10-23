@@ -18,7 +18,7 @@ test('the sandboxed renderer reaches native state through IPC without Node globa
       nativeApp
         .getAppMetrics()
         .find(
-          entry => entry.pid === BrowserWindow.getAllWindows()[0]!.webContents.getOSProcessId(),
+          (entry) => entry.pid === BrowserWindow.getAllWindows()[0]!.webContents.getOSProcessId(),
         ),
     )
     if (renderer?.sandboxed !== undefined) expect(renderer.sandboxed).toBe(true)
