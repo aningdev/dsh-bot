@@ -1,10 +1,10 @@
+import { TooltipProvider } from '@dsh-bot/ui/components/ui/tooltip'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import React, { useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { useTranslation } from 'react-i18next'
 
-import { TooltipProvider } from '@/renderer/components/ui/tooltip'
 import { queryClient } from '@/renderer/lib/query-client'
 
 import { updateAppLanguage } from './actions/language'

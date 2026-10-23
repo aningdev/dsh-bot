@@ -1,13 +1,13 @@
-import { PanelLeftIcon, PanelRightIcon } from 'lucide-react'
-import { type CSSProperties, type ReactNode } from 'react'
-
-import DragWindowRegion from '@/renderer/components/drag-window-region'
-import { Button } from '@/renderer/components/ui/button'
+import { Button } from '@dsh-bot/ui/components/ui/button'
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from '@/renderer/components/ui/resizable'
+} from '@dsh-bot/ui/components/ui/resizable'
+import { PanelLeftIcon, PanelRightIcon } from 'lucide-react'
+import { type CSSProperties, type ReactNode } from 'react'
+
+import DragWindowRegion from '@/renderer/components/drag-window-region'
 import { useWindowState } from '@/renderer/hooks/use-window-state'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 import { APP_CONFIG } from '@/shared/app-config'

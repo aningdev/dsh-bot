@@ -1,14 +1,13 @@
-import type { QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { Activity } from 'react'
-
 import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
-} from '@/renderer/components/ui/sidebar'
+} from '@dsh-bot/ui/components/ui/sidebar'
+import type { QueryClient } from '@tanstack/react-query'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { Activity } from 'react'
 const inDevelopment = import.meta.env.DEV
 import BaseLayout from '@/renderer/layouts/base-layout'
 

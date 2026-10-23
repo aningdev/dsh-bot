@@ -3,8 +3,8 @@
 import { spawn } from 'node:child_process'
 import { readdir } from 'node:fs/promises'
 
-const DEFAULT_UI_PATH = 'src/renderer/components/ui'
-const DEFAULT_EXECUTOR = 'npx'
+const DEFAULT_UI_PATH = 'src/components/ui'
+const DEFAULT_EXECUTOR = 'bun'
 const COMPONENT_EXTENSION = '.tsx'
 
 async function getComponentsNames(uiPath?: string) {
@@ -19,7 +19,7 @@ async function getComponentsNames(uiPath?: string) {
 }
 
 function mountInstallShadcnInstallCommand(components: string[]) {
-  const baseCommand = 'shadcn@latest add -y -o'
+  const baseCommand = 'run shadcn add -y -o'
   const installCommand = `${baseCommand} ${components.join(' ')}`
 
   return installCommand.split(' ')

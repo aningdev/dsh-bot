@@ -1,8 +1,8 @@
+import { cn } from '@dsh-bot/ui/lib/utils'
 import { useMutation } from '@tanstack/react-query'
 import type { ComponentProps } from 'react'
 
 import { openExternalLinkMutationOptions } from '@/renderer/actions/shell'
-import { cn } from '@/renderer/lib/utils'
 
 type ExternalLinkProps = ComponentProps<'button'> & { href?: string }
 

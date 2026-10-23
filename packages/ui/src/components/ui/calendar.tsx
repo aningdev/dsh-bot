@@ -1,11 +1,10 @@
 'use client'
 
+import { Button, buttonVariants } from '@dsh-bot/ui/components/ui/button'
 import { cn } from 'cn'
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from 'lucide-react'
 import * as React from 'react'
 import { DayPicker, getDefaultClassNames, type DayButton, type Locale } from 'react-day-picker'
-
-import { Button, buttonVariants } from '@/renderer/components/ui/button'
 
 function Calendar({
   className,

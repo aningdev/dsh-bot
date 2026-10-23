@@ -1,9 +1,8 @@
+import { ToggleGroup, ToggleGroupItem } from '@dsh-bot/ui/components/ui/toggle-group'
 import { useTranslation } from 'react-i18next'
 
 import { setAppLanguage } from '@/renderer/actions/language'
 import langs from '@/renderer/localization/langs'
-
-import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group'
 
 export default function LangToggle() {
   const { i18n } = useTranslation()

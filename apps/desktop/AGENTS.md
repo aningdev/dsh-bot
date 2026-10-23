@@ -23,6 +23,8 @@
 
 ### Renderer 与状态
 
+界面文案、页面布局、视觉样式与组件组合遵循 [界面设计与文案规范](../../docs/UI_GUIDELINES.md)。
+
 - routes 负责页面组装；layouts 只提供空间与 slots；actions 是 renderer 调用原生能力的唯一入口。
 - 交互优先使用语义化 HTML，提供可访问名称、键盘操作和可见焦点；自定义交互同时验证鼠标与键盘路径。
 - 异步查询结果由 React Query 缓存，不复制到 Zustand；全局 QueryClient 只在 `src/renderer/lib/query-client.ts` 创建，通过 Provider 与 Router context 共享。
@@ -90,14 +92,14 @@ src/main/ipc/<domain>/schemas.ts
 
 ## 目录归属
 
-| 位置            | 只放                                                              |
-| --------------- | ----------------------------------------------------------------- |
-| `src/main/`     | Main 生命周期、窗口、安全策略、IPC server                         |
-| `src/preload/`  | 端口转发                                                          |
-| `src/renderer/` | actions、routes、layouts、stores、components、hooks、localization |
-| `src/shared/`   | 跨进程类型、常量、纯函数                                          |
-| `tests/`        | `unit/{main,renderer}` 与 `e2e`                                   |
-| `scripts/`      | 构建与验证脚本                                                    |
+| 位置            | 只放                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `src/main/`     | Main 生命周期、窗口、安全策略、IPC server                                                      |
+| `src/preload/`  | 端口转发                                                                                       |
+| `src/renderer/` | actions、routes、layouts、stores、应用组件、hooks、localization；基础 UI 从 `@dsh-bot/ui` 消费 |
+| `src/shared/`   | 跨进程类型、常量、纯函数                                                                       |
+| `tests/`        | `unit/{main,renderer}` 与 `e2e`                                                                |
+| `scripts/`      | 构建与验证脚本                                                                                 |
 
 新建目录前先在本文件补充职责定义，再创建。
 

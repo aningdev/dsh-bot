@@ -52,6 +52,8 @@ scripts/      构建与验证脚本
 
 TypeScript 使用三份配置：[`tsconfig.json`](./tsconfig.json) 保存公共选项并声明项目引用；[`tsconfig.node.json`](./tsconfig.node.json) 检查 main、preload、工具脚本和测试；[`tsconfig.renderer.json`](./tsconfig.renderer.json) 检查 renderer 与 shared。两个子项目均使用 `noEmit`，不生成声明文件。renderer 通过 `import type` 引用 main router，为 oRPC 推导类型。
 
+基础组件和设计 Token 位于 [`packages/ui`](../../packages/ui/README.md)，通过 `@dsh-bot/ui/components/ui/*` 消费；桌面样式只维护窗口布局与滚动策略。
+
 ## Vite、代码检查与测试配置
 
 [`vite.config.ts`](./vite.config.ts) 集中配置 Vite Plus 的 lint、格式化和 Vitest 单元测试。Forge 构建分别使用 [`vite.main.config.mts`](./vite.main.config.mts)、[`vite.preload.config.mts`](./vite.preload.config.mts) 和 [`vite.renderer.config.mts`](./vite.renderer.config.mts)；Playwright 使用 [`playwright.config.ts`](./playwright.config.ts)。

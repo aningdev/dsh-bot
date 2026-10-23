@@ -1,9 +1,8 @@
+import { Button } from '@dsh-bot/ui/components/ui/button'
 import { cn } from 'cn'
 import useEmblaCarousel, { type UseEmblaCarouselType } from 'embla-carousel-react'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import * as React from 'react'
-
-import { Button } from '@/renderer/components/ui/button'
 
 type CarouselApi = UseEmblaCarouselType[1]
 type UseCarouselParameters = Parameters<typeof useEmblaCarousel>

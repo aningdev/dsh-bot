@@ -1,8 +1,8 @@
+import { Button } from '@dsh-bot/ui/components/ui/button'
 import { Moon } from 'lucide-react'
 import { useState } from 'react'
 
 import { toggleTheme } from '@/renderer/actions/theme'
-import { Button } from '@/renderer/components/ui/button'
 
 export default function ToggleTheme() {
   const [pending, setPending] = useState(false)

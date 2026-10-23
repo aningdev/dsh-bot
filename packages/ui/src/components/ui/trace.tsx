@@ -1,12 +1,11 @@
-import { cn } from 'cn'
-import { ChevronRightIcon } from 'lucide-react'
-import * as React from 'react'
-
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/renderer/components/ui/collapsible'
+} from '@dsh-bot/ui/components/ui/collapsible'
+import { cn } from 'cn'
+import { ChevronRightIcon } from 'lucide-react'
+import * as React from 'react'
 
 function Trace({ className, ...props }: React.ComponentProps<'div'>) {
   return (

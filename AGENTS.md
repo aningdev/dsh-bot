@@ -2,6 +2,8 @@
 
 本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)，术语见 [术语表](GLOSSARY.md)；修改工作区划分、profile、客户端连接或打包前阅读 [架构与工作区方案](docs/PROJECT_LAYOUT.md)，修改桌面应用前阅读 [应用约束](apps/desktop/AGENTS.md)。
 
+修改界面文案、页面布局、视觉样式或共享 UI 组件前，阅读并遵循 [界面设计与文案规范](docs/UI_GUIDELINES.md)。
+
 ## 目录归属
 
 - `apps/`：可独立构建或交付的客户端、后台与 Relay 应用；当前桌面源码位于 `apps/desktop/`，其余目标工作区见架构方案。

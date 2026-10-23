@@ -23,6 +23,7 @@
 | apps/relay               | 设备连接路由、在线状态与密文转发                                                | 远程交付             |
 | packages/bot             | Bot 产品服务、配置与 Session 关联、Agent 生命周期、必要的 Remote 声明和生成贡献 | 首版                 |
 | packages/client          | 跨端可用的调用、状态与连接逻辑，提供平台适配入口                                | 按实际消费者提取     |
+| packages/ui              | shadcn 基础组件、通用展示组件、设计 Token 与共享样式；desktop 已消费 | 已有 |
 | packages/web-ui          | 桌面与 Web 实际相同的聊天、输入、审批、工具结果、附件等业务组件                 | Web 提取阶段         |
 | packages/harness-runtime | 固定版本 Harness 依赖和运行时资源定义                                           | 已有，随 Runner 完善 |
 | packages/plugin-*        | 按独立加载、依赖隔离或分发需要组织的标准 Harness 能力插件                       | 按具体能力新增       |
@@ -66,7 +67,7 @@ apps/runner 负责选择 profile、组合进程服务与插件、配置数据目
 
 | 消费方           | 依赖内容                                                         |
 | ---------------- | ---------------------------------------------------------------- |
-| desktop Renderer | web-ui、桌面 actions 与平台适配；原生和后台操作继续经过受控 oRPC |
+| desktop Renderer | ui、后续 web-ui、桌面 actions 与平台适配；原生和后台操作继续经过受控 oRPC |
 | desktop Main     | client 的 Node 适配、本机 Runner 管理、窗口与系统能力            |
 | web              | web-ui、client 的浏览器适配、Web 路由与 PWA 配置                 |
 | mobile           | client 的 React Native 适配、Expo 页面与平台能力                 |
@@ -74,6 +75,8 @@ apps/runner 负责选择 profile、组合进程服务与插件、配置数据目
 | client           | 所属服务的客户端安全声明与生成贡献、适用的状态和传输逻辑         |
 | runner           | bot、Harness runtime、选定工具插件、设备和连接模块               |
 | relay            | 路由与密文传输所需模块                                           |
+
+ui 通过 `@dsh-bot/ui` 子路径导出 TS/TSX 与 CSS，由应用构建；React/React DOM 是 peer 依赖。其 shadcn 配置与更新脚本统一放在包内，主题选择与持久化由应用负责。上游 ui-primitives 已提供无 Cordis 的 React 基础层、ui-theme 单独管理主题；本项目沿用基础层与应用能力分离的方向，保留现有 shadcn/Base UI 及 Token，不引入上游 UI 和主题插件。
 
 web-ui 优先共享消息、输入、审批、标准工具结果与附件组件；desktop 和 web 分别拥有路由、导航、布局与平台功能。适合共同维护的完整页面在出现时再提取。共享包通过明确的业务数据和操作入口使用客户端能力，不导入应用目录；客户端状态只反映 Runner 的执行事实。
 

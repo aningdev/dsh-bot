@@ -1,13 +1,12 @@
-import { Link } from '@tanstack/react-router'
-import { useTranslation } from 'react-i18next'
-
 import {
   NavigationMenu as NavigationMenuBase,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
   navigationMenuTriggerStyle,
-} from '@/renderer/components/ui/navigation-menu'
+} from '@dsh-bot/ui/components/ui/navigation-menu'
+import { Link } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 
 import ExternalLink from './external-link'
 

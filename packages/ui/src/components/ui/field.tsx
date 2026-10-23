@@ -1,9 +1,8 @@
+import { Label } from '@dsh-bot/ui/components/ui/label'
+import { Separator } from '@dsh-bot/ui/components/ui/separator'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from 'cn'
 import { useMemo } from 'react'
-
-import { Label } from '@/renderer/components/ui/label'
-import { Separator } from '@/renderer/components/ui/separator'
 
 function FieldSet({ className, ...props }: React.ComponentProps<'fieldset'>) {
   return (

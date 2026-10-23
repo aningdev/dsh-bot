@@ -1,6 +1,7 @@
 'use client'
 
 import { Toast as ToastPrimitive } from '@base-ui/react/toast'
+import { Button } from '@dsh-bot/ui/components/ui/button'
 import { cn } from 'cn'
 import {
   XIcon,
@@ -11,8 +12,6 @@ import {
   Loader2Icon,
 } from 'lucide-react'
 import * as React from 'react'
-
-import { Button } from '@/renderer/components/ui/button'
 
 const toast = ToastPrimitive.createToastManager()
 

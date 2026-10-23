@@ -1,8 +1,7 @@
+import { Button } from '@dsh-bot/ui/components/ui/button'
 import { cn } from 'cn'
 import { ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon } from 'lucide-react'
 import * as React from 'react'
-
-import { Button } from '@/renderer/components/ui/button'
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
   return (

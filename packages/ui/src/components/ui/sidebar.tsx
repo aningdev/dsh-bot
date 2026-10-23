@@ -1,23 +1,22 @@
 import { mergeProps } from '@base-ui/react/merge-props'
 import { useRender } from '@base-ui/react/use-render'
-import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from 'cn'
-import { PanelLeftIcon } from 'lucide-react'
-import * as React from 'react'
-
-import { Button } from '@/renderer/components/ui/button'
-import { Input } from '@/renderer/components/ui/input'
-import { Separator } from '@/renderer/components/ui/separator'
+import { Button } from '@dsh-bot/ui/components/ui/button'
+import { Input } from '@dsh-bot/ui/components/ui/input'
+import { Separator } from '@dsh-bot/ui/components/ui/separator'
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from '@/renderer/components/ui/sheet'
-import { Skeleton } from '@/renderer/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/renderer/components/ui/tooltip'
-import { useIsMobile } from '@/renderer/hooks/use-mobile'
+} from '@dsh-bot/ui/components/ui/sheet'
+import { Skeleton } from '@dsh-bot/ui/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@dsh-bot/ui/components/ui/tooltip'
+import { useIsMobile } from '@dsh-bot/ui/hooks/use-mobile'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from 'cn'
+import { PanelLeftIcon } from 'lucide-react'
+import * as React from 'react'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
