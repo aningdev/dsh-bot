@@ -2,6 +2,8 @@
 
 本文件汇总已确认的架构决定，给出依赖方向、进程关系和分阶段实施草案。产品行为以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 为准，术语见 [GLOSSARY.md](../GLOSSARY.md)，上游依据见 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。整体依赖图和实施顺序待最终确认，本文不表示对应实现已经完成。
 
+上游目录、名称、profile 和插件的逐项复用方案见 [Harness 映射方案](./HARNESS_MAPPING_PLAN.md)。后台保持 `apps/runner`，不加载官方 `dsh-web-app`；由自有 profile/bundle 装配标准执行和通信插件，后续 Web/PWA 由 `apps/web` 自建。`packages/harness-runtime` 管理固定依赖与规划中的基础服务 bundle，Runner 是加载这些资源并由 launchd 管理的应用进程。
+
 ## 当前工程与上游依赖
 
 桌面源码位于 apps/desktop，packages/harness-runtime 管理固定版本 Harness npm 依赖与 CLI。其余目标工作区随实际实现建立。
@@ -23,7 +25,7 @@
 | apps/relay               | 设备连接路由、在线状态与密文转发                                                | 远程交付             |
 | packages/bot             | Bot 产品服务、配置与 Session 关联、Agent 生命周期、必要的 Remote 声明和生成贡献 | 首版                 |
 | packages/client          | 跨端可用的调用、状态与连接逻辑，提供平台适配入口                                | 按实际消费者提取     |
-| packages/ui              | shadcn 基础组件、通用展示组件、设计 Token 与共享样式；desktop 已消费 | 已有 |
+| packages/ui              | shadcn 基础组件、通用展示组件、设计 Token 与共享样式；desktop 已消费            | 已有                 |
 | packages/web-ui          | 桌面与 Web 实际相同的聊天、输入、审批、工具结果、附件等业务组件                 | Web 提取阶段         |
 | packages/harness-runtime | 固定版本 Harness 依赖和运行时资源定义                                           | 已有，随 Runner 完善 |
 | packages/plugin-*        | 按独立加载、依赖隔离或分发需要组织的标准 Harness 能力插件                       | 按具体能力新增       |
@@ -65,16 +67,16 @@ apps/runner 负责选择 profile、组合进程服务与插件、配置数据目
 
 ## 代码依赖与客户端复用
 
-| 消费方           | 依赖内容                                                         |
-| ---------------- | ---------------------------------------------------------------- |
+| 消费方           | 依赖内容                                                                  |
+| ---------------- | ------------------------------------------------------------------------- |
 | desktop Renderer | ui、后续 web-ui、桌面 actions 与平台适配；原生和后台操作继续经过受控 oRPC |
-| desktop Main     | client 的 Node 适配、本机 Runner 管理、窗口与系统能力            |
-| web              | web-ui、client 的浏览器适配、Web 路由与 PWA 配置                 |
-| mobile           | client 的 React Native 适配、Expo 页面与平台能力                 |
-| web-ui           | React DOM 业务组件、显式传入的业务数据与操作入口                 |
-| client           | 所属服务的客户端安全声明与生成贡献、适用的状态和传输逻辑         |
-| runner           | bot、Harness runtime、选定工具插件、设备和连接模块               |
-| relay            | 路由与密文传输所需模块                                           |
+| desktop Main     | client 的 Node 适配、本机 Runner 管理、窗口与系统能力                     |
+| web              | web-ui、client 的浏览器适配、Web 路由与 PWA 配置                          |
+| mobile           | client 的 React Native 适配、Expo 页面与平台能力                          |
+| web-ui           | React DOM 业务组件、显式传入的业务数据与操作入口                          |
+| client           | 所属服务的客户端安全声明与生成贡献、适用的状态和传输逻辑                  |
+| runner           | bot、Harness runtime、选定工具插件、设备和连接模块                        |
+| relay            | 路由与密文传输所需模块                                                    |
 
 ui 通过 `@dsh-bot/ui` 子路径导出 TS/TSX 与 CSS，由应用构建；React/React DOM 是 peer 依赖。其 shadcn 配置与更新脚本统一放在包内，主题选择与持久化由应用负责。上游 ui-primitives 已提供无 Cordis 的 React 基础层、ui-theme 单独管理主题；本项目沿用基础层与应用能力分离的方向，保留现有 shadcn/Base UI 及 Token，不引入上游 UI 和主题插件。
 
@@ -119,7 +121,7 @@ Relay 首次交付仅支持客户端与 Runner 同时在线，不承担离线请
 
 | 阶段              | 工作                                                                                            | 完成条件                                                                  |
 | ----------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 1. 工程归位       | 已完成：桌面迁至 apps/desktop，根脚本、CI、IDE 与文档引用同步                        | 安装、检查、现有单元、打包 E2E 与成品冒烟通过           |
+| 1. 工程归位       | 已完成：桌面迁至 apps/desktop，根脚本、CI、IDE 与文档引用同步                                   | 安装、检查、现有单元、打包 E2E 与成品冒烟通过                             |
 | 2. 接入原型       | 发布版依赖下装配 Runner profile、Bot 服务与生成 Remote；验证客户端最小组合及 Agent 生命周期协调 | 同一 Bot 唯一 Session，空闲配置即时生效、失败恢复，调用和跟随在替换后可用 |
 | 3. 本机产品闭环   | Bot 管理、真实模型与工具、审批、队列操作、后台进程管理和安装资源                                | 桌面退出后执行继续，异常拉起与主动停止符合语义，无外部运行时可用          |
 | 4. Web/PWA 与远程 | 建立独立 web，按实际需要提取 client/web-ui；实现设备配对、Relay 和端到端资源传输                | 本人设备可完成协作与附件任务，撤销生效，断连与重连状态准确                |

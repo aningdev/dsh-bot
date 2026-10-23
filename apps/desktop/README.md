@@ -56,7 +56,7 @@ TypeScript 使用三份配置：[`tsconfig.json`](./tsconfig.json) 保存公共�
 
 ## Vite、代码检查与测试配置
 
-[`vite.config.ts`](./vite.config.ts) 集中配置 Vite Plus 的 lint、格式化和 Vitest 单元测试。Forge 构建分别使用 [`vite.main.config.mts`](./vite.main.config.mts)、[`vite.preload.config.mts`](./vite.preload.config.mts) 和 [`vite.renderer.config.mts`](./vite.renderer.config.mts)；Playwright 使用 [`playwright.config.ts`](./playwright.config.ts)。
+根 [`vite.config.ts`](../../vite.config.ts) 统一配置 lint、格式化、进程边界与暂存文件检查；应用 [`vite.config.ts`](./vite.config.ts) 保留 React 插件、别名和 Vitest 单元测试。Forge 构建分别使用 [`vite.main.config.mts`](./vite.main.config.mts)、[`vite.preload.config.mts`](./vite.preload.config.mts) 和 [`vite.renderer.config.mts`](./vite.renderer.config.mts)；Playwright 使用 [`playwright.config.ts`](./playwright.config.ts)。
 
 lint 的通用规则统一配置；`lint.overrides` 按源码目录约束不同进程的能力和依赖方向，同时覆盖路径别名与相对导入：
 

@@ -61,5 +61,7 @@ git submodule update --init references/deepseek-harness
 - [架构与工作区方案](docs/PROJECT_LAYOUT.md)
 - [Harness 配置接入探索](docs/HARNESS_INTEGRATION.md)
 - [Host 与客户端调研](docs/HOST_AND_CLIENT_RESEARCH.md)
+- [Desktop Host 启动链与 Runner 复用调研](docs/DESKTOP_HOST_RESEARCH.md)
+- [Harness 到本项目的映射方案](docs/HARNESS_MAPPING_PLAN.md)
 - 架构决定：[ADR](docs/adr/)
 - 工程约定：[Agent skills 配置](docs/agents/)

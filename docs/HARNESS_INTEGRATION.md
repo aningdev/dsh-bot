@@ -46,7 +46,11 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 首版可以先验证应用管理的 Bot 创建与恢复，再接入官方 Remote/API。如果官方控制器缺少可用的生命周期委托接口，优先评估一个小范围的上游扩展接口，让它委托 Bot 生命周期所有者；不要复制整套 Session Controller、绕过其私有字段或依赖未发布的源码导出。是否需要该扩展由下一步真实组合验证决定。
 
-## 本机证据
+## 当前 npm Runner 接入状态
+
+当前 #3 的 Bot 服务草稿尚未完成 profile、Remote 和进程重启闭环。本次重跑 `bun run --cwd packages/bot test:unit`，首轮回复为空，1 项测试失败；后续历史与重启断言未执行。具体错误、根因尚未确定的范围及上游启动装配依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-当前状态与失败证据)。以下较早的源码工作区组合实验不能替代当前应用验收。
+
+## 此前源码工作区组合证据
 
 临时组合实验使用现有预设贡献 fixture、MockAdapter 和真实 JSONL 持久化，在 macOS 上验证了以下结果。
 

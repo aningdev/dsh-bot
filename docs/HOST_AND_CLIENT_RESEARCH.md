@@ -18,6 +18,8 @@ Host 是承载 Cordis 服务与插件的执行侧环境。host/ 目录中的包�
 
 产品服务也能通过标准插件机制加入这套调用体系：Host 服务继承 TypertRemoteService，用 Remote 声明可调用方法，提供生成的 typert 与 remote 入口，客户端装配相应贡献。独立工程仍需验证公开生成工具、产物和客户端装配，不能直接照搬上游工作区的构建命令。来源：[增加 Remote API](../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)。
 
+Desktop 实际如何装配这些层、处理运行时资源、认证及退出，见 [Desktop Host 启动链与 Runner 复用调研](./DESKTOP_HOST_RESEARCH.md)。该调研还区分官方 Electron 子进程与本项目 launchd Runner 的所有权，并记录当前 #3 的失败证据。
+
 ## 复用时仍需解决的两项问题
 
 Session Controller 自己控制 Agent 激活。其恢复路径调用 agents.resume 后只返回 agent；历史 follow 在输出快照后可调用 promote 触发恢复。Bot 配置即时替换需要应用持有 AgentHandle，因此必须验证统一的生命周期协调方式。单纯在接口前增加 Bot ID 映射不足以解决该问题。来源：[Agent 控制器](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)、[历史跟随](../references/deepseek-harness/packages/api/session-controller/src/history.ts)、[此前配置接入实验](./HARNESS_INTEGRATION.md)。
