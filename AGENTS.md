@@ -1,10 +1,10 @@
 # dsh-bot 开发约束
 
-本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)，术语见 [术语表](apps/dsh-bot/GLOSSARY.md)；修改桌面应用前阅读 [应用约束](apps/dsh-bot/AGENTS.md)。
+本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)，术语见 [术语表](apps/dsh-bot/GLOSSARY.md)；修改工作区划分、profile、客户端连接或打包前阅读 [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)，修改桌面应用前阅读 [应用约束](apps/dsh-bot/AGENTS.md)。
 
 ## 目录归属
 
-- `apps/`：交互客户端；当前 `apps/dsh-bot/` 为 Electron 桌面应用，未来移动端加入同层工作区。
+- `apps/`：可独立构建或交付的客户端、后台与 Relay 应用；当前桌面源码位于 `apps/dsh-bot/`，目标名称与后续工作区见架构方案。
 - `packages/`：有实际消费者的共享包与后台运行时；当前 `packages/harness-runtime/` 管理固定版本的 Harness npm 依赖。
 - `references/`：固定提交的上游 Git submodule，只供阅读、调试和兼容性研究，不参与产品安装、构建和发布。
 - `.github/workflows/`：整个产品仓库的检查、测试和发布入口。

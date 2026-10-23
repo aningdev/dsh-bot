@@ -22,6 +22,15 @@ _Avoid_：Bot、客户端设备、自建 Agent 执行引擎
 **Client（交互客户端）**：向 Runner 提交用户操作并展示执行状态的桌面或移动应用。
 _Avoid_：Runner、独立 Agent
 
+**Device identity（设备身份）**：Runner 用于区分已配对交互端，并分别授权和撤销其访问的独立身份。
+_Avoid_：用户账号、网络连接、Bot 身份
+
+**Pairing（设备配对）**：用户确认一个新交互端可以连接指定 Runner 并获得相应访问权限的过程。
+_Avoid_：模型凭据配置、Relay 登录
+
+**Relay（连接中继）**：在不同网络间为 Client 与 Runner 转发连接和加密业务内容的中间设施，无法读取聊天正文、工具结果与审批内容。
+_Avoid_：Runner、执行状态权威、模型服务
+
 ## Harness 执行
 
 **Harness（执行框架）**：DeepSeek Harness 提供的插件装配、Agent 执行、会话持久化和能力服务体系。

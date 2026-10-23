@@ -10,7 +10,7 @@
 | [packages/harness-runtime](packages/harness-runtime/README.md) | 固定版本的 Harness npm 依赖与 CLI 入口 |
 | [references/deepseek-harness](references/README.md)            | 官方源码 Git submodule，仅作参考       |
 
-后续移动客户端作为 `apps/` 下的独立工作区加入。共享包放在 `packages/`，有实际消费者时再抽取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
+目标工作区、进程关系与实施顺序见 [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)。共享包放在 `packages/`，有实际消费者或独立装配需求时提取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
 
 ## 开发
 
@@ -59,4 +59,4 @@ git submodule update --init references/deepseek-harness
 - [领域术语](apps/dsh-bot/GLOSSARY.md)
 - [产品蓝图](apps/dsh-bot/PRODUCT_BLUEPRINT.md)
 - [Harness 配置接入探索](apps/dsh-bot/HARNESS_INTEGRATION.md)
-- [工程与依赖决策](apps/dsh-bot/PROJECT_LAYOUT.md)
+- [架构与工作区方案](apps/dsh-bot/PROJECT_LAYOUT.md)
