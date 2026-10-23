@@ -89,7 +89,6 @@
           <div class="field"><dt>已生效配置</dt><dd id="s-applied"></dd></div>
           <div class="field"><dt>已保存配置</dt><dd id="s-saved"></dd></div>
           <div class="field"><dt>待处理输入</dt><dd id="s-inbox"></dd></div>
-          <div class="field"><dt>排队中的保存</dt><dd id="s-deferred"></dd></div>
           <div class="field"><dt>待完成的系统动作</dt><dd id="s-effects"></dd></div>
         </dl>
         <div class="notice">
@@ -137,7 +136,6 @@
           saved: botConfigVersion,
           inbox: { turn: 0, step: 0 },
           effects: [],
-          deferredSave: null,
           failNextConfigApply: false,
           client: '未初始化',
           log: [],
@@ -164,24 +162,12 @@
         return null
       }
 
-      function replaceBlockedBy(s) {
-        if (s.deferredSave !== null) return '已有一份配置在排队等待应用'
-        return idleWindowBlockedBy(s)
-      }
-
       function beginReplace(s, version) {
         const effects = s.phase === 'cold'
           ? [{ kind: 'persist', version }, { kind: 'resume', version }]
           : [{ kind: 'persist', version }, { kind: 'dispose' }, { kind: 'resume', version }]
-        return say(plan({ ...s, phase: 'replacing', deferredSave: null }, ...effects),
+        return say(plan({ ...s, phase: 'replacing' }, ...effects),
           `正在把配置应用到第 ${version} 版`)
-      }
-
-      /** A deferred save starts the moment the blocking condition clears. */
-      function maybeApplyDeferred(s) {
-        if (s.deferredSave === null) return s
-        if (idleWindowBlockedBy(s) !== null) return s
-        return beginReplace(s, s.deferredSave)
       }
 
       function react(state, action) {
@@ -205,7 +191,7 @@
           case 'TURN_COMPLETE': {
             if (s.phase !== 'running') return say(s, '当前没有执行中的轮次')
             const after = startTurn({ ...s, phase: 'ready' })
-            return maybeApplyDeferred(say(after, after.phase === 'running' ? '本轮结束，下一轮开始' : '本轮结束，空闲'))
+            return say(after, after.phase === 'running' ? '本轮结束，下一轮开始' : '本轮结束，空闲')
           }
 
           case 'STOP_TURN': {
@@ -213,13 +199,13 @@
             if (s.phase === 'faulted') return say(s, '执行已停止接纳')
             if (s.phase === 'replacing') return say(s, '更换 Agent 中，停止由更换流程负责')
             if (s.phase === 'ready') return say(s, '当前没有执行中的轮次')
-            const stopped = maybeApplyDeferred({ ...s, phase: 'ready' })
+            const stopped = { ...s, phase: 'ready' }
             return say(stopped, queued(s) ? '已停止当前执行，待处理输入被保留' : '已停止当前执行')
           }
 
           case 'WITHDRAW_INPUT': {
             if (!queued(s)) return say(s, '没有待处理输入可撤回')
-            const cleared = maybeApplyDeferred({ ...s, inbox: { turn: 0, step: 0 } })
+            const cleared = { ...s, inbox: { turn: 0, step: 0 } }
             return say(cleared, '已撤回待处理输入')
           }
 
@@ -232,7 +218,7 @@
 
           case 'END_MAINTENANCE': {
             if (s.phase !== 'maintenance') return say(s, '当前没有维护在进行')
-            const after = maybeApplyDeferred(startTurn({ ...s, phase: 'ready' }))
+            const after = startTurn({ ...s, phase: 'ready' })
             return say(after, after.phase === 'running' ? '维护结束，接着执行待处理输入' : '维护结束')
           }
 
@@ -245,14 +231,8 @@
 
           case 'SAVE_CONFIG': {
             const version = Math.max(s.applied, s.saved) + 1
-            if (s.phase === 'running') return say(s, '执行中禁止修改配置：必须在提交前就拒绝，不能悄悄排队')
-            const blocked = replaceBlockedBy(s)
-            if (blocked !== null) {
-              if (s.phase === 'replacing' || s.phase === 'faulted' || s.deferredSave !== null) {
-                return say(s, `保存被拒绝：${blocked}`)
-              }
-              return say({ ...s, deferredSave: version }, `配置第 ${version} 版已保存，但${blocked}；等空闲后自动应用`)
-            }
+            const blocked = idleWindowBlockedBy(s)
+            if (blocked !== null) return say(s, `保存被拒绝：${blocked}。没有「已保存待应用」这种状态`)
             return beginReplace(s, version)
           }
 
@@ -261,7 +241,7 @@
             const [head, ...rest] = s.effects
             const working = { ...s, effects: rest }
             if (head.kind === 'persist') {
-              return say({ ...working, saved: head.version, deferredSave: head.version }, `第 ${head.version} 版配置已写入，但还没生效`)
+              return say({ ...working, saved: head.version }, `第 ${head.version} 版配置已写入，但还没生效`)
             }
             if (head.kind === 'dispose') return say(working, '旧 Agent 已销毁，待处理输入随之清空')
             // resume: version === null is the plain first initialization.
@@ -270,10 +250,10 @@
               return say(after, after.phase === 'running' ? '已初始化，开始执行' : '已初始化')
             }
             if (s.failNextConfigApply) {
-              return say({ ...working, phase: 'faulted', deferredSave: null, failNextConfigApply: false, saved: s.applied },
+              return say({ ...working, phase: 'faulted', failNextConfigApply: false, saved: s.applied },
                 '新配置装配失败：已回退旧配置并停止接纳，客户端不能显示已生效')
             }
-            const applied = { ...working, applied: head.version, saved: Math.max(s.saved, head.version), deferredSave: null }
+            const applied = { ...working, applied: head.version, saved: Math.max(s.saved, head.version) }
             const after = startTurn({ ...applied, phase: 'ready' })
             return say(after, `第 ${head.version} 版配置已生效，下一次执行使用新配置`)
           }
@@ -328,14 +308,15 @@
         },
         {
           name: '待处理输入挡住保存',
-          about: '停止执行会保留待处理输入，于是保存只能排队——这是最容易被忽略的一条。',
+          about: '停止执行会保留待处理输入，于是保存被直接拒绝。撤回后再次保存才能成功。',
           steps: [
             ['QUEUE_MESSAGE', '发送第一条'],
             ['EFFECT_DONE', '让系统完成初始化'],
             ['QUEUE_MESSAGE', '再排一条'],
             ['STOP_TURN', '停止当前执行'],
-            ['SAVE_CONFIG', '保存配置（只能排队）'],
-            ['WITHDRAW_INPUT', '撤回剩下的待处理输入'],
+            ['SAVE_CONFIG', '保存配置（被拒绝）'],
+            ['WITHDRAW_INPUT', '撤回待处理输入'],
+            ['SAVE_CONFIG', '重新保存配置'],
             ['EFFECT_DONE', '写入配置'],
             ['EFFECT_DONE', '销毁旧 Agent'],
             ['EFFECT_DONE', '用新配置恢复'],
@@ -343,14 +324,15 @@
         },
         {
           name: '维护期保存',
-          about: '维护占着真正的空闲窗口，启动维护时对外仍是空闲，所以保存要等维护结束。',
+          about: '维护占着真正的空闲窗口；此时保存也只能被拒绝，等维护结束再保存。',
           steps: [
             ['QUEUE_MESSAGE', '发送一条消息'],
             ['EFFECT_DONE', '让系统完成初始化'],
             ['TURN_COMPLETE', '这一轮执行完成'],
             ['START_MAINTENANCE', '开始维护'],
-            ['SAVE_CONFIG', '维护中保存配置'],
+            ['SAVE_CONFIG', '维护中保存配置（被拒绝）'],
             ['END_MAINTENANCE', '维护结束'],
+            ['SAVE_CONFIG', '重新保存配置'],
             ['EFFECT_DONE', '写入配置'],
             ['EFFECT_DONE', '销毁旧 Agent'],
             ['EFFECT_DONE', '用新配置恢复'],
@@ -401,25 +383,21 @@
           state.inbox.turn + state.inbox.step === 0
             ? '无'
             : `下一轮 ${state.inbox.turn} 条 · 下一步 ${state.inbox.step} 条`
-        el('s-deferred').textContent = state.deferredSave === null ? '无' : `第 ${state.deferredSave} 版，等待空闲`
         el('s-effects').textContent = state.effects.length === 0 ? '无' : `${state.effects.length} 个`
 
         const client = el('s-client')
         client.textContent = state.client
-        const tone =
-          state.phase === 'faulted' ? 'bad' : state.deferredSave !== null || state.phase === 'replacing' ? 'wait' : 'ok'
+        const tone = state.phase === 'faulted' ? 'bad' : state.phase === 'replacing' ? 'wait' : 'ok'
         const tag = document.createElement('span')
         tag.className = `tag ${tone}`
         tag.textContent =
           state.phase === 'faulted'
             ? '不可用'
-            : state.deferredSave !== null
-              ? '等待应用'
-              : state.phase === 'replacing'
-                ? '更换中'
-                : state.applied === state.saved
-                  ? '已生效'
-                  : '未生效'
+            : state.phase === 'replacing'
+              ? '更换中'
+              : state.applied === state.saved
+                ? '已生效'
+                : '未生效'
         client.prepend(tag)
 
         const list = el('s-effectlist')
