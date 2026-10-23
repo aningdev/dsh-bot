@@ -1,4 +1,4 @@
 {
-  "vitest.rootConfig": "apps/dsh-bot/vite.config.ts",
+  "vitest.rootConfig": "apps/desktop/vite.config.ts",
   "vitest.configSearchPatternExclude": "{**/node_modules/**,**/vendor/**,**/.*/**,**/*.d.ts,**/references/**}"
 }

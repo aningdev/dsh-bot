@@ -40,5 +40,5 @@ jobs:
         if: always()
         with:
           name: playwright-${{ matrix.os }}
-          path: apps/dsh-bot/playwright-report/
+          path: apps/desktop/playwright-report/
           retention-days: 7

@@ -28,7 +28,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-只维护根 `bun.lock`，不要在本应用目录单独安装依赖或创建锁文件。下文的应用专属命令在 `apps/dsh-bot` 中执行；根目录也提供 `package`、`check`、`test:unit`、`test:e2e` 与 `test:smoke` 转发入口。
+只维护根 `bun.lock`，不要在本应用目录单独安装依赖或创建锁文件。下文的应用专属命令在 `apps/desktop` 中执行；根目录也提供 `package`、`check`、`test:unit`、`test:e2e` 与 `test:smoke` 转发入口。
 
 从 [`src/renderer/routes/index.tsx`](./src/renderer/routes/index.tsx) 开始修改首页。不需要第二个示例页面时，可以删除 [`src/renderer/routes/second.tsx`](./src/renderer/routes/second.tsx)。开发期间修改 main 进程代码会自动重启应用。
 

@@ -6,7 +6,7 @@
 
 | 路径                                                           | 职责                                   |
 | -------------------------------------------------------------- | -------------------------------------- |
-| [apps/dsh-bot](apps/dsh-bot/README.md)                         | Electron 桌面界面、原生能力与现有 IPC  |
+| [apps/desktop](apps/desktop/README.md)                         | Electron 桌面界面、原生能力与现有 IPC  |
 | [packages/harness-runtime](packages/harness-runtime/README.md) | 固定版本的 Harness npm 依赖与 CLI 入口 |
 | [references/deepseek-harness](references/README.md)            | 官方源码 Git submodule，仅作参考       |
 
@@ -31,7 +31,7 @@ bun run test:e2e
 bun run test:smoke
 ```
 
-`test:e2e` 会先构建桌面产物，`test:smoke` 检查当前产物；完整验证用 `bun run test:all`。桌面详情、签名与发布说明见 [应用 README](apps/dsh-bot/README.md)。
+`test:e2e` 会先构建桌面产物，`test:smoke` 检查当前产物；完整验证用 `bun run test:all`。桌面详情、签名与发布说明见 [应用 README](apps/desktop/README.md)。
 
 使用 VS Code 时以仓库根目录打开项目。[工作区设置](.vscode/settings.json) 将 Vitest 扩展指向桌面应用的 `vite.config.ts`，并排除 `references/` 中的上游配置和测试脚本，避免加载未安装开发依赖的参考子模块。桌面 E2E 使用 Playwright，仍通过 `bun run test:e2e` 运行。
 

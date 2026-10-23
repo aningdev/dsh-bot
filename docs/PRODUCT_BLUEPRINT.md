@@ -1,6 +1,6 @@
 # dsh-bot 产品蓝图
 
-本文记录已确认的产品方向与首版范围，供实现和验收使用，不表示这些能力已经实现。当前应用仍为 Electron 桌面骨架；领域名称以 [GLOSSARY.md](../GLOSSARY.md) 为准，当前开发和打包操作见 [README.md](../apps/dsh-bot/README.md)。
+本文记录已确认的产品方向与首版范围，供实现和验收使用，不表示这些能力已经实现。当前应用仍为 Electron 桌面骨架；领域名称以 [GLOSSARY.md](../GLOSSARY.md) 为准，当前开发和打包操作见 [README.md](../apps/desktop/README.md)。
 
 ## 产品定位
 

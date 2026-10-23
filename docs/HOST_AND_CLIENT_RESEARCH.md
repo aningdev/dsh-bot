@@ -42,7 +42,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 两者都运行 React DOM，因此聊天、Bot 配置、工具结果、审批和响应式布局可以共享页面源码。共享的是页面实现，桌面与 PWA 仍可拥有独立构建入口、导航外壳和发布产物。这是工程可行性判断，尚未完成迁移。
 
-当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源：[当前 IPC 客户端](../apps/dsh-bot/src/renderer/lib/ipc-client.ts)、[当前 app actions](../apps/dsh-bot/src/renderer/actions/app.ts)、[桌面开发约束](../apps/dsh-bot/AGENTS.md)。
+当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源：[当前 IPC 客户端](../apps/desktop/src/renderer/lib/ipc-client.ts)、[当前 app actions](../apps/desktop/src/renderer/actions/app.ts)、[桌面开发约束](../apps/desktop/AGENTS.md)。
 
 | 可共享页面与逻辑            | 需要平台适配的能力           |
 | --------------------------- | ---------------------------- |
@@ -57,7 +57,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 Expo 官方支持同一项目交付 Web、iOS 和 Android。跨端 UI 复用通常基于 React Native 的 View、Text 等组件，React Native Web 将这些组件用于浏览器。Expo Web 的 PWA 还需要配置 manifest、Service Worker 与缓存策略。来源：[Expo Web](https://docs.expo.dev/workflow/web/)、[Expo PWA](https://docs.expo.dev/guides/progressive-web-apps/)。
 
-当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源：[当前桌面依赖](../apps/dsh-bot/package.json)、[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
+当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源：[当前桌面依赖](../apps/desktop/package.json)、[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
 
 | 候选                        | 界面归属                                             | 主要取舍                                                   |
 | --------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- |
