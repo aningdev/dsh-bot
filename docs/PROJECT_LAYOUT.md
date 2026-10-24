@@ -2,11 +2,11 @@
 
 本文件汇总已确认的架构决定，给出依赖方向、进程关系和分阶段实施草案。产品行为以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 为准，术语见 [GLOSSARY.md](../GLOSSARY.md)，上游依据见 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。整体依赖图和实施顺序待最终确认，本文不表示对应实现已经完成。
 
-上游目录、名称、profile 和插件的逐项复用方案见 [Harness 映射方案](./HARNESS_MAPPING_PLAN.md)。后台保持 `apps/runner`，不加载官方 `dsh-web-app`；由自有 profile/bundle 装配标准执行和通信插件，后续 Web/PWA 由 `apps/web` 自建。`packages/harness-runtime` 管理固定依赖与规划中的基础服务 bundle，Runner 是加载这些资源并由 launchd 管理的应用进程。
+上游目录、名称、profile 和插件的逐项复用方案见 [Harness 映射方案](./HARNESS_MAPPING_PLAN.md)。后台保持 `apps/runner`，不加载官方 `dsh-web-app`；由自有 profile/bundle 装配标准执行和通信插件，后续 Web/PWA 由 `apps/web` 自建。`packages/harness-runtime` 管理固定依赖与基础服务 bundle，Runner 是加载这些资源并由 launchd 管理的应用进程。
 
 ## 当前工程与上游依赖
 
-桌面源码位于 apps/desktop，packages/harness-runtime 管理固定版本 Harness npm 依赖与 CLI。其余目标工作区随实际实现建立。
+桌面源码位于 apps/desktop，apps/runner 已有命名 profile 与 Bot Remote 骨架，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。Web、移动端与 Relay 仍按后续阶段建立。
 
 产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../patches/README.md)。
 

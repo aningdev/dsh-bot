@@ -1,3 +1,8 @@
+# Harness and Runner build artifacts
+packages/bot/lib/
+apps/runner/lib/
+apps/runner/.test-output/
+
 node_modules/
 .vite-hooks/_/
 .env

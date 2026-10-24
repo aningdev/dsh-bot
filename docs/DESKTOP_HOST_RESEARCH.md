@@ -1,6 +1,6 @@
 # Desktop Host 启动链与 Runner 复用调研
 
-本文核对参考子模块提交 `687f282e8625c6b8d11ff58211a90524be2e4317`（DSH `0.2.1-rc.2`），沿 Desktop → Desktop Host → profile → 插件树追踪运行、通信、资源与退出。结论来自固定版本源码；本次没有启动上游完整桌面、制作 Runner 安装包或验证 launchd。当前 #3 实现状态与失败证据单独列在文末。
+本文核对参考子模块提交 `687f282e8625c6b8d11ff58211a90524be2e4317`（DSH `0.2.1-rc.2`），沿 Desktop → Desktop Host → profile → 插件树追踪运行、通信、资源与退出。结论来自固定版本源码；本次没有启动上游完整桌面、制作 Runner 安装包或验证 launchd。#3 实施前的失败基线保留在文末；当前 Runner 实现与验证范围见 [Runner README](../apps/runner/README.md)。
 
 ## 结论与职责
 
@@ -122,9 +122,9 @@ Host 接到 `shutdown` 或父 IPC `disconnect` 后，合并并发停止操作，
 
 对应源码：[私有包清单](../references/deepseek-harness/apps/desktop-host/package.json)、[Office 组合](../references/deepseek-harness/apps/desktop-host/src/office.ts)、[Office 引擎解析](../references/deepseek-harness/apps/desktop-host/src/office-engine.ts)、[Platform 发布](../references/deepseek-harness/apps/desktop-host/src/platform-session.ts)、[CLI](../references/deepseek-harness/apps/desktop-host/src/cli.ts)、[Windows 信号](../references/deepseek-harness/apps/desktop-host/src/windows-cli-signals.ts)、[CI runner 脚本](../references/deepseek-harness/apps/desktop/scripts/macos-runner-service.sh)。
 
-## #3 当前状态与失败证据
+## #3 实施前失败证据
 
-[Issue #3](https://github.com/zhuxining/dsh-bot/issues/3) 仍为 OPEN。当前实现基线为分支 `wip/t3-bot-service` 的提交 `71a2d821e3`；本次调研不修改产品代码，也不把此前源码工作区中的成功实验视为当前 npm 应用集成的通过证据。
+以下是 [Issue #3](https://github.com/zhuxining/dsh-bot/issues/3) 实施前的调研记录，基线为分支 `wip/t3-bot-service` 的提交 `71a2d821e3`。它描述失败草稿，不代表当前 Runner；后续实现已通过真实 profile、生成 Remote 和进程重启测试。
 
 本次在仓库根目录执行 `bun run --cwd packages/bot test:unit`，退出码为 1：1 个文件、1 项测试失败。测试期望流式文本 `echo: hello`，实际为 `''`，失败位置为 `packages/bot/tests/bot.spec.ts:31`。测试在首次回复断言处停止，没有执行后面的历史读取、Host 释放和重启，因此这些分支均不能声称通过。[当前测试](../packages/bot/tests/bot.spec.ts)。
 
@@ -139,7 +139,7 @@ Host 接到 `shutdown` 或父 IPC `disconnect` 后，合并并发停止操作，
 | 进程重启后同 Session 历史              | 当前测试未走到重启，且没有实际进程重启证据                                |
 | 自动化测试覆盖完整路径                 | 当前只有失败的进程内服务测试，没有 profile/Remote/进程重启闭环            |
 
-实现证据：[Host 草稿](../packages/bot/src/host.ts)、[Bot 包入口](../packages/bot/package.json)、[测试](../packages/bot/tests/bot.spec.ts)。
+失败草稿可通过 `git show 71a2d821e3:packages/bot/src/host.ts` 查阅；该生产 helper 已移除。当前入口与测试见 [Bot 包](../packages/bot/README.md) 和 [Runner](../apps/runner/README.md)。
 
 ## 回到实现时的验证顺序
 
@@ -149,4 +149,4 @@ Host 接到 `shutdown` 或父 IPC `disconnect` 后，合并并发停止操作，
 4. 停止实际 Runner 进程，重新启动后读取同一 Bot/Session 历史，并确认旧进程及日志句柄已经释放。
 5. 保持 #3 与 #11/#12 分工：#3 建立可运行后台及调用路径，launchd 注册、桌面退出存活和安装升级由后续票给出系统级证据。
 
-以上是依据源码整理的后续实施顺序，不表示这些步骤已经运行或通过。其余配置事务与生命周期问题继续由 [配置接入探索](./HARNESS_INTEGRATION.md) 和各自 issue 管理。
+上述顺序是当时的实施建议；其中 #3 的 profile、Remote、日志与进程重启路径已有实现和通过证据，系统交付仍待 #11/#12。其余配置事务与生命周期问题继续由 [配置接入探索](./HARNESS_INTEGRATION.md) 和各自 issue 管理。

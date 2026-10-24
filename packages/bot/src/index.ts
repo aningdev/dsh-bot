@@ -1,252 +1,372 @@
-/** Bot product service: one Bot, one Chat, one stable Session. */
+/** Bot Remote owner; execution and durable history belong to Harness services. */
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import { Service, type Context } from '@deepseek-ai/cordis'
-import { installModelSelection, type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
-import { createUserMessage, type MessageSource } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
 
-/** Stored Bot record; the product-level identity of one ongoing conversation. */
-export interface BotRecord {
-  readonly botId: string
-  readonly name: string
-  readonly cwd: string
+import type { Context } from '@deepseek-ai/cordis'
+import { installModelSelection, type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent-loop'
+import type {} from '@deepseek-ai/dsh-agent-preset-registry'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { deriveEventMessage, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-persistence'
+import { defineDomain, domainTable, type KvTable } from '@deepseek-ai/dsh-storage-domain'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import schema from '@deepseek-ai/schemastery'
+import { z } from 'zod'
+
+import type { BotFrame, BotRecord, ChatMessage, CreateBotRequest } from './types.ts'
+export type { BotFrame, BotRecord, ChatMessage, CreateBotRequest } from './types.ts'
+
+/** Deployment-owned initial model selection; storage routing belongs to storageDomain. */
+export interface Config {
   readonly provider: string
   readonly model: string
-  readonly sessionId: string
 }
 
-/** One frame the caller receives while a turn runs. */
-export type BotFrame =
-  | { readonly type: 'text'; readonly text: string }
-  | { readonly type: 'done' }
+/** Validates deployment values before the plugin activates. */
+export const Config: schema<Config> = schema.object({
+  provider: schema.string().default('deepseek-official'),
+  model: schema.string().default('deepseek-flash'),
+})
 
-/** One message read back from the Bot's Chat. */
-export interface ChatMessage {
-  readonly role: 'user' | 'assistant'
-  readonly text: string
-}
+const storedBot = z.object({
+  botId: z.uuid(),
+  name: z.string().trim().min(1),
+  cwd: z.string().refine(path.isAbsolute, 'Working directory must be absolute'),
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  sessionId: z.uuid(),
+})
 
-/** Configuration for the Bot service. */
-export interface BotConfig {
-  /** Root directory holding Bot records; defaults to `bots` under the Runner home. */
-  readonly root: string
-  /** Preset every Bot mounts; the Runner registers it at boot. */
-  readonly presetId: string
+const createBotInput = storedBot.pick({ name: true, cwd: true })
+const botDomain = defineDomain({
+  name: 'dsh_bot',
+  version: 1,
+  tables: { bots: domainTable(storedBot) },
+})
+
+/** Whether a filesystem failure means a requested file is absent. */
+function missing(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Bot product service. */
-    botService: BotService
+    /** Bot records, Remote operations, and owned Agent lifetimes. */
+    botController: BotController
   }
 }
 
-const USER_SOURCE: MessageSource = { kind: 'user' }
-
-/**
- * Owns Bot records, their Session association, and the Agent handle for each Bot.
- * All Agent activation for a Bot goes through this service.
- */
-export class BotService extends Service {
+/** Owns Bot identity and Agent handles without replacing Harness execution. */
+export class BotController extends TypertRemoteService {
+  static inject = [
+    'agents',
+    'agentLoop',
+    'agentPresets',
+    'sessions',
+    'sessionPersistence',
+    'storageDomain',
+  ]
   private readonly handles = new Map<string, AgentHandle>()
+  private readonly presets = new Map<string, () => Promise<void>>()
+  private readonly busy = new Set<string>()
+  private stopping = false
 
   /**
-   * @param ctx - owning plugin context.
-   * @param config - resolved service configuration.
+   * @param ctx - Owning plugin context.
+   * @param config - Validated deployment values.
+   * @param records - Validated domain table, closed by the owning plugin after Agent teardown.
    */
-  constructor(ctx: Context, private readonly config: BotConfig) {
-    super(ctx, 'botService')
-    ctx.effect(() => async () => {
-      const handles = [...this.handles.values()]
-      this.handles.clear()
-      for (const handle of handles) await handle.dispose()
-    }, 'bot-service: agent handles')
+  constructor(
+    ctx: Context,
+    private readonly config: Config,
+    private readonly records: KvTable<string, BotRecord>,
+  ) {
+    super(ctx, 'botController', { namespace: 'bot' })
+    ctx.effect(
+      () => async () => {
+        this.stopping = true
+        const failures: unknown[] = []
+        for (const handle of this.handles.values()) {
+          try {
+            await handle.dispose()
+          } catch (error) {
+            failures.push(error)
+          }
+        }
+        this.handles.clear()
+        for (const dispose of this.presets.values()) {
+          try {
+            await dispose()
+          } catch (error) {
+            failures.push(error)
+          }
+        }
+        this.presets.clear()
+        if (failures.length > 0) throw new AggregateError(failures, 'Bot cleanup failed')
+      },
+      'bot: Agent handles and preset declarations',
+    )
   }
 
   /**
-   * Create a Bot and its Session association.
-   * @param input - display name and working directory for the new Bot.
-   * @returns the stored Bot record.
+   * Create a Bot with its own initial model and stable Session identity.
+   * @param input - Display name and absolute working directory.
+   * @param signal - Caller cancellation before the record is committed.
+   * @returns The committed Bot record.
    */
-  async createBot(input: { readonly name: string; readonly cwd: string }): Promise<BotRecord> {
+  @Remote('create')
+  async createBot(input: CreateBotRequest, signal: AbortSignal): Promise<BotRecord> {
+    const parsed = createBotInput.safeParse(input)
+    if (!parsed.success)
+      throw new RemoteError('bot/invalid-input', 'Provide a name and absolute working directory', {
+        field: 'input',
+      })
+    const directory = await stat(parsed.data.cwd).catch((error: unknown) => {
+      if (missing(error)) return undefined
+      throw error
+    })
+    if (directory === undefined || !directory.isDirectory()) {
+      throw new RemoteError('bot/invalid-input', 'Choose an existing working directory', {
+        field: 'cwd',
+      })
+    }
+    signal.throwIfAborted()
     const botId = randomUUID()
     const record: BotRecord = {
+      ...parsed.data,
       botId,
-      name: input.name,
-      cwd: input.cwd,
-      provider: 'fake',
-      model: 'fake-1',
       sessionId: botId,
+      provider: this.config.provider,
+      model: this.config.model,
     }
-    await this.write(record)
+    await this.records.put(botId, record)
     return record
   }
 
   /**
-   * Read one Bot record.
-   * @param botId - identity returned by {@link createBot}.
-   * @returns the stored record.
+   * Read one persisted Bot.
+   * @param botId - Identity returned by create.
+   * @param signal - Caller cancellation.
+   * @returns The validated record.
    */
-  async getBot(botId: string): Promise<BotRecord> {
-    const raw = await readFile(this.recordPath(botId), 'utf8')
-    return JSON.parse(raw) as BotRecord
+  @Remote('get')
+  async getBot(botId: string, signal: AbortSignal): Promise<BotRecord> {
+    signal.throwIfAborted()
+    this.validateBotId(botId)
+    const record = this.records.get(botId)
+    if (record === undefined) throw new RemoteError('bot/not-found', 'Bot not found', { botId })
+    if (record.botId !== botId || record.sessionId !== botId)
+      throw new Error('Bot record identity does not match its table key')
+    return record
   }
 
   /**
-   * List every stored Bot.
-   * @returns Bot records in directory order.
+   * List stored Bots without activating their Agents.
+   * @param signal - Caller cancellation.
+   * @returns The stored records in stable identity order.
    */
-  async listBots(): Promise<readonly BotRecord[]> {
-    let entries: string[]
-    try {
-      entries = await readdir(this.config.root)
-    } catch {
-      return []
-    }
+  @Remote('list')
+  async listBots(signal: AbortSignal): Promise<readonly BotRecord[]> {
     const records: BotRecord[] = []
-    for (const entry of entries) {
-      if (!entry.endsWith('.json')) continue
-      records.push(JSON.parse(await readFile(path.join(this.config.root, entry), 'utf8')) as BotRecord)
-    }
+    for (const id of [...this.records.keys()].sort()) records.push(await this.getBot(id, signal))
     return records
   }
 
   /**
-   * Send one message to a Bot and stream the turn's assistant text.
-   * @param botId - target Bot identity.
-   * @param text - user message text.
-   * @returns frames for this turn; the iteration ends when the turn settles.
+   * Admit one turn and stream assistant text; disconnecting stops observation only.
+   * @param botId - Target Bot.
+   * @param text - User prompt.
+   * @param signal - Cancels observation, preserving accepted execution.
+   * @returns Text frames and a final frame after durable flush; execution failures reject.
    */
-  async *send(botId: string, text: string): AsyncIterable<BotFrame> {
-    const record = await this.getBot(botId)
-    const agent = await this.resolveAgent(record)
-    const queue = new TextQueue()
-    const stop = this.ctx.on('agent/assistant-stream', ({ agent: owner, frame }) => {
-      if (owner.id !== agent.id) return
-      if (frame.type !== 'chunk') return
-      if (frame.chunk.type === 'text-delta') queue.push(frame.chunk.text)
-    }, { global: true })
-    // Attach before the prompt: a fast model can finish the turn before the
-    // caller observes it, and an idle agent would then close an empty queue.
-    const running = Promise.withResolvers<void>()
-    const stopStatus = this.ctx.on('agent/status', ({ agent: owner, status }) => {
-      if (owner.id === agent.id && status === 'running') running.resolve()
-    }, { global: true })
-
+  @Remote({ name: 'send', mode: 'stream' })
+  async *send(botId: string, text: string, signal: AbortSignal): AsyncIterable<BotFrame> {
+    if (typeof text !== 'string' || text.trim().length === 0)
+      throw new RemoteError('bot/invalid-input', 'Message must not be empty', { field: 'text' })
+    signal.throwIfAborted()
+    if (this.stopping || this.busy.has(botId))
+      throw new RemoteError('bot/busy', 'Bot is busy or stopping', { botId })
+    this.busy.add(botId)
+    let accepted = false
     try {
-      agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: USER_SOURCE }))
-      if (agent.status !== 'running') await running.promise
-      const settled = agent.whenIdle().then(() => queue.close())
-      for await (const chunk of queue) yield { type: 'text', text: chunk }
-      await settled
-      yield { type: 'done' }
+      const record = await this.getBot(botId, signal)
+      const agent = await this.resolveAgent(record)
+      signal.throwIfAborted()
+      const queue = new TextQueue()
+      let failure: unknown
+      const stopStream = this.ctx.on(
+        'agent/assistant-stream',
+        ({ agent: owner, frame }) => {
+          if (owner.id === agent.id && frame.type === 'chunk' && frame.chunk.type === 'text-delta')
+            queue.push(frame.chunk.text)
+        },
+        { global: true },
+      )
+      const stopError = this.ctx.on(
+        'agent/error',
+        ({ agent: owner, error }) => {
+          if (owner.id === agent.id) failure = error
+        },
+        { global: true },
+      )
+      const abort = (): void => {
+        queue.close()
+      }
+      signal.addEventListener('abort', abort, { once: true })
+      try {
+        agent.followup(
+          createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }),
+        )
+        accepted = true
+        const settled = agent
+          .whenIdle()
+          .then(async () => {
+            if (!(await this.ctx.sessions.flush(agent.session)))
+              throw new Error('Bot Session has no durability listener')
+          })
+          .catch((error: unknown) => {
+            failure = error
+          })
+          .finally(() => {
+            this.busy.delete(botId)
+            queue.close()
+          })
+        for await (const chunk of queue) {
+          signal.throwIfAborted()
+          yield { type: 'text', text: chunk }
+        }
+        signal.throwIfAborted()
+        await settled
+        if (failure !== undefined)
+          throw new RemoteError(
+            'bot/turn-failed',
+            'Bot execution failed',
+            { botId },
+            { cause: failure },
+          )
+        yield { type: 'done' }
+      } finally {
+        signal.removeEventListener('abort', abort)
+        stopError()
+        stopStream()
+      }
     } finally {
-      stopStatus()
-      stop()
+      if (!accepted) this.busy.delete(botId)
     }
   }
 
   /**
-   * Read the Bot's Chat back from its durable Session log.
-   * @param botId - target Bot identity.
-   * @returns user and assistant messages in log order.
+   * Read canonical stored messages without creating or resuming an Agent.
+   * @param botId - Target Bot.
+   * @param signal - Caller cancellation.
+   * @returns User and assistant text in event order.
    */
-  async history(botId: string): Promise<readonly ChatMessage[]> {
-    const record = await this.getBot(botId)
-    const session = this.ctx.sessions.get(SessionId(record.sessionId))
-    const events = session === undefined
-      ? await this.ctx.sessions.load(SessionId(record.sessionId))
-      : session.snapshotEvents()
+  @Remote('history')
+  async history(botId: string, signal: AbortSignal): Promise<readonly ChatMessage[]> {
+    const record = await this.getBot(botId, signal)
+    const id = SessionId(record.sessionId)
+    const live = this.ctx.sessions.get(id)
+    let events: readonly SessionEvent[]
+    if (live !== undefined) events = live.snapshotEvents()
+    else {
+      if ((await this.ctx.sessionPersistence.stat(id, { signal })) === undefined) return []
+      await using stored = await this.ctx.sessionPersistence.open(id, 'read', { signal })
+      events = (await stored.read()).events
+    }
     const messages: ChatMessage[] = []
     for (const event of events) {
-      if (event.type === 'user/message') {
-        const text = event.data.content
-          .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-          .map(block => block.text)
-          .join('')
-        messages.push({ role: 'user', text })
-      }
-      if (event.type === 'assistant/message') {
-        const text = event.data.content
-          .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-          .map(block => block.text)
-          .join('')
-        messages.push({ role: 'assistant', text })
-      }
+      const message = deriveEventMessage(event)
+      if (message?.role !== 'user' && message?.role !== 'assistant') continue
+      if (message.role === 'user' && message.source.kind !== 'user') continue
+      const text = message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('')
+      messages.push({ role: message.role, text })
     }
     return messages
   }
 
   private async resolveAgent(record: BotRecord): Promise<Agent> {
+    const owned = this.handles.get(record.botId)
+    if (owned !== undefined) return owned.agent
     const sessionId = SessionId(record.sessionId)
-    const live = this.ctx.agents.get(sessionId)
-    if (live !== undefined) return live
-
-    const selection = { current: { provider: record.provider, model: record.model }, assembled: undefined }
+    const presetId = `dsh-bot:${record.botId}`
+    if (!this.presets.has(record.botId)) {
+      this.presets.set(
+        record.botId,
+        await this.ctx.agentPresets.register({ id: presetId, plugins: [] }),
+      )
+    }
+    const selection = {
+      current: { provider: record.provider, model: record.model },
+      assembled: undefined,
+    }
     const setup = async (agentCtx: Context): Promise<void> => {
-      // Without an installed selection the loop assembles no request and the turn
-      // ends with no model call at all.
       installModelSelection(agentCtx, selection)
+      await this.ctx.agentPresets.mount(agentCtx, presetId)
     }
     const agentOptions = { provider: record.provider, model: record.model }
-    const handle = this.ctx.sessions.get(sessionId) === undefined
-      ? await this.ctx.agents.create({ sessionId, meta: { cwd: record.cwd }, agentOptions, setup })
-      : await this.ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
+    const handle =
+      (await this.ctx.sessionPersistence.stat(sessionId)) === undefined
+        ? await this.ctx.agents.create({
+            sessionId,
+            meta: { cwd: record.cwd, agentPreset: presetId },
+            agentOptions,
+            setup,
+          })
+        : await this.ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
     this.handles.set(record.botId, handle)
     return handle.agent
   }
 
-  private recordPath(botId: string): string {
-    return path.join(this.config.root, `${botId}.json`)
-  }
-
-  private async write(record: BotRecord): Promise<void> {
-    await mkdir(this.config.root, { recursive: true })
-    const target = this.recordPath(record.botId)
-    const temporary = `${target}.${process.pid}.tmp`
-    await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, 'utf8')
-    await rename(temporary, target)
+  private validateBotId(botId: string): void {
+    if (!z.uuid().safeParse(botId).success)
+      throw new RemoteError('bot/invalid-input', 'Invalid Bot identity', { field: 'botId' })
   }
 }
 
-/** Bridges synchronous stream notifications into one async iteration. */
+/** Bridges live notifications for one observed turn. */
 class TextQueue implements AsyncIterable<string> {
   private readonly buffer: string[] = []
   private waiter: (() => void) | undefined
   private done = false
-
   push(text: string): void {
-    if (this.done) return
-    this.buffer.push(text)
-    this.waiter?.()
-    this.waiter = undefined
+    if (!this.done) {
+      this.buffer.push(text)
+      this.waiter?.()
+    }
   }
-
   close(): void {
     this.done = true
     this.waiter?.()
-    this.waiter = undefined
   }
-
   async *[Symbol.asyncIterator](): AsyncIterator<string> {
     while (true) {
-      while (this.buffer.length > 0) yield this.buffer.shift() as string
+      while (this.buffer.length > 0) yield this.buffer.shift()!
       if (this.done) return
-      await new Promise<void>((resolve) => { this.waiter = resolve })
+      await new Promise<void>((resolve) => {
+        this.waiter = resolve
+      })
+      this.waiter = undefined
     }
   }
 }
 
-/**
- * Cordis plugin entry for the Bot service.
- * @param ctx - plugin context.
- * @param config - service configuration supplied by the profile.
- */
-export function apply(ctx: Context, config: BotConfig): void {
-  ctx.plugin(BotService, config)
-}
-
-/** Stable plugin name. */
+/** Stable Loader plugin name. */
 export const name = 'bot'
+/** Required execution services; dependency disposal follows the Bot controller. */
+export const inject = BotController.inject
+/**
+ * Register the product Controller in the profile tree.
+ * @param ctx - Plugin context.
+ * @param config - Validated deployment values.
+ * @returns Resolution after the domain is open and the Controller is registered.
+ */
+export async function apply(ctx: Context, config: Config): Promise<void> {
+  const domain = await ctx.storageDomain.open(botDomain)
+  ctx.effect(() => () => domain.close(), 'bot: record domain')
+  new BotController(ctx, config, domain.table('bots'))
+}

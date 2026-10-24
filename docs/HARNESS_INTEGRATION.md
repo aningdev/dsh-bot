@@ -48,7 +48,9 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 ## 当前 npm Runner 接入状态
 
-当前 #3 的 Bot 服务草稿尚未完成 profile、Remote 和进程重启闭环。本次重跑 `bun run --cwd packages/bot test:unit`，首轮回复为空，1 项测试失败；后续历史与重启断言未执行。具体错误、根因尚未确定的范围及上游启动装配依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-当前状态与失败证据)。以下较早的源码工作区组合实验不能替代当前应用验收。
+#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。配置事务、跨 Agent 替换和官方 Session Controller 协调仍由后续票实现。
+
+此前空回复的直接原因已通过 `agent/error` 定位为 adapter 精确模型元数据缺少 `id`、`name`，产生 `INVALID_MODEL_INFO`；修正后继续修复了历史字段、持久化读取及清理入口。原始失败基线保留在 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)，不与本次通过的契约测试混用。
 
 ## 此前源码工作区组合证据
 
@@ -62,4 +64,4 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 初次运行相关测试因缺少本机原生 flock 模块失败；执行 pnpm run build:native-system 后，预设注册测试、Agent 恢复测试与首个组合实验合计 84 项通过。新增失败恢复实验后，单独执行两个组合实验，2 项通过。临时实验没有作为上游包变更保留。
 
-尚未验证真实模型、同模型下全部参数清除语义、Remote/API 跟随跨 Agent 替换、配置文件提交的崩溃恢复、多个客户端并发保存，以及独立 Runner 与安装包。这里的结果证明公开机制可组合，不替代这些应用验收。
+尚未验证真实模型、同模型下全部参数清除语义、Remote/API 跟随跨 Agent 替换、配置文件提交的崩溃恢复、多个客户端并发保存，以及安装包。这里的结果证明公开机制可组合，不替代这些应用验收。

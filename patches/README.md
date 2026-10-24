@@ -1,6 +1,14 @@
 # 第三方兼容补丁
 
-根 package.json 的 patchedDependencies 与 bun.lock 管理补丁，安装时由 Bun 自动应用，不手动改写 node_modules。
+根 package.json 的 patchedDependencies 与 bun.lock 管理补丁，安装时由 Bun 自动应用，不手动改写 node_modules。补丁的 diff 上下文保留上游原始空白，`.gitattributes` 仅对 `patches/*.patch` 关闭 Git 空白样式检查；应用正确性由冻结安装和相应行为测试验证。
+
+## Typert generator 0.2.1-rc.2
+
+发布版生成器只将工作区注册的 protocol 包或 ambient module 中的符号识别为 Remote 元数据。产品通过 npm 导入同版 protocol 时，原生成器报告 Bot 没有 Remote 方法，无法生成严格的 Host/Client 产物。
+
+当前补丁只在现有符号识别处补充检查：声明所属的已安装 npm 包必须为 `@deepseek-ai/dsh-typert-protocol`。不按装饰器名称猜测来源，不修改生成格式，也不复制生成器。Runner 契约测试经生成客户端发起真实调用，并确认错误 wire 参数返回 `gateway/input-invalid`，验证严格描述已生效。
+
+上游版本支持独立 npm protocol 后，移除此补丁，重建 Bot 并通过 profile、Remote、输入拒绝和进程重启测试。
 
 ## Electron Forge 8.0.1
 

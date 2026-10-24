@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/bot/tsconfig.json"
+    }
+  ]
+}

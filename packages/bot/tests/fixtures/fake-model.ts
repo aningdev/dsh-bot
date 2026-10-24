@@ -1,5 +1,11 @@
-/** Scripted model provider used by tests and local development. */
-import { LlmAdapter, type GenerateOptions, type LlmModelInfo, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
+/** Deterministic external model replacement for automated tests. */
+import {
+  LlmAdapter,
+  type GenerateOptions,
+  type LlmModelInfo,
+  type LlmResolvedModelInfo,
+  type StreamChunk,
+} from '@deepseek-ai/dsh-llm'
 
 /** Provider route the {@link FakeModelAdapter} owns. */
 export const FAKE_PROVIDER = 'fake'
@@ -17,7 +23,7 @@ const CONTEXT_WINDOW = 128_000
  */
 export function replyFor(options: GenerateOptions): string {
   const texts = options.messages
-    .filter((message) => message.role === 'user')
+    .filter((message) => message.role === 'user' && message.source?.kind === 'user')
     .flatMap((message) => message.content)
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
   const last = texts.at(-1)?.text ?? ''
@@ -29,11 +35,7 @@ export function replyFor(options: GenerateOptions): string {
  * Streams character by character so streaming paths are exercised, not assumed.
  */
 export class FakeModelAdapter extends LlmAdapter {
-  /** @param provider - registered route; the adapter reports itself under this id. */
-  constructor(private readonly provider: string = FAKE_PROVIDER) {
-    super()
-  }
-
+  private readonly held = new Set<() => void>()
   /**
    * @param provider - one of the routes this adapter was registered for.
    * @returns display metadata whose id equals the provider.
@@ -43,11 +45,11 @@ export class FakeModelAdapter extends LlmAdapter {
   }
 
   /**
-   * @param _provider - ignored; the fake route advertises one model.
+   * @param provider - registered route; the fake advertises one model.
    * @returns the single advertised model.
    */
-  override async listModels(_provider: string): Promise<readonly LlmModelInfo[]> {
-    return [{ id: FAKE_MODEL, name: 'Fake model', contextWindow: CONTEXT_WINDOW }]
+  override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
+    return [{ provider, id: FAKE_MODEL, name: 'Fake model' }]
   }
 
   /**
@@ -56,7 +58,7 @@ export class FakeModelAdapter extends LlmAdapter {
    * @returns resolved metadata for the fake route.
    */
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
-    return { provider, model, contextWindow: CONTEXT_WINDOW }
+    return { provider, id: model, name: model, context: { contextWindow: CONTEXT_WINDOW } }
   }
 
   /**
@@ -65,13 +67,43 @@ export class FakeModelAdapter extends LlmAdapter {
    */
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const text = replyFor(options)
+    if (text === 'echo: fail') throw new Error('Deterministic model failure')
+    if (text === 'echo: release') for (const release of [...this.held]) release()
     yield { type: 'block-start', index: 0, blockType: 'text' }
+    let first = true
     for (const character of text) {
-      if (options.signal.aborted) return
+      if (options.signal?.aborted) return
       yield { type: 'text-delta', index: 0, text: character }
+      if (first && text === 'echo: hold') {
+        first = false
+        await this.waitForRelease(options.signal)
+      }
     }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }
     yield { type: 'usage', usage: { inputTokens: 1, outputTokens: text.length } }
     yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+
+  private waitForRelease(signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const cleanup = (): void => {
+        this.held.delete(release)
+        signal?.removeEventListener('abort', abort)
+      }
+      const release = (): void => {
+        cleanup()
+        resolve()
+      }
+      const abort = (): void => {
+        cleanup()
+        reject(new Error('aborted'))
+      }
+      if (signal?.aborted) {
+        abort()
+        return
+      }
+      this.held.add(release)
+      signal?.addEventListener('abort', abort, { once: true })
+    })
   }
 }

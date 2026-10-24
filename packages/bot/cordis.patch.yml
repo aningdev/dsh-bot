@@ -1,0 +1,6 @@
+- insert:
+    - id: bot
+      name: '@dsh-bot/bot'
+      config:
+        provider: deepseek-official
+        model: deepseek-flash

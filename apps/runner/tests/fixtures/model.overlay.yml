@@ -1,0 +1,11 @@
+- id: bot
+  config:
+    provider: fake
+    model: fake-1
+- id: session-persistence-jsonl
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+- insert:
+    - id: test-model
+      name: ../../.test-output/model.js

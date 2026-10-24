@@ -16,7 +16,7 @@
     "package": "bun run --filter dsh-bot package",
     "make": "bun run --filter dsh-bot make",
     "release": "bun run --filter dsh-bot release",
-    "check": "vp check && bun run --filter @dsh-bot/harness-runtime check",
+    "check": "bun run --filter @dsh-bot/bot build && vp check && bun run --filter @dsh-bot/harness-runtime check",
     "test": "bun run test:unit",
     "test:unit": "bun run --workspaces --if-present test:unit",
     "test:e2e": "bun run --filter dsh-bot test:e2e",
@@ -42,7 +42,8 @@
     "node": "^24.15.0 || >=26.0.0"
   },
   "patchedDependencies": {
-    "@electron-forge/core-utils@8.0.1": "patches/@electron-forge%2Fcore-utils@8.0.1.patch"
+    "@electron-forge/core-utils@8.0.1": "patches/@electron-forge%2Fcore-utils@8.0.1.patch",
+    "@deepseek-ai/dsh-typert-generator@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-typert-generator@0.2.1-rc.2.patch"
   },
   "trustedDependencies": [
     "electron",

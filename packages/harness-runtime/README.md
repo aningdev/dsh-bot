@@ -1,8 +1,8 @@
 # Harness npm 运行时
 
-此工作区声明 dsh-bot 使用的固定版本 `@deepseek-ai/dsh`，为产品提供发布版 CLI。当前不实现 Bot 生命周期、服务端接口或独立后台进程。
+此工作区固定 dsh-bot 使用的 Harness npm 版本，并提供标准服务 bundle。它不启动独立进程，也不实现 Bot 生命周期。`apps/runner` 通过命名 profile 加载本包和 Bot 插件，承载同一棵 Host 插件树。
 
-在仓库根目录安装和调用：
+在仓库根目录安装和调用 CLI：
 
 ```sh
 bun install --frozen-lockfile
@@ -10,12 +10,12 @@ bun run harness --version
 bun run harness --help
 ```
 
-版本以 [package.json](package.json) 为准；后续直接依赖的 DSH 服务包须与该发行版一致，Cordis 与 Loader 使用该发行版要求的版本。应用插件通过 bundle 加入命名 profile，参考子模块不参与本工作区构建。
+版本以 [package.json](package.json) 为准；直接依赖的 DSH 服务包与该发行版一致，Cordis 与 Loader 使用该发行版要求的版本。参考子模块不参与产品构建。
 
-## 与 Runner 的关系
+## Bundle 与 Runner
 
-`apps/runner` 是规划中的后台应用，负责通过命名 profile 启动 Host、发布就绪和故障并完成进程级清理，由 launchd 管理。此包为它提供固定的 Harness npm 依赖；后续规划增加标准服务 bundle 与运行资源定义，由 Runner 的 profile 加载。此包不会另起后台进程，也不自行创建根 Context。
+`cordis.patch.yml` 在 `dsh-base` 上补充独立 WebServer、Connection、Remote 事件贡献和 AgentPresetRegistry，调整 Host 全局工具作用域。当前 standard preset 为空，各 Bot 使用自己的稳定 preset。官方 `dsh-web-app` 和页面不进入 profile；桌面与后续 Web 页面由本项目提供。
 
-Runner 不加载官方 `dsh-web-app`，通信按需装配独立的 WebServer、Connection 和 Gateway 插件；桌面与后续 Web 页面由本项目提供。具体映射及当前与规划的区别见 [Harness 映射方案](../../docs/HARNESS_MAPPING_PLAN.md)。
+Runner 拥有应用入口、profile 选择、就绪/故障通知和进程级清理。此包只提供固定依赖和装配资源，不另建 `startHost()` 或根 Context。默认模型保持官方 provider；确定性模型只在 Runner 的测试 overlay 中注册。
 
-当前工作区只验证 CLI 能启动，尚无上述服务 bundle 或随包 Node 可执行程序。具体工具需要的原生依赖、独立后台和随应用分发仍需对应的集成验证，详见 [产品蓝图](../../docs/PRODUCT_BLUEPRINT.md)。
+当前已验证发布版 npm 下的 profile、认证 Remote、真实日志和进程重启。launchd 注册、随包 Node、安装签名和运行时替换尚未实现；这里的“运行时包”不表示已经携带 Node 可执行程序。操作与验证命令见 [Runner README](../../apps/runner/README.md)，职责依据见 [Harness 映射方案](../../docs/HARNESS_MAPPING_PLAN.md)。

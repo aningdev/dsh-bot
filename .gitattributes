@@ -1,0 +1,2 @@
+# Generated patches retain upstream whitespace in diff context.
+patches/*.patch -whitespace
