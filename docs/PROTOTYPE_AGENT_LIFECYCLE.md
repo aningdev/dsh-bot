@@ -37,4 +37,4 @@
 
 此原型验证的是**协调规则**，不是 API 可行性。#5 已用公开 npm 版复现官方 Controller 的独立冷恢复与历史开场绕过替换拒绝；直接装配不能满足原型假定的统一所有者。真实证据、扩展点和替代方案见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
-原型未覆盖多个客户端同时保存、持久化中断、真实维护与模型执行。#4 的公开接口测试已验证五种拒绝、并发保存、真正的维护占用、同一 Session 替换、失败回退及未完成事务在 Host 重启后的停止接纳；真实 Node Remote 测试覆盖配置应用与进程重启。实现与验证范围见 [Bot 插件](../packages/bot/README.md) 和 [Runner](../apps/runner/README.md)。真实模型、保存中途强制终止进程，以及扩展后的官方 Session Controller 共存仍需验证。
+原型未覆盖多个客户端同时保存、持久化中断、真实维护与模型执行。#4 的公开接口测试已验证五种拒绝、并发保存、真正的维护占用、同一 Session 替换、失败回退及未完成事务在 Host 重启后的停止接纳；真实 Node Remote 测试覆盖配置应用与进程重启。实现与验证范围见 [Bot 插件](../packages/bot/README.md) 和 [Runner](../apps/runner/README.md)。标准 Controller 共存已通过受版本锁定的 Host 扩展验证；真实模型、保存中途强制终止进程与系统交付仍需验证。

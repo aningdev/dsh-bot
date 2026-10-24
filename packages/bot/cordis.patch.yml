@@ -4,3 +4,5 @@
       config:
         provider: deepseek-official
         model: deepseek-flash
+    - id: bot-session-controller
+      name: '@dsh-bot/bot/session-controller'

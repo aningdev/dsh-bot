@@ -110,6 +110,27 @@ export function runnerHarness() {
     })
     return { child, ready, probes }
   }
+  async function startFailure(home: string, patches: string[]): Promise<never> {
+    const index = children.length
+    try {
+      await start(home, true, patches)
+    } catch (error) {
+      const child = children[index]!
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL')
+      }, 10000)
+      try {
+        if (child.exitCode === null && child.signalCode === null) await once(child, 'exit')
+        if (child.exitCode !== 1)
+          throw new AggregateError([error], 'Failed startup did not exit with code 1')
+        children.splice(index, 1)
+      } finally {
+        clearTimeout(timer)
+      }
+      throw error
+    }
+    throw new Error('Expected Runner startup to fail')
+  }
   async function stop(
     child: ChildProcess,
   ): Promise<{ code: number | null; acknowledged: boolean }> {
@@ -195,5 +216,5 @@ export function runnerHarness() {
     if (failures.length > 0) throw new AggregateError(failures, 'Runner test cleanup failed')
   })
 
-  return { start, stop, connect, home }
+  return { start, startFailure, stop, connect, home }
 }

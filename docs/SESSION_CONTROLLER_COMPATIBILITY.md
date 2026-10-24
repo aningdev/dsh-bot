@@ -1,93 +1,76 @@
 # Session Controller 共存验证
 
-固定 npm 发行版 `0.2.1-rc.2` 不能直接满足 Bot 的 Agent 所有权和严格配置替换要求。#5 按其允许的替代验收交付可执行复现与最小扩展点结论；正式 Runner 继续只开放 Bot 所有者协调的接口。官方 Session Controller 的正式接入需要可消费的上游扩展版本。
+正式 Runner profile 已接入标准 Session Controller、文件引用与上传，BotController 继续独占 Bot 的 AgentHandle、配置和 preset。固定 npm 基线缺少所需委托，因此当前通过根 Bun 锁文件应用五个运行时兼容补丁；这不是上游已经发布生命周期扩展的声明。包版本见 [runtime 清单](../packages/harness-runtime/package.json)，补丁职责和移除条件见 [补丁说明](../patches/README.md)。
 
-## 验证组合与复现
+产品仍通过 npm 公开入口与命名 `runner` profile 启动，不加载官方 Web 应用，不复制 Controller，不替换 AgentFactory，也不从参考子模块导入产品代码。Session 事件、查询、队列、权限和模型循环保持上游实现；没有新增 Session 格式或客户端传输协议。
 
-测试使用真实 Node Runner、独立 home、命名 profile、JSONL、storageDomain、Connection/Gateway、已发布 Session Controller 与生成客户端，只替换外部模型。通过调用时 overlay 加入 workspace、file-reference、file-upload、Session Controller 和测试观察插件，保持正式 bundle 不变；不加载官方 Web 应用或页面。
+## 所有权与操作窗口
+
+[产品适配器](../packages/bot/src/session-controller.ts) 连接以下 Host 接口；这些接口由补丁增加，不是新的客户端 Remote 方法。
+
+| 所属包                 | 接口                                           | 作用                                                        |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
+| typert-protocol        | `OperationGuardRegistry`                       | 单提供者注册、取消、幂等释放、退出等待和退役后的拒绝        |
+| api-session-controller | `registerLifecycle({ acquire, resolveAgent })` | 命令、历史开场、后台 promotion 和统一 Agent 解析            |
+| api-gateway            | `registerOperationGuard`                       | 在 Context/参数 lookup 前取得窗口，保留到调用与结果编码结束 |
+| client-file-upload     | `registerUploadGuard`                          | 从冷解析到字节接收、持久化和回执暂存保持窗口                |
+| dsh/profile-boot       | `runProfile({ beforeDispose })`                | 在整棵插件树销毁之前排空已接纳操作                          |
+
+BotController 按稳定 Session 身份识别 Bot，并沿标准 subagent header 的父链识别所属 Bot。操作窗口是按 Bot 计数的共享租约，允许同一调用内的嵌套解析；配置替换要求计数为零，已有调用期间立即返回 `maintenance`。配置应用开始后，新查询、激活、上传与命令在使用候选 Agent 前返回 `replacing`。冷初始化也阻止替换，并由 Bot 持有一个共享初始化任务，避免不同调用各自创建 Agent。
+
+创建与恢复使用 Bot 插件自身的 Context，句柄不会归属于一次 Gateway invocation。取消一个初始化观察者不撤销 Bot 已拥有的初始化任务；退出时由 Bot 等待任务终结。Agent 的模型、参数、cwd、字面指令与能力来自最新已提交配置，Controller 不重新安装官方默认模型选择。
+
+Gateway 保留原有授权和参数校验顺序。通过授权后，先取得操作窗口，再解析 Host Context 和参数；并行参数解析全部结算后才能释放窗口。失败清理、流迭代结束和 RPC 编码均有释放路径。调用方不能在 lookup 返回后、异步方法仍使用 Agent 时开始替换它。
+
+## 历史、上传和命令
+
+历史 page 与 projections 只读取，不为了查询激活 Agent。follow 的开场保护订阅与首个快照，首帧交出后释放窗口；已有长流不占用配置替换资格，并能在同一 Session 上继续收到新 Agent 的事件。冷 follow 的后台 promotion 独立重新取得窗口，覆盖恢复及 observation 清理。尚无日志的新 Bot 由所有者先建立空 Session，再返回快照。
+
+原始上传在接收字节之前取得窗口，优先使用注册的普通 Session resolver；原有 subagent 所有权检查保留。`uploadStream` 接受原有 iterable 或接收完整取消信号的 source factory。HTTP 入口使用 source factory 和 Node `Readable.fromWeb`，让生命周期退役可以中断等待字节的 reader；租约到持久化、事件发布和回执暂存结束才释放。编码上传还受 Gateway 与暂存操作窗口保护。文件存储与回执继续使用上游实现，不额外承诺跨物理 Session 关闭保留暂存回执。
+
+标准 prompt、queue 更新、cancel 和 rename 经过相同所有者解析；cancel 保留标准输入队列语义。标准 create、fork、selectModel 在产品 profile 中返回 `bot/operation-unavailable`，避免独立创建第二个会话所有者或绕过完整配置事务。Bot 创建和模型更新仍使用 Bot Remote。传统 `bot.send` 保持单轮流式观察：有运行或待处理用户输入时返回 `bot/busy`，其观察期间不接受标准 prompt 混入另一轮；标准 prompt 自身继续使用上游队列。
+
+## 退出顺序
+
+Runner 的退出前钩子先停止 Bot 接纳，再关闭三类操作 guard，取消并等待查询、lookup、上传和流的收尾。之后 Bot 等待已接纳配置与初始化任务、取消活动执行并等待其持久化、释放 Agent 和 preset，最后才调用上游插件树清理。记录域的关闭也明确等待 Bot 清理完成。
+
+这段顺序不能只靠 Cordis `inject`：整棵树销毁会并发启动兄弟清理，服务 withdrawal 的等待不保证其他资源关闭尚未开始。受控测试在消费者最后一次使用 Agent 与记录域之前暂停，再分别触发私有 IPC shutdown 和 SIGTERM；省略退出前钩子时观测到 Agent 已不活跃，恢复钩子后两种退出路径都等待清理完成并保留依赖可用。
+
+guard 退役后新的访问明确失败，不能落回官方自动恢复。取消或清理失败不会伪装成成功；已有配置事务失败、回退及故障保持继续使用 Bot 的既有错误与持久 intent。退出前钩子不改变进程强制终止的恢复保证。
+
+## 自动化证据
 
 ```sh
 bun install --frozen-lockfile
+bun run --cwd packages/bot check
+bun run --cwd packages/bot test:unit
 bun run --cwd apps/runner check
-bun run --cwd apps/runner test:unit -- session-controller-compatibility
+bun run --cwd apps/runner test:unit
 ```
 
-[兼容性测试](../apps/runner/tests/session-controller-compatibility.spec.ts) 包含三个复现；[观察插件](../apps/runner/tests/fixtures/session-controller-probe.ts) 只报告公开事件、可选注册空 preset，并用明确的初始化屏障控制交错。它不替换官方方法或读取私有字段，正常 build 不构建测试插件。
+[Runner 生命周期测试](../apps/runner/tests/session-lifecycle.spec.ts) 使用真实 Node、独立 home、正式命名 profile、JSONL、storageDomain、Connection/Gateway 和生成客户端，只替换外部模型。受控文件引用 provider、初始化和上传屏障仅存在于 [测试插件](../apps/runner/tests/fixtures/session-controller-probe.ts)，正常 build 不构建这些 fixture。
 
-| 复现                         | 准备与触发                                                                        | 实际观测                                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 冷恢复缺少 Bot preset        | 完成 fake-1 一轮，成功保存 fake-2 配置但尚未执行下一轮；重启后加入官方 Controller | `session.rename` 恢复失败；`session.follow` 先返回快照，随后后台激活报告找不到 `dsh-bot:<botId>`             |
-| 注册 preset 仍缺少所有者交接 | 在同样的冷启动中，通过公开 registry 预注册空 preset，使官方历史跟随能够恢复       | 官方创建的 Agent 不属于 Bot；Bot 保存返回 `unavailable`。保存记录为 fake-2，官方 prompt 却产生 fake-1 的回复 |
-| 历史开流绕过替换拒绝         | 阻塞 Bot 新 Agent 的 `agent/created` 初始化监听器，使配置应用保持未完成           | Bot history 返回 `replacing`；同一时刻官方 follow 返回快照，保存完成前没有经过 Bot 的拒绝判断                |
+| 路径                         | 验证结果                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| 重启后标准 rename 触发冷恢复 | 由 Bot 保留句柄；下一轮使用最新模型、参数与字面指令，并可再次保存            |
+| 冷 follow 与已有长流         | 后台激活经过 Bot；长流跨替换继续收到新模型回复，不长期阻止保存               |
+| 配置应用中的间接入口         | 标准历史开场、rename、文件引用、编码上传与原始 HTTP 上传均在候选被使用前拒绝 |
+| 异步 lookup                  | 初始化未就绪时保存返回 `maintenance`，就绪后查询和替换成功                   |
+| lookup 后的方法执行          | 文件引用方法仍在异步使用 Agent 时，保存保持拒绝；方法结算后可替换            |
+| 原始上传及适配器退役         | 上传接收期间保持窗口，退役取消接收和消费者收尾，暂存文件清理后才完成         |
+| Runner 全树退出              | IPC 与 SIGTERM 都等待消费者最后一次依赖使用，之后正常退出                    |
+| 首次 prompt 前打开新 Bot     | 先建立唯一空 Session，首帧后配置仍可应用                                     |
+| 缺失生命周期绑定             | Runner 拒绝报告就绪                                                          |
+| 独立 create/fork/selectModel | 返回产品错误，Bot 配置和身份不变                                             |
 
-第二项的空 preset 只用于隔离“找不到 preset”与“所有权、模型选择”两个问题，覆盖的 Bot 能力列表本来为空。它不是恢复 Bot 指令或移交句柄的实现。模型差异来自“最新已保存配置为 fake-2，最后模型请求仍为 fake-1”，不需要真实 API 即可观测。
+[操作窗口测试](../packages/bot/tests/operation-guard.spec.ts) 另验证无提供者的直通、取消、释放完成前等待、退役期间才交付的租约清理、失败获取和重新注册。真实模型、非 macOS、设备 Peer 授权、实际 subagent 执行、保存中途强制杀进程、launchd 与自带运行时仍未完成验证。
 
-这些测试固定当前发行版的不兼容行为。升级后若观测改变，应将它们转换为统一所有者的正向验收，并更新本结论。
+## npm 基线的缺口
 
-## 上游现有路径
+补丁前的三个真实进程复现保留在 Git 提交 `7febdc2cd3`：冷恢复缺少动态 Bot preset；预注册空 preset 后官方 Controller 持有 Agent 且采用旧模型；历史开场绕过 Bot 的替换拒绝。当前测试已改为对应的统一所有者正向契约，不能继续把基线缺口当作产品期望行为。
 
-参考源码固定在 submodule 提交 `687f282e8625c6b8d11ff58211a90524be2e4317`，运行测试实际导入 npm 公开入口。参考目录不参与产品构建。
+参考源码固定在 `687f282e8625c6b8d11ff58211a90524be2e4317`，与运行补丁分别管理。[Agent Controller](../references/deepseek-harness/packages/api/session-controller/src/agent.ts) 的内部命令、lookup 闭包、upload resolver 和 `resolveObservedAgent` 不统一通过公开 facade；仅覆盖公开 `resolveAgent` 无法协调所有入口。其内部模型选择还优先使用历史投影或 request header，而不是 Bot 记录。
 
-| 入口                                              | 现有内部路径                                                       | 所需协调                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
-| 公开 `resolveAgent`                               | `SessionController → ApiSessionAgentController.resolveAgent`       | 从 Bot 所有者取得 Agent，保留句柄所有权                   |
-| prompt、queue、rename、模型选择                   | Command Controller 直接使用同一个内部 Agent Controller             | 检查和操作在同一个 Bot 接纳窗口内完成                     |
-| Agent / Session 的 Typert lookup 与 Agent context | 内部 Agent Controller 构造时注册闭包                               | 统一解析，不能只改公开 facade 方法                        |
-| file upload                                       | Session Controller 注册 resolver，直接调用内部 Agent Controller    | 上传前的 Agent 解析也经过 Bot 所有者                      |
-| file-reference                                    | Agent context lookup 激活目标，再调用文件引用服务                  | 复用相同解析与拒绝规则                                    |
-| history page、follow 开场                         | `SessionHistoryController.sourceFor → sessionQuery.observeSession` | 替换期间在读取内容和返回快照前明确拒绝                    |
-| 冷 follow 后台激活                                | `follow → promote → resolveObservedAgent`                          | 开场之后重新取得接纳资格，委托 Bot 创建或恢复             |
-| create、fork                                      | Controller 内部独立创建 Agent                                      | Bot profile 拒绝独立会话创建，产品创建继续由 Bot 服务完成 |
+[history.follow](../references/deepseek-harness/packages/api/session-controller/src/history.ts) 先返回快照再触发 [后台 promotion](../references/deepseek-harness/packages/api/session-controller/src/index.ts)。[Typert lookup 类型](../references/deepseek-harness/packages/typert/protocol/src/types.ts) 只返回对象或 Context，[Gateway](../references/deepseek-harness/packages/api/gateway/src/index.ts) 原本在解析后才建立 invocation；因此只替换 lookup 也不能保护后续异步使用。[原始上传](../references/deepseek-harness/packages/client/file-upload/src/index.ts) 的 live Agent 路径还先于 resolver，需要单独覆盖整个上传。
 
-来源：[Session Controller 构造、上传与 promote](../references/deepseek-harness/packages/api/session-controller/src/index.ts)、[Agent 解析、Typert 注册及 resumeObserved](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)、[命令入口](../references/deepseek-harness/packages/api/session-controller/src/commands.ts)、[历史开场与后台激活](../references/deepseek-harness/packages/api/session-controller/src/history.ts)、[文件引用](../references/deepseek-harness/packages/api/session-controller/src/file-references.ts)。
-
-内部 `resumeObserved` 取出 `AgentHandle.agent` 后只返回 Agent；句柄仍由其创建上下文管理，没有 Bot 接收句柄的公开入口。内部 `selections` 也由官方 Controller 独立维护；恢复时优先使用 Session 的模型选择投影或最后 request header，再使用全局默认选择，不读取 Bot 记录。仅补齐 preset 不能保证最新 Bot 配置生效。来源：[Agent Controller](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)。
-
-follow 的开场先 yield 快照，随后才保留 observation 并发起 promotion。读取开场与后续激活是两次不同操作，不能用一个“进入 follow 前检查一次”的判断覆盖。Agent 发布到 registry 后，初始化监听器可能仍在等待；因此只拦截找不到 Agent 时的冷恢复，也不能阻止替换期间的 live fast path。来源：[history.follow](../references/deepseek-harness/packages/api/session-controller/src/history.ts)、[Agent 工厂发布与初始化](../references/deepseek-harness/packages/core/agent-loop/src/index.ts)。
-
-公开类型也只提供原生打开应用等测试替换项，没有生命周期委托。Typert 的 Host lookup 和 Host context resolver 只接收 id、返回对象或 Context，没有把释放函数交给调用生命周期的返回类型；Gateway 在解析这些值之后才建立 invocation。因此，重新配置 lookup 可以改变解析结果，却不能靠它单独保持整个异步操作的租约。来源：[Controller 公共定义](../references/deepseek-harness/packages/api/session-controller/src/index.ts)、[Typert resolver 类型](../references/deepseek-harness/packages/typert/protocol/src/types.ts)、[Gateway.prepareInvocation 与 resolveParameter](../references/deepseek-harness/packages/api/gateway/src/index.ts)。
-
-## 最小扩展点
-
-扩展应位于 Session Controller，复用现有查询、事件、队列、权限与执行循环。应用提供 Host 生命周期委托，官方 Controller 负责让下列入口使用它。当前 npm 版没有此接口；以下是待上游实现和验证的接口草案。
-
-```ts
-interface SessionControllerLifecycle {
-  run<T>(request: SessionOperation, operation: (route: SessionAgentRoute) => Promise<T>): Promise<T>
-}
-
-type SessionAgentRoute =
-  | { readonly kind: 'controller' }
-  | { readonly kind: 'owner'; readonly resolve: () => Promise<Agent> }
-```
-
-`SessionOperation` 至少包含经过授权的 SessionAddress（创建操作另有全局目标）、操作种类和取消信号。实际 Service Definition 留在官方 Controller 包中；Bot 插件提供实现，普通 profile 保持官方默认路由。此草案不增加客户端 RPC 或持久 Session 字段。
-
-委托同时提供受保护的操作窗口与 Agent 解析：对 Bot，`resolve` 调用 Bot 的受控创建/恢复，使用最新配置并保留 AgentHandle；官方 Controller 跳过自身 preset、默认模型和 selection 的装配。对普通 Session，`controller` 路由保留现有行为。不能先检查 idle、释放窗口，再把裸 Agent 交回任意调用者继续修改。
-
-入口适配有三个必要部分：命令、lookup 和 upload 复用委托解析并在操作完成后释放窗口；历史开场在窗口内完成订阅和快照准备，在首个 yield 前释放窗口；冷 follow promotion 在后续再次取得窗口。整个长连接不持有替换锁，已有 follower 继续使用标准同 Session 事件流跨越 Agent 替换。
-
-Bot 提供者在应用期间拒绝新的读写与激活；替换也拒绝与已接纳的互斥操作交错。禁止官方 `selectModel` 绕过 Bot 的版本校验和完整配置事务，也不允许 create/fork 替 Bot 产生额外会话。不能通过 `selectionFor` 在操作时重新安装官方模型选择，覆盖 Bot 已安装的选择。
-
-原有 Remote 授权、SessionAddress/子 Agent 归属检查、writer 锁和查询校验保留。租约需覆盖异步操作和失败清理，支持同一受保护调用内部的 lookup，避免重复获取自身窗口造成死锁；保存拒绝和故障错误还须通过生成的客户端完整传递。
-
-委托接线集中在 Controller 的 `src/index.ts`、`agent.ts`、`commands.ts` 和 `history.ts`。对 Typert 间接调用，还需要 Gateway 在参数/context lookup 前获取操作租约、在调用结算后释放的生命周期入口，或等价的 Host owned-lookup 支持；只改 Controller 的解析闭包不足以覆盖这段时间。这个调用生命期接口也需随扩展版本验收。无须修改 AgentLoop、JSONL 或把 AgentHandle 暴露给客户端。
-
-## 替代方案
-
-| 方案                             | 评估                                                                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 启动时注册所有 Bot preset        | 只解决 preset 不存在；第二个复现证明句柄归属与配置选择仍不一致                                                                             |
-| 子类覆盖公开 `resolveAgent`      | 内部命令、upload、lookup 和 `resolveObservedAgent` 不通过这个 facade 方法                                                                  |
-| 重配 Typert lookup               | 只覆盖使用该 lookup 的入口，不能覆盖内部命令与历史开场/promotion                                                                           |
-| `agent/created` 监听器接管       | 此时已进入发布流程，事件不提供 AgentHandle；第三个复现也证明仅有 live Agent 不代表替换已结束                                               |
-| Gateway 或 Remote access 过滤    | 授权不能替代运行中操作的租约；Host 直接调用、upload resolver 和后台 promotion 也需协调                                                     |
-| 替换 AgentFactory                | 已有工厂注册时会被拒绝，且扩大到执行循环和其他 Agent；来源见 [setFactory](../references/deepseek-harness/packages/core/agent/src/index.ts) |
-| 复制 Controller 或访问其私有成员 | 增加维护面，不能继续消费公开 npm 入口；不采用                                                                                              |
-| 暂时保持 Bot Remote              | 当前正式组合；继续复用公开 Agent/Session 能力，官方 Controller 待扩展版本验收后接入                                                        |
-
-## 启用前验收
-
-可消费版本需要将三个复现改成：冷 follow 由 Bot 创建/恢复且下一轮使用最新配置；配置应用期间 page/follow 在返回内容前拒绝；配置成功后相同 Session 可继续跟随，已打开的 follower 不会长期阻止保存。还需覆盖命令、upload 和 Typert lookup 的交错、子 Agent 归属，以及新错误码的客户端传递。尤其要验证 lookup 返回后、实际方法仍在执行时，配置替换不会提前销毁其 Agent；长历史流的租约只覆盖开场。
-
-这些路径中，当前自动化实际验证的是表内三个缺口及既有 Bot/Runner 契约。upload、其他 lookup、所有权策略接口草案尚未完成扩展后的行为验收；真实模型、非 macOS 环境与成品交付不在本次兼容性结论内。优先等待或提供包含上述委托的上游发行版，固定同一版本的 DSH 依赖后再启用；未经验证的兼容补丁不进入正式 profile。
+仅补齐 preset、覆盖 facade、监听 `agent/created` 接管、做一次授权过滤或替换 AgentFactory 均不满足这些时间与所有权要求。当前选择在公开 npm 安装物上补充 Host 委托和操作生命周期，保持应用策略在 Bot 包。上游提供等价可消费接口后，统一升级同版 DSH 依赖、移除兼容补丁，并重新通过上述正向测试；不直接删除补丁后依赖基线行为。

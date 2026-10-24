@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-loop'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
+import type { OwnedSessionAgent } from '@deepseek-ai/dsh-api-session-controller'
 import { createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import {
   deriveEventMessage,
@@ -18,7 +19,12 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { defineDomain, domainTable, type KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import {
+  Remote,
+  RemoteError,
+  TypertRemoteService,
+  type OperationLease,
+} from '@deepseek-ai/dsh-typert-protocol'
 import { snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import schema from '@deepseek-ai/schemastery'
@@ -159,7 +165,13 @@ export class BotController extends TypertRemoteService {
   private readonly applying = new Map<string, BotRecord>()
   private readonly faults = new Set<string>()
   private readonly operations = new Set<Promise<BotRecord>>()
+  private readonly turns = new Set<Promise<void>>()
+  private shutdown: Promise<void> | undefined
   private readonly lifetime = new AbortController()
+  private readonly owner: Context
+  private readonly activations = new Map<string, Promise<Agent>>()
+  private readonly access = new Map<string, number>()
+  private accessDrained: (() => void) | undefined
   private stopping = false
 
   /**
@@ -175,33 +187,57 @@ export class BotController extends TypertRemoteService {
     private readonly transactions: KvTable<string, ConfigurationTransaction>,
   ) {
     super(ctx, 'botController', { namespace: 'bot' })
+    this.owner = ctx
     for (const id of transactions.keys()) this.faults.add(id)
-    ctx.effect(
-      () => async () => {
-        this.stopping = true
-        this.lifetime.abort(new Error('Bot controller is stopping'))
-        await Promise.allSettled(this.operations)
-        const failures: unknown[] = []
-        for (const handle of this.handles.values()) {
-          try {
-            await handle.dispose()
-          } catch (error) {
-            failures.push(error)
-          }
+    ctx.effect(() => () => this.quiesce(), 'bot: Agent handles and preset declarations')
+  }
+
+  /** Stop new execution and configuration admission while accepted work can still clean up. */
+  stopAdmission(): void {
+    this.stopping = true
+  }
+
+  /**
+   * Settle accepted operations and release owned Agents before profile dependencies close.
+   * @returns The shared completion barrier, rejecting on resource cleanup failure.
+   */
+  quiesce(): Promise<void> {
+    return (this.shutdown ??= (async () => {
+      this.stopAdmission()
+      this.lifetime.abort(new Error('Bot controller is stopping'))
+      await Promise.allSettled([...this.operations, ...this.activations.values()])
+      if (this.access.size > 0)
+        await new Promise<void>((resolve) => {
+          this.accessDrained = resolve
+        })
+      const failures: unknown[] = []
+      for (const handle of this.handles.values()) {
+        try {
+          if (handle.agent.status === 'running')
+            handle.agent.cancel({ kind: 'disposed' }, { keepInbox: true })
+        } catch (error) {
+          failures.push(error)
         }
-        this.handles.clear()
-        for (const dispose of this.presets.values()) {
-          try {
-            await dispose()
-          } catch (error) {
-            failures.push(error)
-          }
+      }
+      await Promise.allSettled(this.turns)
+      for (const handle of this.handles.values()) {
+        try {
+          await handle.dispose()
+        } catch (error) {
+          failures.push(error)
         }
-        this.presets.clear()
-        if (failures.length > 0) throw new AggregateError(failures, 'Bot cleanup failed')
-      },
-      'bot: Agent handles and preset declarations',
-    )
+      }
+      this.handles.clear()
+      for (const dispose of this.presets.values()) {
+        try {
+          await dispose()
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      this.presets.clear()
+      if (failures.length > 0) throw new AggregateError(failures, 'Bot cleanup failed')
+    })())
   }
 
   /**
@@ -316,6 +352,8 @@ export class BotController extends TypertRemoteService {
       this.rejectConfiguration(botId, 'running')
     if (owned !== undefined && this.hasPending(owned.agent))
       this.rejectConfiguration(botId, 'pending-input')
+    if (this.access.has(botId) || this.activations.has(botId))
+      this.rejectConfiguration(botId, 'maintenance')
     if (this.ctx.agents.get(SessionId(previous.sessionId)) !== owned?.agent)
       this.rejectConfiguration(botId, 'unavailable')
     const parsed = saveConfigurationInput.safeParse(request)
@@ -553,6 +591,13 @@ export class BotController extends TypertRemoteService {
       const record = await this.getBot(botId, signal)
       const agent = await this.resolveAgent(record)
       signal.throwIfAborted()
+      if (this.stopping) throw new RemoteError('bot/busy', 'Bot is stopping', { botId })
+      if (
+        agent.status === 'running' ||
+        agent.inbox.nextTurn.length > 0 ||
+        agent.inbox.nextStep.some((message) => message.source.kind === 'user')
+      )
+        throw new RemoteError('bot/busy', 'Bot already has running or pending input', { botId })
       const queue = new TextQueue()
       let failure: unknown
       const stopStream = this.ctx.on(
@@ -582,7 +627,7 @@ export class BotController extends TypertRemoteService {
         const settled = agent
           .whenIdle()
           .then(async () => {
-            if (!(await this.ctx.sessions.flush(agent.session)))
+            if (!(await this.owner.sessions.flush(agent.session)))
               throw new Error('Bot Session has no durability listener')
           })
           .catch((error: unknown) => {
@@ -592,6 +637,11 @@ export class BotController extends TypertRemoteService {
             this.busy.delete(botId)
             queue.close()
           })
+        this.turns.add(settled)
+        const releaseTurn = (): void => {
+          this.turns.delete(settled)
+        }
+        void settled.then(releaseTurn, releaseTurn)
         for await (const chunk of queue) {
           signal.throwIfAborted()
           yield { type: 'text', text: chunk }
@@ -649,15 +699,151 @@ export class BotController extends TypertRemoteService {
     return messages
   }
 
+  /**
+   * Identify a Bot or a durable subagent's containing Bot without activation.
+   * @param sessionId - Session addressed by a Host operation.
+   * @param signal - Cancellation of metadata reads.
+   * @returns The containing Bot Session, or undefined for unmanaged Sessions.
+   */
+  async sessionOwner(sessionId: SessionId, signal: AbortSignal): Promise<SessionId | undefined> {
+    const seen = new Set<SessionId>()
+    let current = sessionId
+    while (true) {
+      signal.throwIfAborted()
+      if (this.stopping) this.rejectConfiguration(current, 'unavailable')
+      if (this.records.get(current) !== undefined || this.transactions.get(current) !== undefined)
+        return current
+      if (seen.has(current)) throw new Error('Session ownership lineage contains a cycle')
+      seen.add(current)
+      const header =
+        this.owner.sessions.get(current)?.header ??
+        (await this.owner.sessionPersistence.stat(current, { signal }))?.header
+      if (header?.origin !== 'subagent' || header.parentSession === undefined) return undefined
+      current = header.parentSession
+    }
+  }
+
+  /**
+   * Protect a known Bot from replacement through an operation's cleanup.
+   * @param sessionId - Bot Session returned by sessionOwner.
+   * @param mode - Historical reads may remain available in a faulted Bot.
+   * @param signal - Caller cancellation before acquisition.
+   * @returns An idempotent operation lease; its caller owns release.
+   */
+  acquireSessionAccess(
+    sessionId: SessionId,
+    mode: 'read' | 'write' | 'prompt',
+    signal: AbortSignal,
+  ): OperationLease {
+    signal.throwIfAborted()
+    if (this.stopping) this.rejectConfiguration(sessionId, 'unavailable')
+    this.readBot(sessionId)
+    if (this.applying.has(sessionId)) this.rejectConfiguration(sessionId, 'replacing')
+    if (mode === 'prompt' && this.busy.has(sessionId))
+      throw new RemoteError('bot/busy', 'Bot already has an admitted streamed turn', {
+        botId: sessionId,
+      })
+    if (mode !== 'read' && this.faults.has(sessionId))
+      throw new RemoteError('bot/faulted', 'Bot configuration recovery is required', {
+        botId: sessionId,
+      })
+    this.access.set(sessionId, (this.access.get(sessionId) ?? 0) + 1)
+    let released = false
+    return {
+      release: () => {
+        if (released) return
+        released = true
+        const remaining = this.access.get(sessionId)! - 1
+        if (remaining === 0) this.access.delete(sessionId)
+        else this.access.set(sessionId, remaining)
+        if (this.access.size === 0) this.accessDrained?.()
+      },
+    }
+  }
+
+  /**
+   * Resolve a Bot Agent while retaining its actual handle in this Controller.
+   * @param sessionId - Ordinary Session identity; child routing remains with Harness.
+   * @param signal - Cancels this observer without abandoning owned initialization.
+   * @returns Owned Agent and exact selection, or undefined for another owner.
+   */
+  async resolveSessionAgent(
+    sessionId: SessionId,
+    signal: AbortSignal,
+  ): Promise<OwnedSessionAgent | undefined> {
+    const owner = await this.sessionOwner(sessionId, signal)
+    if (owner !== sessionId) return undefined
+    const lease = this.acquireSessionAccess(owner, 'write', signal)
+    try {
+      const record = this.readBot(owner)
+      const agent = await this.observeActivation(this.resolveAgent(record), signal)
+      return { agent, selection: this.modelOptions(record) }
+    } finally {
+      await lease.release()
+    }
+  }
+
+  /**
+   * Prepare follow without activating a stored, otherwise cold Session.
+   * @param sessionId - Bot Session protected by a follow-opening lease.
+   * @param signal - Cancellation while waiting for owned initialization.
+   * @returns After pending initialization, or first empty Session creation, is ready.
+   */
+  async prepareSessionFollow(sessionId: SessionId, signal: AbortSignal): Promise<void> {
+    const stored =
+      this.owner.sessions.get(sessionId)?.header ??
+      (await this.owner.sessionPersistence.stat(sessionId, { signal }))?.header
+    const pending = this.activations.get(sessionId)
+    if (pending !== undefined) await this.observeActivation(pending, signal)
+    const live = this.owner.agents.get(sessionId)
+    if (live !== undefined && this.handles.get(sessionId)?.agent !== live)
+      this.rejectConfiguration(sessionId, 'unavailable')
+    if (stored === undefined && this.owner.sessions.get(sessionId) === undefined)
+      await this.resolveSessionAgent(sessionId, signal)
+  }
+
+  private async observeActivation(task: Promise<Agent>, signal: AbortSignal): Promise<Agent> {
+    signal.throwIfAborted()
+    let abort!: () => void
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      abort = () => {
+        reject(signal.reason)
+      }
+      signal.addEventListener('abort', abort, { once: true })
+    })
+    try {
+      const agent = await Promise.race([task, cancelled])
+      signal.throwIfAborted()
+      return agent
+    } finally {
+      signal.removeEventListener('abort', abort)
+    }
+  }
+
   private async resolveAgent(record: BotRecord, originalCwd = record.cwd): Promise<Agent> {
+    if (this.stopping) this.rejectConfiguration(record.botId, 'unavailable')
+    const pending = this.activations.get(record.botId)
+    if (pending !== undefined) return pending
+    const operation = this.createOwnedAgent(record, originalCwd)
+    this.activations.set(record.botId, operation)
+    try {
+      return await operation
+    } finally {
+      this.activations.delete(record.botId)
+    }
+  }
+
+  private async createOwnedAgent(record: BotRecord, originalCwd: string): Promise<Agent> {
     const owned = this.handles.get(record.botId)
     if (owned !== undefined) return owned.agent
+    const foreign = this.owner.agents.get(SessionId(record.sessionId))
+    if (foreign !== undefined) this.rejectConfiguration(record.botId, 'unavailable')
     const sessionId = SessionId(record.sessionId)
     const presetId = `dsh-bot:${record.botId}`
     if (!this.presets.has(record.botId)) {
       this.presets.set(
         record.botId,
-        await this.ctx.agentPresets.register({
+        await this.owner.agentPresets.register({
           id: presetId,
           plugins: this.capabilityPlugins(record),
         }),
@@ -685,13 +871,19 @@ export class BotController extends TypertRemoteService {
     const agentOptions = this.modelOptions(record)
     const handle =
       (await this.ctx.sessionPersistence.stat(sessionId)) === undefined
-        ? await this.ctx.agents.create({
+        ? await this.owner.agents.create({
             sessionId,
+            signal: this.lifetime.signal,
             meta: { cwd: originalCwd, agentPreset: presetId },
             agentOptions,
             setup,
           })
-        : await this.ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
+        : await this.owner.agents.resume({
+            resumeSessionId: sessionId,
+            agentOptions,
+            setup,
+            signal: this.lifetime.signal,
+          })
     this.handles.set(record.botId, handle)
     return handle.agent
   }
@@ -741,6 +933,24 @@ export const inject = BotController.inject
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const domain = await ctx.storageDomain.open(botDomain)
-  ctx.effect(() => () => domain.close(), 'bot: record domain')
-  new BotController(ctx, config, domain.table('bots'), domain.table('configuration_transactions'))
+  const controller = new BotController(
+    ctx,
+    config,
+    domain.table('bots'),
+    domain.table('configuration_transactions'),
+  )
+  ctx.effect(
+    () => async () => {
+      const failures: unknown[] = []
+      for (const close of [() => controller.quiesce(), () => domain.close()]) {
+        try {
+          await close()
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      if (failures.length > 0) throw new AggregateError(failures, 'Bot domain cleanup failed')
+    },
+    'bot: record domain after owned operations',
+  )
 }

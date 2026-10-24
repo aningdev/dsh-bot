@@ -4,12 +4,13 @@
 
 ## 公开入口
 
-| 入口                  | 消费方      | 内容                                              |
-| --------------------- | ----------- | ------------------------------------------------- |
-| `@dsh-bot/bot`        | Host Loader | 插件、Config、Controller                          |
-| `@dsh-bot/bot/types`  | 各客户端    | 配置、Bot、消息、流字段和错误码；不导入 Host 实现 |
-| `@dsh-bot/bot/typert` | Host Loader | 官方生成器输出的严格描述与校验                    |
-| `@dsh-bot/bot/remote` | 客户端组合  | 生成的 Remote 贡献及类型                          |
+| 入口                              | 消费方      | 内容                                              |
+| --------------------------------- | ----------- | ------------------------------------------------- |
+| `@dsh-bot/bot`                    | Host Loader | 插件、Config、Controller                          |
+| `@dsh-bot/bot/session-controller` | Host Loader | 标准 Session API 的生命周期与操作窗口接线         |
+| `@dsh-bot/bot/types`              | 各客户端    | 配置、Bot、消息、流字段和错误码；不导入 Host 实现 |
+| `@dsh-bot/bot/typert`             | Host Loader | 官方生成器输出的严格描述与校验                    |
+| `@dsh-bot/bot/remote`             | 客户端组合  | 生成的 Remote 贡献及类型                          |
 
 Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfiguration`、`history` 和流式 `send`。参数、结果与取消语义使用标准 Gateway；共享框架包使用 peerDependencies，构建保留外部包引用。
 
@@ -29,25 +30,25 @@ Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfi
 
 保存先占用该 Bot 的替换状态，并通过上游 `runMaintenance()` 原子占用真正空闲的阶段。校验目录、模型和候选 preset 后写入持久事务记录及候选配置；再次检查 inbox，再在维护回调内发起旧句柄释放，退出回调后等待释放完成。随后替换稳定 preset，在同一 Session 上恢复 Agent；尚无日志时创建该 Session。确认持久化后删除事务记录，返回成功。应用期间 `get`、`list` 保持返回旧的已提交配置，发送及历史读取被拒绝。
 
-| `bot/config-rejected` 的 reason | 条件                                                           |
-| ------------------------------- | -------------------------------------------------------------- |
-| `running`                       | 已接纳 turn 或 Agent 正在执行                                  |
-| `pending-input`                 | next-turn 或 next-step 中仍有输入，包括冷 Session 的持久化输入 |
-| `maintenance`                   | 其他维护任务占用真正空闲阶段，即使公开状态显示 idle            |
-| `replacing`                     | 已有一次配置应用正在进行                                       |
-| `unavailable`                   | 已停止接纳、处于故障，或活跃 Agent 不属于此控制器              |
+| `bot/config-rejected` 的 reason | 条件                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `running`                       | 已接纳 turn 或 Agent 正在执行                                            |
+| `pending-input`                 | next-turn 或 next-step 中仍有输入，包括冷 Session 的持久化输入           |
+| `maintenance`                   | 其他维护、冷初始化或已接纳的标准 API 操作占用窗口，即使公开状态显示 idle |
+| `replacing`                     | 已有一次配置应用正在进行                                                 |
+| `unavailable`                   | 已停止接纳、处于故障，或活跃 Agent 不属于此控制器                        |
 
 版本过期返回 `bot/config-conflict`，校验失败返回 `bot/config-invalid`。装配或提交失败后恢复旧配置与旧配置下的 Agent，返回 `bot/config-failed`；清理或恢复失败则返回 `bot/faulted` 并停止接纳。待处理输入不会为了保存而被清空。
 
-持久事务记录用于识别中断或恢复失败。重启遇到未完成记录时，该 Bot 保持停止接纳，读取仍返回旧配置；当前尚无产品故障恢复入口。事务保证覆盖同一 Runner 中 BotController 协调的入口；官方 Session Controller 在 #5 中已确认缺少统一生命周期委托，正式接入等待扩展版本，见 [共存验证](../../docs/SESSION_CONTROLLER_COMPATIBILITY.md)；Runner 跨进程单实例由 #11 验证。
+持久事务记录用于识别中断或恢复失败。重启遇到未完成记录时，该 Bot 保持停止接纳，读取仍返回旧配置；当前尚无产品故障恢复入口。事务保证覆盖同一 Runner 的 Bot 与受协调的标准 Session 入口；生命周期委托、异步操作窗口及退出顺序见 [共存验证](../../docs/SESSION_CONTROLLER_COMPATIBILITY.md)。Runner 跨进程单实例仍由 #11 验证。
 
 ## 记录与执行
 
-Bot 记录使用上游 `storageDomain`，domain 为 `dsh_bot`，版本 1，表为 `bots` 和 `configuration_transactions`。原始六字段记录仍可读取，新增字段补为版本 0、空指令、空能力及空参数覆盖；Bot 和 Session 身份不变。domain 在插件激活时打开并校验，插件清理等待配置操作、Agent 和 preset 释放，再关闭 domain。Zod 固定为上游使用的 4.4.3。
+Bot 记录使用上游 `storageDomain`，domain 为 `dsh_bot`，版本 1，表为 `bots` 和 `configuration_transactions`。原始六字段记录仍可读取，新增字段补为版本 0、空指令、空能力及空参数覆盖；Bot 和 Session 身份不变。domain 在插件激活时打开并校验，插件清理等待配置、冷初始化、操作窗口、轮次持久化、Agent 和 preset 释放，再关闭 domain；Runner 先在 profile 退出钩子中完成排空。Zod 固定为上游使用的 4.4.3。
 
-每个 Bot 以 `dsh-bot:<botId>` 注册独立 preset，Session ID 稳定。发送时按持久存储状态选择 create/resume；控制器持有并释放所有创建的句柄。当前不挂载会自行冷恢复 Agent 的官方 Session Controller。
+每个 Bot 以 `dsh-bot:<botId>` 注册独立 preset，Session ID 稳定。发送时按持久存储状态选择 create/resume；控制器持有并释放所有创建的句柄。标准 Session Controller 通过 Host 委托调用同一个所有者，不能独立冷恢复 Bot 或覆盖其模型选择。
 
-每个 Bot 同时接纳一个 turn，忙碌时返回 `bot/busy`。模型错误以 `bot/turn-failed` 拒绝流；`done` 在空闲和持久化屏障完成后发送。断开观察不取消已接纳执行。`history` 是 user/assistant 文本投影，不包含注入的 runtime-context，也不代替完整会话事件接口。
+传统 `bot.send` 同时接纳一个流式 turn，执行中或有待处理用户输入时返回 `bot/busy`；其观察期间的标准 prompt 也拒绝混入。标准 prompt 自身使用上游队列。模型错误以 `bot/turn-failed` 拒绝流；`done` 在空闲和持久化屏障完成后发送。断开观察不取消已接纳执行。`history` 是 user/assistant 文本投影，不包含注入的 runtime-context，也不代替完整会话事件接口。
 
 ## 构建与测试
 

@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@dsh-bot/bot'
+import type {} from '@dsh-bot/bot/session-controller'
 
 async function main(): Promise<void> {
   const { values } = parseArgs({
@@ -37,6 +38,19 @@ async function main(): Promise<void> {
     resolvedProfile: { profile, installAnchor },
     patchFiles: values.patch,
     args: [],
+    beforeDispose: async (ctx) => {
+      const bot = ctx.get('botController')
+      bot?.stopAdmission()
+      const failures: unknown[] = []
+      for (const close of [() => ctx.get('botSessionController')?.close(), () => bot?.quiesce()]) {
+        try {
+          await close()
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      if (failures.length > 0) throw new AggregateError(failures, 'Runner quiescence failed')
+    },
   })
   let stopping: Promise<void> | undefined
   const stop = (): Promise<void> =>
@@ -71,6 +85,10 @@ async function main(): Promise<void> {
       'agentLoop',
       'agentPresets',
       'botController',
+      'sessionController',
+      'fileUploads',
+      'sessionFileReferences',
+      'botSessionController',
     ]) {
       if (ctx.get(service) === undefined)
         throw new Error(`Runner required service is unavailable: ${service}`)

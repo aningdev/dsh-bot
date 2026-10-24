@@ -22,7 +22,7 @@ Web/PWA 采用独立应用入口、构建和发布。桌面与 Web 共用实际�
 
 Harness 引擎经命名 dsh profile 启动，应用配置与插件复用上游扩展机制。模型循环、输入队列、会话日志、权限策略与工具执行继续归 Harness 所有；应用不另建这些机制。
 
-Runner 沿用 Harness Host、Gateway 与标准插件机制，产品插件补充 Bot 管理与生命周期协调。上游 Session Controller、Remote 事件和审批能力按需验证复用；独立 Runner 中的完整组合、客户端连接、实时回复、任务取消和审批往返尚未通过应用集成验证。
+Runner 沿用 Harness Host、Gateway 与标准插件机制，产品插件补充 Bot 管理与生命周期协调。标准 Session Controller 已通过 Host 生命周期扩展接入独立 Runner，确定性模型下的真实进程调用、跟随与配置替换已有契约验证；桌面连接、真实模型与工具、任务操作界面和审批往返仍待应用集成。
 
 ## Bot、模板与目录
 

@@ -25,7 +25,11 @@ if (diagnostics.length)
   )
 program.emit()
 await build({
-  entryPoints: [packageRoot + 'src/index.ts', packageRoot + 'src/types.ts'],
+  entryPoints: [
+    packageRoot + 'src/index.ts',
+    packageRoot + 'src/types.ts',
+    packageRoot + 'src/session-controller.ts',
+  ],
   outdir: packageRoot + 'lib',
   bundle: true,
   packages: 'external',

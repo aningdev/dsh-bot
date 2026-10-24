@@ -1,0 +1,245 @@
+diff --git a/lib/index.js b/lib/index.js
+index f0e7770f3b4e6515938e13e78bb38a153b890033..c65f24b1cc84eafe09a807bae6b72179b81c4a63 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -3,7 +3,7 @@ import { Service, symbols } from "@deepseek-ai/cordis";
+ import { Deque } from "@deepseek-ai/dsh-deque";
+ import { MAX_TIMER_DELAY_MS } from "@deepseek-ai/dsh-timeout";
+ import z from "@deepseek-ai/schemastery";
+-import { RemoteError, isRemoteJsonValue, remoteErrorOf, remoteMethods } from "@deepseek-ai/dsh-typert-protocol";
++import { OperationGuardRegistry, RemoteError, isRemoteJsonValue, remoteErrorOf, remoteMethods } from "@deepseek-ai/dsh-typert-protocol";
+ import WebSocket, { WebSocketServer } from "ws";
+ //#region lib/types/access.js
+ /**
+@@ -742,6 +742,11 @@ var TypertGatewayError = class extends RemoteError {
+ * @typert service typertGateway
+ */
+ var TypertGatewayService = class extends Service {
++	operationGuards = new OperationGuardRegistry(() => new TypertGatewayError("gateway/service-unavailable", "$operation", "Remote operation owner is unavailable"));
++	/** Register an effect-owned guard before Host identity resolution. */
++	registerOperationGuard(guard) {
++		return this.ctx.effect(() => this.operationGuards.register(guard), "gateway: operation guard");
++	}
+ 	static inject = ["typert", "remoteAccess"];
+ 	static Config = z.object({
+ 		websocketHeartbeatIntervalMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_WEBSOCKET_HEARTBEAT_INTERVAL_MS),
+@@ -915,15 +920,16 @@ var TypertGatewayService = class extends Service {
+ 	async invoke(request) {
+ 		return this.invokePrepared(await this.prepareInvocation(request, new AbortController()));
+ 	}
+-	async invokePrepared(prepared) {
+-		if (prepared.descriptor.mode !== void 0) throw new TypertGatewayError("gateway/signature-invalid", prepared.endpoint, "stream Remote methods must be opened through the stream carrier");
++	async invokePrepared(prepared, retainOperation = false) {
+ 		try {
++			if (prepared.descriptor.mode !== void 0) throw new TypertGatewayError("gateway/signature-invalid", prepared.endpoint, "stream Remote methods must be opened through the stream carrier");
+ 			return await Reflect.apply(prepared.method, prepared.receiver, prepared.args);
+ 		} catch (error) {
+ 			if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error);
+ 			throw error;
+ 		} finally {
+-			await prepared.invocation.close();
++			try { await prepared.invocation.close(); }
++			finally { if (!retainOperation) await prepared.invocation.releaseOperation(); }
+ 		}
+ 	}
+ 	/**
+@@ -941,21 +947,18 @@ var TypertGatewayService = class extends Service {
+ 	async openStream(request, control) {
+ 		const prepared = await this.prepareInvocation(request, control);
+ 		if (prepared.descriptor.mode === void 0) {
+-			await prepared.invocation.close();
++			try { await prepared.invocation.close(); } finally { await prepared.invocation.releaseOperation(); }
+ 			throw new TypertGatewayError("gateway/signature-invalid", prepared.endpoint, "unary Remote methods cannot be opened through the stream carrier");
+ 		}
+ 		let source;
+ 		try {
+ 			source = Reflect.apply(prepared.method, prepared.receiver, prepared.args);
++			if (!isIterable(source)) throw new TypertGatewayError("gateway/result-invalid", prepared.endpoint, "stream Remote method did not return Iterable or AsyncIterable", { field: "result" });
+ 		} catch (error) {
+-			await prepared.invocation.close();
++			try { await prepared.invocation.close(); } finally { await prepared.invocation.releaseOperation(); }
+ 			if (prepared.invocation.signal.aborted) throw remoteCancelled(prepared.endpoint, error);
+ 			throw error;
+ 		}
+-		if (!isIterable(source)) {
+-			await prepared.invocation.close();
+-			throw new TypertGatewayError("gateway/result-invalid", prepared.endpoint, "stream Remote method did not return Iterable or AsyncIterable", { field: "result" });
+-		}
+ 		return cancellableStream(source, prepared.endpoint, prepared.invocation);
+ 	}
+ 	async dispatchRpc(endpoint, payload, signal, peer) {
+@@ -1160,7 +1163,8 @@ var TypertGatewayService = class extends Service {
+ 	async invokeRpc(endpoint, payload, signal, peer) {
+ 		try {
+ 			const prepared = await this.prepareInvocation(remoteRequest(endpoint, payload, signal, peer), new AbortController());
+-			return encodeRpcResult(await this.invokePrepared(prepared), prepared.descriptor.result);
++			try { return encodeRpcResult(await this.invokePrepared(prepared, true), prepared.descriptor.result); }
++			finally { await prepared.invocation.releaseOperation(); }
+ 		} catch (error) {
+ 			return rpcFailure(error);
+ 		}
+@@ -1172,8 +1176,10 @@ var TypertGatewayService = class extends Service {
+ 		const descriptor = this.resolveDescriptor(request.namespace, request.method, endpoint);
+ 		assertExactArguments(request.args, descriptor, endpoint);
+ 		const validated = validateArguments(descriptor, request.args, endpoint);
++		const resources = request.peer.principal.kind !== "owner" || this.operationGuards.enabled
++			? callResources(this.ctx.typert, this.resourceReaders(descriptor), descriptor, validated, request.signal ?? NEVER_ABORTED_SIGNAL)
++			: void 0;
+ 		if (request.peer.principal.kind !== "owner") {
+-			const resources = callResources(this.ctx.typert, this.resourceReaders(descriptor), descriptor, validated, request.signal ?? NEVER_ABORTED_SIGNAL);
+ 			const decision = resources === void 0 ? {
+ 				kind: "deny",
+ 				reason: "resource-invalid"
+@@ -1188,12 +1194,23 @@ var TypertGatewayService = class extends Service {
+ 				reason: decision.reason
+ 			});
+ 		}
++		const methodControl = methodSignal(request, control, descriptor.mode === "stream");
++		const operation = this.operationGuards.enabled ? await this.operationGuards.acquire({
++			namespace: request.namespace, method: request.method, args: validated,
++			resources,
++			signal: methodControl,
++		}) : void 0;
++		try {
+ 		const receiverContext = await this.resolveReceiverContext(descriptor, validated, endpoint);
+ 		const receiver = receiverContext.get(descriptor.service);
+ 		if (!isObject(receiver)) throw new TypertGatewayError("gateway/service-unavailable", endpoint, `active Service ${JSON.stringify(descriptor.service)} is unavailable`);
+ 		validateBinding(receiver, descriptor.service, descriptor.namespace, endpoint);
+-		const args = await Promise.all(descriptor.parameters.map((parameter) => this.resolveParameter(parameter, validated, endpoint)));
+-		const signal = methodSignal(request, control, descriptor.mode === "stream");
++		const resolved = await Promise.allSettled(descriptor.parameters.map((parameter) => this.resolveParameter(parameter, validated, endpoint)));
++		const failure = resolved.find(result => result.status === "rejected");
++		if (failure !== void 0) throw failure.reason;
++		const args = resolved.map(result => result.value);
++		const signal = operation?.signal === void 0 ? methodControl : AbortSignal.any([methodControl, operation.signal]);
++		operation?.signal?.throwIfAborted();
+ 		const invocation = new GatewayInvocation({
+ 			namespace: request.namespace,
+ 			method: request.method,
+@@ -1207,6 +1224,7 @@ var TypertGatewayService = class extends Service {
+ 				control.abort(reason);
+ 			}
+ 		});
++		invocation.operation = operation;
+ 		if (descriptor.cancellation !== void 0) args.push(signal);
+ 		const callReceiver = receiverContext.extend({ invocation }).get(descriptor.service);
+ 		const implementation = descriptor.implementation ?? descriptor.method;
+@@ -1220,6 +1238,10 @@ var TypertGatewayService = class extends Service {
+ 			method,
+ 			invocation
+ 		};
++		} catch (error) {
++			await operation?.release();
++			throw error;
++		}
+ 	}
+ 	resolveDescriptor(namespace, method, endpoint) {
+ 		const strict = this.ctx.typert.local.get(endpoint);
+@@ -1497,31 +1519,35 @@ function isIterable(value) {
+ }
+ async function* cancellableStream(source, endpoint, invocation) {
+ 	const { signal } = invocation;
+-	const asyncFactory = Reflect.get(source, Symbol.asyncIterator);
+-	const syncFactory = Reflect.get(source, Symbol.iterator);
+-	const iterator = typeof asyncFactory === "function" ? Reflect.apply(asyncFactory, source, []) : Reflect.apply(syncFactory, source, []);
++	let iterator;
+ 	let rejectAbort;
+ 	const onAbort = () => {
+ 		rejectAbort?.(streamAbortFailure(endpoint, signal.reason));
+ 	};
+ 	signal.addEventListener("abort", onAbort, { once: true });
+ 	try {
++		const asyncFactory = Reflect.get(source, Symbol.asyncIterator);
++		const syncFactory = Reflect.get(source, Symbol.iterator);
++		iterator = typeof asyncFactory === "function" ? Reflect.apply(asyncFactory, source, []) : Reflect.apply(syncFactory, source, []);
+ 		while (true) {
+ 			if (signal.aborted) throw streamAbortFailure(endpoint, signal.reason);
+ 			const aborted = new Promise((_resolve, reject) => {
+ 				rejectAbort = reject;
+ 			});
+ 			aborted.catch(() => void 0);
+-			const next = await Promise.race([Promise.resolve(iterator.next()), aborted]);
++			const pending = Promise.resolve().then(() => iterator.next());
++			const next = await Promise.race([pending, aborted]);
+ 			rejectAbort = void 0;
++			if (invocation.operation?.lifetime === "opening") await invocation.releaseOperation();
+ 			if (next.done === true) return;
+ 			yield next.value;
+ 		}
+ 	} finally {
+ 		rejectAbort = void 0;
+ 		signal.removeEventListener("abort", onAbort);
+-		await invocation.close();
+-		await iterator.return?.();
++		try { await invocation.close(); } finally {
++			try { await iterator?.return?.(); } finally { await invocation.releaseOperation(); }
++		}
+ 	}
+ }
+ /**
+@@ -1615,6 +1641,8 @@ var UplinkDecoder = class {
+ * the call's downlink finishes.
+ */
+ var GatewayInvocation = class {
++	operation;
++	releaseOperation() { return this.operation?.release(); }
+ 	request;
+ 	service;
+ 	peer;
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 78af896b395d2e92e8b26ca083db04c933fd1eb3..32ff4991870d57c7a087084422ff7089190cf274 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -7,8 +7,9 @@
+ import { Context, Service } from '@deepseek-ai/cordis';
+ import z from '@deepseek-ai/schemastery';
+ export type { TypertGatewayFaultDetails } from './remote-error-codes.ts';
+-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol';
+-import type { InvokeRemoteRequest, TypertGateway, TypertGatewayErrorCode, TypertGatewayWireStream, TypertRemoteEventSource } from './types.ts';
++import { RemoteError, type OperationGuard } from '@deepseek-ai/dsh-typert-protocol';
++export type { GatewayOperation } from './types.ts';
++import type { GatewayOperation, InvokeRemoteRequest, TypertGateway, TypertGatewayErrorCode, TypertGatewayWireStream, TypertRemoteEventSource } from './types.ts';
+ import { type RemoteEventHostInfo } from './stream-protocol.ts';
+ export type { InvokeRemoteRequest, TypertGateway, TypertGatewayErrorCode, TypertGatewayWireStream, TypertRemoteEventContext, TypertRemoteEventDispatch, TypertRemoteEventFrame, TypertRemoteEventInvocation, TypertRemoteEventOutcome, TypertRemoteEventSource, } from './types.ts';
+ export type { RemoteEventHostInfo } from './stream-protocol.ts';
+@@ -48,6 +49,8 @@ export declare class TypertGatewayError extends RemoteError<TypertGatewayErrorCo
+  * @typert service typertGateway
+  */
+ export declare class TypertGatewayService extends Service implements TypertGateway {
++    /** Register an effect-owned guard before Host identity resolution and through call cleanup. */
++    registerOperationGuard(guard: OperationGuard<GatewayOperation>): () => Promise<void>;
+     static inject: string[];
+     static Config: z<Config>;
+     /** Carrier adapter shared by the WebSocket mux and local Host transports. */
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+index 373e9754c45a730a621aadb34c100eac17af67c4..eb6796300c06df0b5a07178d8c9eb734e335579a 100644
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -3,7 +3,7 @@
+  * @module @deepseek-ai/dsh-api-gateway/types
+  */
+ import type { Context } from '@deepseek-ai/cordis';
+-import type { PeerScope, RemoteUplinkWindow, TypertResourceReader } from '@deepseek-ai/dsh-typert-protocol';
++import type { OperationGuard, TypertResource, PeerScope, RemoteUplinkWindow, TypertResourceReader } from '@deepseek-ai/dsh-typert-protocol';
+ import type { RemoteEventHostInfo } from './stream-protocol.ts';
+ /** One Remote method request after a carrier has decoded its envelope. */
+ export interface InvokeRemoteRequest {
+@@ -106,8 +106,18 @@ export interface TypertGatewayWireStream {
+ }
+ /** Stable infrastructure and boundary failures emitted before or after business execution. */
+ export type TypertGatewayErrorCode = 'gateway/ambiguous-endpoint' | 'gateway/arguments-invalid' | 'gateway/binding-invalid' | 'gateway/context-failed' | 'gateway/context-not-found' | 'gateway/context-unavailable' | 'gateway/definition-unavailable' | 'gateway/input-invalid' | 'gateway/interactions-forbidden' | 'gateway/invocation-unavailable' | 'gateway/lookup-failed' | 'gateway/lookup-not-found' | 'gateway/lookup-unavailable' | 'gateway/method-unavailable' | 'gateway/peer-disposed' | 'gateway/protocol' | 'gateway/provider-mismatch' | 'gateway/result-invalid' | 'gateway/service-unavailable' | 'gateway/signature-invalid' | 'gateway/uplink-overflow';
++/** Validated invocation metadata, available before Host lookup or Context resolution. */
++export interface GatewayOperation {
++    readonly namespace: string;
++    readonly method: string;
++    readonly args: Readonly<Record<string, unknown>>;
++    readonly resources: readonly TypertResource[] | undefined;
++    readonly signal?: AbortSignal;
++}
+ /** Host dispatcher consumed by Connection adapters. */
+ export interface TypertGateway {
++    /** Acquire before identity resolution; the caller owns and awaits guard withdrawal. */
++    registerOperationGuard(guard: OperationGuard<GatewayOperation>): () => Promise<void>;
+     /** Carrier adapter shared by WebSocket and in-process transports. */
+     readonly wireStream: TypertGatewayWireStream;
+     /**

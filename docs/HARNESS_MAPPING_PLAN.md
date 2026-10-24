@@ -1,6 +1,6 @@
 # Harness 到 dsh-bot 的映射方案
 
-本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；官方 Session Controller 协调、桌面接入、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
+本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调；桌面接入、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
 
 ## 推荐选择
 
@@ -100,11 +100,11 @@ Bot 包的 Host 实现与客户端贡献分开。沿用上游的 `./typert`、`.
 
 ## 生命周期协调的取舍
 
-优先复用 Session Controller 的业务方法，并通过统一委托保持 Bot 的 Agent 生命周期所有权。#5 已在固定 npm 版复现 preset 缺失、官方激活句柄未交给 Bot，以及历史开场绕过替换拒绝；当前公开接口不足。扩展点、替代方案和可执行证据见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
+优先复用 Session Controller 的业务方法，并通过统一委托保持 Bot 的 Agent 生命周期所有权。#5 已在固定 npm 版复现 preset 缺失、官方激活句柄未交给 Bot，以及历史开场绕过替换拒绝；npm 基线的公开接口不足；正式 profile 通过根锁文件中的兼容补丁提供 Host 委托。扩展、替代方案和正向证据见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
-#3/#4 的 Bot Remote 继续调用公开 Agent/Session 能力。#5 按其替代验收交付扩展点结论；正式装配保持关闭官方 Controller，待包含 Host 生命周期委托的可消费版本通过验收后启用。产品构建不修改参考子模块或复制 Controller。
+Bot Remote 与标准 Controller 共用 Bot 的 AgentHandle 所有者。正式 profile 已装配标准服务及 `@dsh-bot/bot/session-controller`，通过操作窗口保护 lookup、方法使用、历史开场和上传；退出前先排空消费者。产品构建不修改参考子模块或复制 Controller。
 
-在协调完成前，所有会自行激活 Bot Session 的非 Bot 入口必须关闭或拒绝该类访问，并验证冷历史跟随、文件和上传等间接入口；仅让 UI 隐藏按钮不够。产品 patch 可以暂时禁用相应 Controller 条目，其余标准服务继续保留；若依赖分析表明无法这样隔离，应将该问题作为明确的实施阻塞处理，不复制 Controller 绕过。
+标准 create、fork 和 selectModel 在产品 profile 中明确拒绝，避免绕过 Bot 管理；故障或替换中的入口也不能落回官方自动恢复。上游提供等价可消费接口后，统一升级并通过正向契约测试，再移除补丁。
 
 ## 进程和客户端映射
 
@@ -142,7 +142,7 @@ Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Render
 | #3：标准插件组合  | 命名 profile、公开 npm、runtime/Bot bundle 加载  | 启动及清理成功，所需服务与 Remote 存在；不是只打开端口     |
 | #3：测试执行闭环  | 测试 overlay 注册确定性 adapter，调用 Bot Remote | 流式回复、真实日志、实际进程重启后同 Session 历史均通过    |
 | #4：配置事务      | Bot 配置事务、preset 替换、失败回退              | 已验证严格保存、五种拒绝、原 Session 连续及故障保持        |
-| #5：生命周期协调  | 官方 Controller 与 Bot 共享 Agent 所有者         | 已完成缺口复现和最小扩展结论；正式共存待扩展版本验收       |
+| #5：生命周期协调  | 官方 Controller 与 Bot 共享 Agent 所有者         | 已通过受补丁约束的冷恢复、长流、异步操作、上传和退出验证   |
 | #6 及后续桌面票   | Main 接入与现有 UI 操作                          | 经受控 oRPC 完成对话、工具和审批                           |
 | #11/#12：系统交付 | launchd、自带 Node、安装和升级                   | 桌面退出继续执行、异常拉起、主动停止及版本替换均有成品证据 |
 

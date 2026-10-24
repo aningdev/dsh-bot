@@ -1,0 +1,298 @@
+diff --git a/lib/index.js b/lib/index.js
+index 730b8a4116b1a81ecb72273a9629ae55bebbb4c5..eeb90f5e659d2dd9fba8909385bdb72f2142d93c 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -4,7 +4,7 @@ import z from "@deepseek-ai/schemastery";
+ import { AssistantStreamAccumulator, ReasoningEffortId, assistantStreamChunks, createUserMessage, errorChain, freezeMessage } from "@deepseek-ai/dsh-llm";
+ import { canOpenNativePath, nativeFileApplications, nativeFileManager, openNativeAssociatedPath, openNativeFileApplication, revealNativePath } from "@deepseek-ai/dsh-native-command";
+ import { SessionQueryError } from "@deepseek-ai/dsh-session-query";
+-import { Remote, RemoteError, TypertRemoteService, principalOf, remoteErrorOf } from "@deepseek-ai/dsh-typert-protocol";
++import { OperationGuardRegistry, Remote, RemoteError, TypertRemoteService, principalOf, remoteErrorOf } from "@deepseek-ai/dsh-typert-protocol";
+ import { canonicalClientTimeZone } from "@deepseek-ai/dsh-util-time";
+ import { assertNever } from "@deepseek-ai/dsh-util-values";
+ import { randomUUID } from "node:crypto";
+@@ -179,13 +179,16 @@ async function inspectApiSession(ctx, sessionId, signal) {
+ /** Owns every operation that may create, resume, or configure a Web Agent. */
+ var ApiSessionAgentController = class {
+ 	ctx;
++	ownedResolver;
++	ownedSelections = new WeakMap();
+ 	resumes = /* @__PURE__ */ new Map();
+ 	claims = /* @__PURE__ */ new Map();
+ 	selections = /* @__PURE__ */ new WeakMap();
+ 	imageAdmissionChains = /* @__PURE__ */ new WeakMap();
+ 	/** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
+-	constructor(ctx) {
++	constructor(ctx, ownedResolver) {
+ 		this.ctx = ctx;
++		this.ownedResolver = ownedResolver;
+ 		ctx.typert.lookups.configure("agent", async (sessionId) => {
+ 			const found = await this.resolveAgent(sessionId);
+ 			if ("error" in found) throw found.error;
+@@ -220,9 +223,21 @@ var ApiSessionAgentController = class {
+ 	}
+ 	async resolve(sessionId, observation) {
+ 		const live = this.liveAgent(sessionId);
+-		if (live !== void 0) return live;
++		if (live !== void 0 && "error" in live) return live;
+ 		const attached = this.ctx.sessions.get(sessionId);
+ 		if (attached !== void 0 && hasApiSessionSubagentOwner(this.ctx, attached, void 0)) return { error: apiSessionSubagentOwnershipError(sessionId) };
++		try {
++			const owned = await this.ownedResolver?.(sessionId);
++			if (owned !== void 0) {
++				this.ownedSelections.set(owned.agent, { get current() { return owned.selection; }, assembled: void 0, consume: () => false });
++				return { agent: owned.agent };
++			}
++		} catch (error) {
++			const remote = remoteErrorOf(error);
++			if (remote !== void 0) return { error: remote };
++			throw error;
++		}
++		if (live !== void 0) return live;
+ 		let resume = this.resumes.get(sessionId);
+ 		if (resume === void 0) {
+ 			resume = this.resume(sessionId, observation).finally(() => {
+@@ -272,6 +287,8 @@ var ApiSessionAgentController = class {
+ 	* @returns the installed mutable selection reference.
+ 	*/
+ 	selectionFor(agent) {
++		const owned = this.ownedSelections.get(agent);
++		if (owned !== void 0) return owned;
+ 		const installed = this.selections.get(agent);
+ 		if (installed !== void 0) return installed;
+ 		const projectionState = this.ctx.sessionProjections.stateOf(agent.session, "modelSelection");
+@@ -310,6 +327,7 @@ var ApiSessionAgentController = class {
+ 	* @param selection - validated selection to record and apply.
+ 	*/
+ 	selectForNextRequest(agent, selection) {
++		if (this.ownedSelections.has(agent)) throw new RemoteError("session/agent-busy", "Model selection belongs to the Session lifecycle owner", { reason: "managed model selection" });
+ 		agent.session.append("model/selection", selection);
+ 		this.selectionFor(agent).current = selection;
+ 	}
+@@ -2671,6 +2689,32 @@ let SessionController = (() => {
+ 	let _projections_decorators;
+ 	let _control_decorators;
+ 	return class SessionController extends _classSuper {
++		lifecycle = new OperationGuardRegistry(() => new RemoteError("session/agent-busy", "Session lifecycle owner is unavailable", { reason: "lifecycle owner unavailable" }));
++		lifecycleProvider;
++		/** Register one effect-owned lifecycle provider, drained on withdrawal. */
++		registerLifecycle(provider) {
++			return this.ctx.effect(() => {
++				const close = this.lifecycle.register(request => provider.acquire(request));
++				this.lifecycleProvider = provider;
++				return async () => { await close(); this.lifecycleProvider = void 0; };
++			}, "session-controller: lifecycle provider");
++		}
++		resolveLifecycleAgent(sessionId) {
++			return this.lifecycle.run({ action: "resolve", sessionId, signal: this.ctx.invocation?.signal }, signal => this.lifecycleProvider?.resolveAgent(sessionId, signal));
++		}
++		async *openLifecycleStream(request, signal) {
++			const address = request.address;
++			const sessionId = address.kind === "session" ? address.sessionId : address.parentSessionId;
++			const lease = await this.lifecycle.acquire({ action: "follow", sessionId, signal });
++			let iterator;
++			try {
++				iterator = this.history.follow(request, lease?.signal ?? signal)[Symbol.asyncIterator]();
++				const first = await iterator.next();
++				await lease?.release();
++				if (!first.done) { yield first.value; yield* { [Symbol.asyncIterator]: () => iterator }; }
++				lease?.signal?.throwIfAborted();
++			} finally { try { await iterator?.return?.(); } finally { await lease?.release(); } }
++		}
+ 		static {
+ 			const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
+ 			_list_decorators = [Remote("list")];
+@@ -2953,7 +2997,7 @@ let SessionController = (() => {
+ 			ctx.typert.resources.register("session", { field: "sessionId" });
+ 			const resolved = SessionController.Config(config);
+ 			installModelSelectionProjection(ctx);
+-			this.agents = new ApiSessionAgentController(ctx);
++			this.agents = new ApiSessionAgentController(ctx, sessionId => this.resolveLifecycleAgent(sessionId));
+ 			this.commands = new SessionCommandController(ctx, this.agents, process.cwd());
+ 			ctx.effect(() => ctx.fileUploads.registerAgentResolver(async (sessionId) => {
+ 				const result = await this.agents.resolveAgent(sessionId);
+@@ -3006,20 +3050,17 @@ let SessionController = (() => {
+ 		promote(observation) {
+ 			const sessionId = observation.header.id;
+ 			const task = (async () => {
+-				const env_1 = {
+-					stack: [],
+-					error: void 0,
+-					hasError: false
+-				};
++				let lease;
+ 				try {
+-					const ownedObservation = __addDisposableResource(env_1, observation, false);
+-					const result = await this.agents.resolveObservedAgent(ownedObservation);
++					lease = await this.lifecycle.acquire({ action: "resolve", sessionId });
++					const result = await this.agents.resolveObservedAgent(observation);
+ 					if ("error" in result) this.ctx.emit("api-session/error", sessionId, result.error.message);
+-				} catch (e_1) {
+-					env_1.error = e_1;
+-					env_1.hasError = true;
++				} catch (error) {
++					const remote = remoteErrorOf(error);
++					if (remote === void 0) throw error;
++					this.ctx.emit("api-session/error", sessionId, remote.message);
+ 				} finally {
+-					__disposeResources(env_1);
++					try { observation[Symbol.dispose](); } finally { await lease?.release(); }
+ 				}
+ 			})().catch((error) => {
+ 				this.ctx.logger.error(`session-controller: background activation for "${sessionId}" failed: ${errorChain(error)}`);
+@@ -3044,6 +3085,9 @@ let SessionController = (() => {
+ 		* @returns the current attached state or persisted header and event prefix.
+ 		*/
+ 		inspect(sessionId, signal) {
++			return this.lifecycle.run({ action: "inspect", sessionId, signal }, control => this.inspectUnmanaged(sessionId, control));
++		}
++		inspectUnmanaged(sessionId, signal) {
+ 			const attached = this.ctx.sessions.get(sessionId);
+ 			if (attached !== void 0) return Promise.resolve({
+ 				meta: attached.header,
+@@ -3088,7 +3132,7 @@ let SessionController = (() => {
+ 		* @returns the created or reused Session identity and its preset when configured.
+ 		*/
+ 		create(request) {
+-			return this.commands.create(request);
++			return this.lifecycle.run({ action: "create", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.create(request));
+ 		}
+ 		/**
+ 		* Select one Session-local model after explicitly resuming the Session; save the default in the background.
+@@ -3096,7 +3140,7 @@ let SessionController = (() => {
+ 		* @returns the normalized selection installed for the Session, without waiting for default persistence.
+ 		*/
+ 		selectModel(request) {
+-			return this.commands.selectModel(request);
++			return this.lifecycle.run({ action: "selectModel", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.selectModel(request));
+ 		}
+ 		/**
+ 		* Select the first available account model after login when no provider API key is configured.
+@@ -3194,7 +3238,7 @@ let SessionController = (() => {
+ 		* @returns the accepted title and durable event sequence.
+ 		*/
+ 		rename(request) {
+-			return this.commands.rename(request);
++			return this.lifecycle.run({ action: "rename", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.rename(request));
+ 		}
+ 		/**
+ 		* Fork one cold-readable exact event prefix into a new Session. An omitted
+@@ -3204,6 +3248,9 @@ let SessionController = (() => {
+ 		* @returns the new Session identity.
+ 		*/
+ 		async fork(request) {
++			return this.lifecycle.run({ action: "fork", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.forkUnmanaged(request));
++		}
++		async forkUnmanaged(request) {
+ 			if (request.allowMigration === false && this.ctx.sessions.get(request.sessionId) === void 0) {
+ 				if ((await this.ctx.get("sessionPersistence")?.stat(request.sessionId))?.formatStatus === "migration-required" && this.ctx.sessions.get(request.sessionId) === void 0) throw new RemoteError("session/migration-required", "Open the source Session to complete migration before forking", { sessionId: request.sessionId });
+ 			}
+@@ -3227,7 +3274,7 @@ let SessionController = (() => {
+ 				...clientTimeZone === void 0 ? {} : { clientTimeZone },
+ 				...principal === void 0 ? {} : { principal }
+ 			};
+-			return this.commands.prompt(request, source);
++			return this.lifecycle.run({ action: "prompt", sessionId: request.sessionId, signal }, () => this.commands.prompt(request, source));
+ 		}
+ 		/**
+ 		* Read one image proven reachable from the addressed Session log.
+@@ -3235,7 +3282,7 @@ let SessionController = (() => {
+ 		* @returns the durable attachment reference and base64-encoded bytes.
+ 		*/
+ 		attachment(request) {
+-			return this.commands.attachment(request);
++			return this.lifecycle.run({ action: "attachment", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.attachment(request));
+ 		}
+ 		/**
+ 		* Mutate one still-pending queue occurrence, resuming a cold Agent first.
+@@ -3243,7 +3290,7 @@ let SessionController = (() => {
+ 		* @returns acknowledgement that the queue mutation was applied.
+ 		*/
+ 		updateQueue(request) {
+-			return this.commands.updateQueue(request);
++			return this.lifecycle.run({ action: "queue", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.updateQueue(request));
+ 		}
+ 		/**
+ 		* Cancel one active Agent turn without dropping its pending inbox.
+@@ -3251,7 +3298,7 @@ let SessionController = (() => {
+ 		* @returns acknowledgement that cancellation was requested.
+ 		*/
+ 		cancel(request) {
+-			return this.commands.cancel(request);
++			return this.lifecycle.run({ action: "cancel", sessionId: request.sessionId, signal: this.ctx.invocation?.signal }, () => this.commands.cancel(request));
+ 		}
+ 		/**
+ 		* Read one cold-safe, message-aligned Session history page.
+@@ -3260,7 +3307,7 @@ let SessionController = (() => {
+ 		* @returns one chronological page.
+ 		*/
+ 		page(request, signal) {
+-			return this.history.page(request, signal);
++			return this.lifecycle.run({ action: "page", sessionId: request.address.kind === "session" ? request.address.sessionId : request.address.parentSessionId, signal }, control => this.history.page(request, control));
+ 		}
+ 		/**
+ 		* Follow one Session log from its opening or resume cursor.
+@@ -3270,7 +3317,7 @@ let SessionController = (() => {
+ 		*   frames and optional cursorless assistant-stream frames.
+ 		*/
+ 		follow(request, signal) {
+-			return this.history.follow(request, signal);
++			return this.openLifecycleStream(request, signal);
+ 		}
+ 		/**
+ 		* Read exact projections, returning cached hints only when migration is required.
+@@ -3279,6 +3326,9 @@ let SessionController = (() => {
+ 		* @returns a sequenced baseline, cached hints when migration is deferred, or null when absent.
+ 		*/
+ 		async projections(request, signal) {
++			return this.lifecycle.run({ action: "projections", sessionId: request.sessionId, signal }, control => this.projectionsUnmanaged(request, control));
++		}
++		async projectionsUnmanaged(request, signal) {
+ 			const { sessionId } = request;
+ 			if (sessionId.length === 0) throw new RemoteError("gateway/bad-request", "sessionId must not be empty", {});
+ 			try {
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 08bb851544825573cafc632ff9616d0c4c493790..497838b427637eed5a8472f95a7a7ffbd49dab21 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -2,6 +2,8 @@
+ import { Context } from '@deepseek-ai/cordis';
+ import z from '@deepseek-ai/schemastery';
+ import { nativeFileApplications, openNativeFileApplication } from '@deepseek-ai/dsh-native-command';
++import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent';
++import type { OperationGuard } from '@deepseek-ai/dsh-typert-protocol';
+ import type { SessionId } from '@deepseek-ai/dsh-session';
+ import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence';
+ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
+@@ -18,6 +20,22 @@ declare module '@deepseek-ai/cordis' {
+         sessionController: SessionController;
+     }
+ }
++/** Host admission request; a history address uses its containing ordinary Session. */
++export interface SessionOperation {
++    readonly action: 'resolve' | 'create' | 'fork' | 'selectModel' | 'rename' | 'prompt' | 'queue' | 'cancel' | 'page' | 'follow' | 'projections' | 'inspect' | 'attachment';
++    readonly sessionId?: SessionId;
++    readonly signal?: AbortSignal;
++}
++/** An Agent whose handle and model-selection effects remain with its external owner. */
++export interface OwnedSessionAgent {
++    readonly agent: Agent;
++    readonly selection: ModelSelection;
++}
++/** Acquire for operation duration and resolve before the Controller's live or cold paths. */
++export interface SessionLifecycleProvider {
++    readonly acquire: OperationGuard<SessionOperation>;
++    resolveAgent(sessionId: SessionId, signal: AbortSignal): Promise<OwnedSessionAgent | undefined>;
++}
+ /** Session Controller deployment policy. */
+ export interface Config {
+     /** Override platform desktop-opener detection. */
+@@ -44,6 +62,8 @@ export interface SessionControllerInternals {
+ }
+ /** Host service backing the generated `ctx.remote.session` namespace. */
+ export declare class SessionController extends TypertRemoteService {
++    /** Register an effect-owned provider. Withdrawal cancels, drains, and disables managed admission. */
++    registerLifecycle(provider: SessionLifecycleProvider): () => Promise<void>;
+     static inject: string[];
+     static Config: z<Config, ResolvedConfig>;
+     private readonly agents;

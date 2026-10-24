@@ -50,6 +50,8 @@ export interface ChatMessage {
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** This standard API operation must use Bot management instead. */
+    'bot/operation-unavailable': { readonly operation: string }
     /** A requested Bot does not exist. */
     'bot/not-found': { readonly botId: string }
     /** One turn is already admitted for this Bot. */

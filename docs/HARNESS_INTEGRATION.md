@@ -22,7 +22,7 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 [AgentRegistry.create/resume](../references/deepseek-harness/packages/core/agent/src/index.ts) 返回 AgentHandle，只有持有句柄的创建方可以执行完整销毁。ResumeAgentOptions.setup 在发布前装配新的 Agent 作用域；[AgentLoop](../references/deepseek-harness/packages/core/agent-loop/src/index.ts) 使用 resumeSessionId 打开原持久日志，setup 成功后才发布。
 
-#4 已在 BotController 和生成 Remote 中实现以下保存流程；当前所有入口均由 Bot 所有者协调，官方 Session Controller 未挂载。
+#4 已在 BotController 和生成 Remote 中实现以下保存流程；Bot 与已挂载的标准 Session Controller 入口均由同一个所有者协调。
 
 1. Runner 为该 Bot 独占处理此次配置修改，检查配置读取版本，阻止新的执行操作和冷恢复与替换过程交错。
 2. 执行中立即拒绝修改，不等待当前任务结束后悄悄保存。检查 nextTurn、nextStep 和其他执行资源，不能在仍有待处理输入时销毁 Agent。
@@ -44,11 +44,11 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 推荐应用 Bot 生命周期插件从首次创建开始持有所有 AgentHandle。复用官方查询、跟随、审批和输入能力时，所有会激活或修改 Bot 的入口都必须受同一个生命周期所有者协调，包括历史跟随触发的冷恢复、文件引用与上传等间接入口。不能只串行化保存按钮，也不能在配置替换窗口直接暴露未受协调的官方接口。
 
-当前由 Bot 服务管理创建、恢复和句柄，正式 profile 关闭官方 Session Controller。#5 的实际进程验证确认需要 Host 生命周期委托扩展，覆盖历史开场、后台 promotion、命令、lookup 和 upload 解析；具体证据和替代方案见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
+当前由 Bot 服务管理创建、恢复和句柄，正式 profile 通过运行时兼容补丁挂载标准 Session Controller。Host 委托覆盖历史开场、后台 promotion、命令、lookup、方法使用与 upload，Runner 在销毁插件树前排空操作；证据和移除条件见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 ## 当前 npm Runner 接入状态
 
-#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。#4 已补齐配置事务、同一 Session 替换、参数覆盖清除、能力选择、五种拒绝、回退及未完成事务重启后的停止接纳；公开 Controller 与真实 Runner Remote 均有通过的契约测试。#5 已完成公开接口缺口的可执行复现；正式共存仍需带生命周期委托的可消费发行版，详见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
+#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。#4 已补齐配置事务、同一 Session 替换、参数覆盖清除、能力选择、五种拒绝、回退及未完成事务重启后的停止接纳；公开 Controller 与真实 Runner Remote 均有通过的契约测试。#5 已在基线缺口复现后，以受版本锁定的 Host 扩展完成标准 Controller 共存及退出验证，详见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 此前空回复的直接原因已通过 `agent/error` 定位为 adapter 精确模型元数据缺少 `id`、`name`，产生 `INVALID_MODEL_INFO`；修正后继续修复了历史字段、持久化读取及清理入口。原始失败基线保留在 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)，不与本次通过的契约测试混用。
 
@@ -64,4 +64,4 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 初次运行相关测试因缺少本机原生 flock 模块失败；执行 pnpm run build:native-system 后，预设注册测试、Agent 恢复测试与首个组合实验合计 84 项通过。新增失败恢复实验后，单独执行两个组合实验，2 项通过。临时实验没有作为上游包变更保留。
 
-这些早期实验仅证明公开机制可组合。当前 npm 接入另有上述 #3/#4 验证；真实模型、官方 Remote/API 跟随跨 Agent 替换、配置提交中途强制终止进程以及安装交付仍未验证。
+这些早期实验仅证明公开机制可组合。当前 npm 接入另有上述 #3/#4 验证；标准 Remote/API 跟随跨 Agent 替换已有独立 npm 正向测试；真实模型、配置提交中途强制终止进程以及安装交付仍未验证。

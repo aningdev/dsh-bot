@@ -1,0 +1,108 @@
+diff --git a/lib/index.js b/lib/index.js
+index 9edc8744d2819d69ffbce79c6fdd5e475cbc4169..8385794bec72917cec8f24838fb82fd37854a200 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,3 +1,4 @@
++export { OperationGuardRegistry } from './operation-guard.js';
+ import { Context, Service } from "@deepseek-ai/cordis";
+ //#region lib/types/remote-error.js
+ /** The one Remote failure class shared by owners, the Gateway, and consumers. */
+diff --git a/lib/operation-guard.js b/lib/operation-guard.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5688a363dd5447d256dc8cd6338d1d9dba643ec
+--- /dev/null
++++ b/lib/operation-guard.js
+@@ -0,0 +1,53 @@
++/** Single-owner operation guards with retirement and invocation-owned release. */
++export class OperationGuardRegistry {
++  neverAborted = new AbortController().signal;
++  registration;
++  retired = false;
++  get enabled() { return this.registration !== undefined || this.retired; }
++  constructor(unavailable) { this.unavailable = unavailable; }
++  register(guard) {
++    if (this.registration !== undefined) throw new Error('An operation guard is already registered');
++    const registration = { guard, lifetime: new AbortController(), active: 0, drained: undefined };
++    this.registration = registration;
++    this.retired = false;
++    let closing;
++    return () => closing ??= (async () => {
++      registration.lifetime.abort(this.unavailable());
++      this.retired = true;
++      if (registration.active > 0) await new Promise(resolve => { registration.drained = resolve; });
++      if (this.registration === registration) this.registration = undefined;
++    })();
++  }
++  async acquire(request) {
++    const registration = this.registration;
++    if (this.retired) throw this.unavailable();
++    if (registration === undefined) return undefined;
++    const signal = AbortSignal.any([request.signal ?? this.neverAborted, registration.lifetime.signal]);
++    signal.throwIfAborted();
++    registration.active++;
++    const finish = () => {
++      registration.active--;
++      if (registration.active === 0) registration.drained?.();
++    };
++    let lease;
++    try {
++      lease = await registration.guard({ ...request, signal });
++      signal.throwIfAborted();
++    } catch (error) {
++      try { await lease?.release(); } finally { finish(); }
++      throw error;
++    }
++    if (lease === undefined) { finish(); return undefined; }
++    let closing;
++    return {
++      signal,
++      lifetime: lease.lifetime,
++      release: () => closing ??= (async () => { try { await lease.release(); } finally { finish(); } })(),
++    };
++  }
++  async run(request, operation) {
++    const lease = await this.acquire(request);
++    try { return await operation(lease?.signal ?? request.signal ?? this.neverAborted); }
++    finally { await lease?.release(); }
++  }
++}
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 6e8c39db44e6baa771ae811849bbf83ef56465bc..3facc080c39194e69969c12bb2122aa2f3d44955 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -4,6 +4,7 @@
+  * remains a Typert compiler responsibility.
+  * @module @deepseek-ai/dsh-typert-protocol
+  */
++export { OperationGuardRegistry, type OperationGuard, type OperationLease } from './operation-guard.js';
+ import { Context, Service } from '@deepseek-ai/cordis';
+ import type { RemoteWireArgs, TypertContextMap, TypertResourceReader, TypertResourceReaders } from './types.ts';
+ export { RemoteError, remoteErrorOf } from './remote-error.ts';
+diff --git a/lib/types/operation-guard.d.ts b/lib/types/operation-guard.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..bbc40f985125f8e5cffde614aae1c3f6eaefa1fe
+--- /dev/null
++++ b/lib/types/operation-guard.d.ts
+@@ -0,0 +1,22 @@
++/** A bounded Host operation; release is idempotent and awaited by its caller. */
++export interface OperationLease {
++  /** Invocation cancellation, including withdrawal of its owner. */
++  readonly signal?: AbortSignal;
++  /** Streams may release after their first completed next() instead of their lifetime. */
++  readonly lifetime?: 'call' | 'opening';
++  /** Release owned resources after the operation and its cleanup settle. */
++  release(): void | Promise<void>;
++}
++/** Acquire before using Host objects; undefined delegates an unmanaged operation. */
++export type OperationGuard<Request> = (request: Request & { readonly signal: AbortSignal }) => OperationLease | undefined | Promise<OperationLease | undefined>;
++/** A single effect-owned guard; withdrawal cancels and drains it, then fails closed. */
++export declare class OperationGuardRegistry<Request extends { readonly signal?: AbortSignal }> {
++  readonly enabled: boolean;
++  constructor(unavailable: () => Error);
++  /** Register one provider; the caller owns and awaits the returned disposer. */
++  register(guard: OperationGuard<Request>): () => Promise<void>;
++  /** Acquire an invocation-owned lease after checking owner retirement. */
++  acquire(request: Request): Promise<OperationLease | undefined>;
++  /** Hold a lease through an asynchronous operation and release it on every outcome. */
++  run<T>(request: Request, operation: (signal: AbortSignal) => Promise<T> | T): Promise<T>;
++}

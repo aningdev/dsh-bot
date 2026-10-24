@@ -67,6 +67,14 @@
       name: '@deepseek-ai/dsh-client-connection'
     - id: runner-remotes
       name: '@deepseek-ai/dsh-api-remotes'
+    - id: runner-workspace
+      name: '@deepseek-ai/dsh-workspace'
+    - id: runner-file-references
+      name: '@deepseek-ai/dsh-file-reference-local'
+    - id: runner-file-uploads
+      name: '@deepseek-ai/dsh-client-file-upload'
+    - id: runner-session-controller
+      name: '@deepseek-ai/dsh-api-session-controller'
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:

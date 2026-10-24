@@ -43,7 +43,12 @@
   },
   "patchedDependencies": {
     "@electron-forge/core-utils@8.0.1": "patches/@electron-forge%2Fcore-utils@8.0.1.patch",
-    "@deepseek-ai/dsh-typert-generator@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-typert-generator@0.2.1-rc.2.patch"
+    "@deepseek-ai/dsh-typert-generator@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-typert-generator@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh-typert-protocol@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-typert-protocol@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh-api-gateway@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-api-gateway@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-api-session-controller@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh-client-file-upload@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-client-file-upload@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh@0.2.1-rc.2.patch"
   },
   "trustedDependencies": [
     "electron",
