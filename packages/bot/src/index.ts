@@ -7,27 +7,79 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-loop'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { deriveEventMessage, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import {
+  deriveEventMessage,
+  SessionId,
+  SessionLogOffset,
+  type SessionEvent,
+} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import { defineDomain, domainTable, type KvTable } from '@deepseek-ai/dsh-storage-domain'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
+import type {} from '@deepseek-ai/dsh-working-directory'
 import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 
-import type { BotFrame, BotRecord, ChatMessage, CreateBotRequest } from './types.ts'
-export type { BotFrame, BotRecord, ChatMessage, CreateBotRequest } from './types.ts'
+import type {
+  BotConfiguration,
+  BotFrame,
+  BotRecord,
+  ChatMessage,
+  ConfigurationRejectionReason,
+  CreateBotRequest,
+  SaveBotConfigurationRequest,
+} from './types.ts'
+export type {
+  BotConfiguration,
+  BotFrame,
+  BotRecord,
+  ChatMessage,
+  ConfigurationRejectionReason,
+  CreateBotRequest,
+  SaveBotConfigurationRequest,
+} from './types.ts'
 
-/** Deployment-owned initial model selection; storage routing belongs to storageDomain. */
+/** Deployment-approved preset contribution; callers select its capability id. */
+export interface CapabilityPlugin {
+  readonly name: string
+  readonly config: Record<string, JsonValue>
+}
+
+/** Initial model and approved capabilities; keys and plugin configuration stay execution-side. */
 export interface Config {
   readonly provider: string
   readonly model: string
+  readonly capabilities: Record<string, CapabilityPlugin[]>
 }
+
+const capabilityConfiguration = schema.transform(
+  schema.dict(schema.any<JsonValue>()).required(),
+  (value) => {
+    const snapshot = snapshotJsonValue(value)
+    if (snapshot === undefined)
+      throw new schema.ValidationError(
+        'Bot capability configuration must contain lossless JSON values',
+        {},
+      )
+    return snapshot
+  },
+)
 
 /** Validates deployment values before the plugin activates. */
 export const Config: schema<Config> = schema.object({
   provider: schema.string().default('deepseek-official'),
   model: schema.string().default('deepseek-flash'),
+  capabilities: schema
+    .dict(
+      schema.array(
+        schema.object({ name: schema.string().required(), config: capabilityConfiguration }),
+      ),
+    )
+    .default({}),
 })
 
 const storedBot = z.object({
@@ -37,13 +89,42 @@ const storedBot = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
   sessionId: z.uuid(),
+  revision: z.number().int().nonnegative().default(0),
+  instructions: z.string().default(''),
+  capabilities: z.array(z.string().min(1)).default([]),
+  maxTokens: z.number().int().positive().nullable().default(null),
+  reasoningEffort: z.string().min(1).nullable().default(null),
 })
+
+const configurationInput = storedBot
+  .pick({
+    cwd: true,
+    provider: true,
+    model: true,
+    instructions: true,
+    capabilities: true,
+    maxTokens: true,
+    reasoningEffort: true,
+  })
+  .required()
+const saveConfigurationInput = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  configuration: configurationInput,
+})
+const storedTransaction = z.object({ previous: storedBot, candidate: storedBot })
+interface ConfigurationTransaction {
+  readonly previous: BotRecord
+  readonly candidate: BotRecord
+}
 
 const createBotInput = storedBot.pick({ name: true, cwd: true })
 const botDomain = defineDomain({
   name: 'dsh_bot',
   version: 1,
-  tables: { bots: domainTable(storedBot) },
+  tables: {
+    bots: domainTable(storedBot),
+    configuration_transactions: domainTable(storedTransaction),
+  },
 })
 
 /** Whether a filesystem failure means a requested file is absent. */
@@ -67,26 +148,39 @@ export class BotController extends TypertRemoteService {
     'sessions',
     'sessionPersistence',
     'storageDomain',
+    'llm',
+    'systemPrompt',
+    'workingDirectory',
+    'sessionProjections',
   ]
   private readonly handles = new Map<string, AgentHandle>()
   private readonly presets = new Map<string, () => Promise<void>>()
   private readonly busy = new Set<string>()
+  private readonly applying = new Map<string, BotRecord>()
+  private readonly faults = new Set<string>()
+  private readonly operations = new Set<Promise<BotRecord>>()
+  private readonly lifetime = new AbortController()
   private stopping = false
 
   /**
    * @param ctx - Owning plugin context.
    * @param config - Validated deployment values.
-   * @param records - Validated domain table, closed by the owning plugin after Agent teardown.
+   * @param records - Validated domain table, closed after Agent teardown.
+   * @param transactions - Durable intents; an outstanding intent stops execution after restart.
    */
   constructor(
     ctx: Context,
     private readonly config: Config,
     private readonly records: KvTable<string, BotRecord>,
+    private readonly transactions: KvTable<string, ConfigurationTransaction>,
   ) {
     super(ctx, 'botController', { namespace: 'bot' })
+    for (const id of transactions.keys()) this.faults.add(id)
     ctx.effect(
       () => async () => {
         this.stopping = true
+        this.lifetime.abort(new Error('Bot controller is stopping'))
+        await Promise.allSettled(this.operations)
         const failures: unknown[] = []
         for (const handle of this.handles.values()) {
           try {
@@ -140,6 +234,11 @@ export class BotController extends TypertRemoteService {
       sessionId: botId,
       provider: this.config.provider,
       model: this.config.model,
+      revision: 0,
+      instructions: '',
+      capabilities: [],
+      maxTokens: null,
+      reasoningEffort: null,
     }
     await this.records.put(botId, record)
     return record
@@ -154,8 +253,13 @@ export class BotController extends TypertRemoteService {
   @Remote('get')
   async getBot(botId: string, signal: AbortSignal): Promise<BotRecord> {
     signal.throwIfAborted()
+    return this.readBot(botId)
+  }
+
+  private readBot(botId: string): BotRecord {
     this.validateBotId(botId)
-    const record = this.records.get(botId)
+    const record =
+      this.applying.get(botId) ?? this.transactions.get(botId)?.previous ?? this.records.get(botId)
     if (record === undefined) throw new RemoteError('bot/not-found', 'Bot not found', { botId })
     if (record.botId !== botId || record.sessionId !== botId)
       throw new Error('Bot record identity does not match its table key')
@@ -170,8 +274,261 @@ export class BotController extends TypertRemoteService {
   @Remote('list')
   async listBots(signal: AbortSignal): Promise<readonly BotRecord[]> {
     const records: BotRecord[] = []
-    for (const id of [...this.records.keys()].sort()) records.push(await this.getBot(id, signal))
+    for (const id of [...new Set([...this.records.keys(), ...this.transactions.keys()])].sort())
+      records.push(await this.getBot(id, signal))
     return records
+  }
+
+  /**
+   * Persist and apply a complete configuration while preserving the Bot's Session.
+   * @param botId - Bot whose committed revision the caller edited.
+   * @param request - Expected revision and complete replacement configuration.
+   * @param signal - Cancellation before the durable transaction begins; committed work finishes independently.
+   * @returns The new committed record after its Agent is ready and persistence has flushed.
+   */
+  @Remote('saveConfiguration')
+  saveConfiguration(
+    botId: string,
+    request: SaveBotConfigurationRequest,
+    signal: AbortSignal,
+  ): Promise<BotRecord> {
+    const operation = this.applyConfiguration(botId, request, signal)
+    this.operations.add(operation)
+    const release = (): void => {
+      this.operations.delete(operation)
+    }
+    void operation.then(release, release)
+    return operation
+  }
+
+  private async applyConfiguration(
+    botId: string,
+    request: SaveBotConfigurationRequest,
+    caller: AbortSignal,
+  ): Promise<BotRecord> {
+    caller.throwIfAborted()
+    this.validateBotId(botId)
+    if (this.applying.has(botId)) this.rejectConfiguration(botId, 'replacing')
+    if (this.stopping || this.faults.has(botId)) this.rejectConfiguration(botId, 'unavailable')
+    const previous = this.readBot(botId)
+    const owned = this.handles.get(botId)
+    if (this.busy.has(botId) || owned?.agent.status === 'running')
+      this.rejectConfiguration(botId, 'running')
+    if (owned !== undefined && this.hasPending(owned.agent))
+      this.rejectConfiguration(botId, 'pending-input')
+    if (this.ctx.agents.get(SessionId(previous.sessionId)) !== owned?.agent)
+      this.rejectConfiguration(botId, 'unavailable')
+    const parsed = saveConfigurationInput.safeParse(request)
+    if (!parsed.success)
+      throw new RemoteError('bot/config-invalid', 'Provide a complete valid configuration', {
+        botId,
+        field: 'configuration',
+      })
+    if (parsed.data.expectedRevision !== previous.revision)
+      throw new RemoteError(
+        'bot/config-conflict',
+        'Reload the current Bot configuration before saving',
+        {
+          botId,
+          expectedRevision: parsed.data.expectedRevision,
+          actualRevision: previous.revision,
+        },
+      )
+    const candidate: BotRecord = {
+      ...previous,
+      ...parsed.data.configuration,
+      revision: previous.revision + 1,
+    }
+    this.applying.set(botId, previous)
+    let persistAttempted = false
+    let disposal: Promise<void> | undefined
+    let runtimeChanged = false
+    let disposalFailed = false
+    const prepare = async (maintenance?: AbortSignal): Promise<void> => {
+      const signal = AbortSignal.any([
+        caller,
+        this.lifetime.signal,
+        ...(maintenance === undefined ? [] : [maintenance]),
+      ])
+      if (owned === undefined) await this.rejectStoredPending(previous, signal)
+      await this.validateConfiguration(candidate, signal)
+      signal.throwIfAborted()
+      if (owned !== undefined && this.hasPending(owned.agent))
+        this.rejectConfiguration(botId, 'pending-input')
+      persistAttempted = true
+      await this.transactions.put(botId, { previous, candidate })
+      await this.records.put(botId, candidate)
+      signal.throwIfAborted()
+      if (owned !== undefined && this.hasPending(owned.agent))
+        this.rejectConfiguration(botId, 'pending-input')
+      if (owned !== undefined) {
+        // Disposal cancels synchronously; waiting here would wait on this maintenance task itself.
+        disposal = owned.dispose()
+        void disposal.catch((_error: unknown) => {
+          disposalFailed = true
+        })
+      }
+    }
+    try {
+      let prepared: Promise<void>
+      try {
+        prepared = owned === undefined ? prepare() : owned.agent.runMaintenance(prepare)
+      } catch (error: unknown) {
+        this.rejectConfiguration(botId, 'maintenance', error)
+      }
+      await prepared
+      if (disposal !== undefined) await disposal
+      runtimeChanged = true
+      this.handles.delete(botId)
+      try {
+        await this.removePreset(botId)
+      } catch (error: unknown) {
+        disposalFailed = true
+        throw error
+      }
+      const agent = await this.resolveAgent(candidate, previous.cwd)
+      if (!(await this.ctx.sessions.flush(agent.session)))
+        throw new Error('Bot Session has no durability listener')
+      await this.transactions.delete(botId)
+      return candidate
+    } catch (error: unknown) {
+      if (disposalFailed) {
+        this.faults.add(botId)
+        throw new RemoteError(
+          'bot/faulted',
+          'Agent teardown failed; Bot execution has stopped',
+          { botId },
+          { cause: error },
+        )
+      }
+      try {
+        if (persistAttempted) {
+          if (runtimeChanged) {
+            await this.handles.get(botId)?.dispose()
+            this.handles.delete(botId)
+            await this.removePreset(botId)
+          }
+          await this.records.put(botId, previous)
+          if (runtimeChanged) {
+            const restored = await this.resolveAgent(previous)
+            if (!(await this.ctx.sessions.flush(restored.session)))
+              throw new Error('Restored Bot Session has no durability listener')
+          }
+          await this.transactions.delete(botId)
+        }
+      } catch (recovery: unknown) {
+        this.faults.add(botId)
+        throw new RemoteError(
+          'bot/faulted',
+          'Configuration recovery failed; Bot execution has stopped',
+          { botId },
+          { cause: new AggregateError([error, recovery], 'Bot configuration recovery failed') },
+        )
+      }
+      if (
+        !persistAttempted ||
+        (error instanceof RemoteError && error.code === 'bot/config-rejected')
+      )
+        throw error
+      throw new RemoteError(
+        'bot/config-failed',
+        'Configuration could not be applied; previous configuration restored',
+        { botId, rolledBack: true },
+        { cause: error },
+      )
+    } finally {
+      this.applying.delete(botId)
+    }
+  }
+
+  private rejectConfiguration(
+    botId: string,
+    reason: ConfigurationRejectionReason,
+    cause?: unknown,
+  ): never {
+    throw new RemoteError(
+      'bot/config-rejected',
+      'Bot cannot apply configuration now',
+      {
+        botId,
+        reason,
+      },
+      { cause },
+    )
+  }
+
+  private hasPending(agent: Agent): boolean {
+    return agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0
+  }
+
+  private async rejectStoredPending(record: BotRecord, signal: AbortSignal): Promise<void> {
+    const id = SessionId(record.sessionId)
+    if ((await this.ctx.sessionPersistence.stat(id, { signal })) === undefined) return
+    await using stored = await this.ctx.sessionPersistence.open(id, 'read', { signal })
+    const { events } = await stored.read(0, undefined, { signal })
+    const { snapshot } = this.ctx.sessionProjections.restore(
+      {},
+      events,
+      SessionLogOffset(0),
+      stored.header,
+      stored.inheritedEventCount,
+    )
+    const inbox = snapshot.values.inbox
+    if (inbox === undefined)
+      throw new Error('Bot configuration requires the standard inbox projection')
+    if (inbox['next-turn'].length > 0 || inbox['next-step'].length > 0)
+      this.rejectConfiguration(record.botId, 'pending-input')
+  }
+
+  private modelOptions(configuration: BotConfiguration): LlmCallConfig {
+    return {
+      provider: configuration.provider,
+      model: configuration.model,
+      ...(configuration.maxTokens === null ? {} : { maxTokens: configuration.maxTokens }),
+      ...(configuration.reasoningEffort === null
+        ? {}
+        : { reasoningEffort: ReasoningEffortId(configuration.reasoningEffort) }),
+    }
+  }
+
+  private capabilityPlugins(configuration: BotConfiguration): CapabilityPlugin[] {
+    return configuration.capabilities.flatMap((id) => {
+      if (!Object.hasOwn(this.config.capabilities, id))
+        throw new Error(`Unknown Bot capability: ${id}`)
+      return this.config.capabilities[id]!
+    })
+  }
+
+  private async validateConfiguration(candidate: BotRecord, signal: AbortSignal): Promise<void> {
+    try {
+      const directory = await stat(candidate.cwd)
+      if (!directory.isDirectory()) throw new Error('Working directory is not a directory')
+      const names = candidate.capabilities
+      if (new Set(names).size !== names.length) throw new Error('Capability ids must be unique')
+      const plugins = this.capabilityPlugins(candidate)
+      await this.ctx.llm.resolveCallConfig(this.modelOptions(candidate), signal)
+      const presetId = `dsh-bot:${candidate.botId}:validate:${randomUUID()}`
+      const dispose = await this.ctx.agentPresets.register({ id: presetId, plugins })
+      try {
+        await using _lease = await this.ctx.agentPresets.acquireScope(presetId)
+        signal.throwIfAborted()
+      } finally {
+        await dispose()
+      }
+    } catch (error: unknown) {
+      signal.throwIfAborted()
+      throw new RemoteError(
+        'bot/config-invalid',
+        'Configuration cannot be assembled; check the directory, model, and capability selection',
+        { botId: candidate.botId, field: 'configuration' },
+        { cause: error },
+      )
+    }
+  }
+
+  private async removePreset(botId: string): Promise<void> {
+    await this.presets.get(botId)?.()
+    this.presets.delete(botId)
   }
 
   /**
@@ -186,7 +543,9 @@ export class BotController extends TypertRemoteService {
     if (typeof text !== 'string' || text.trim().length === 0)
       throw new RemoteError('bot/invalid-input', 'Message must not be empty', { field: 'text' })
     signal.throwIfAborted()
-    if (this.stopping || this.busy.has(botId))
+    if (this.faults.has(botId))
+      throw new RemoteError('bot/faulted', 'Bot configuration recovery is required', { botId })
+    if (this.stopping || this.busy.has(botId) || this.applying.has(botId))
       throw new RemoteError('bot/busy', 'Bot is busy or stopping', { botId })
     this.busy.add(botId)
     let accepted = false
@@ -265,6 +624,7 @@ export class BotController extends TypertRemoteService {
    */
   @Remote('history')
   async history(botId: string, signal: AbortSignal): Promise<readonly ChatMessage[]> {
+    if (this.applying.has(botId)) this.rejectConfiguration(botId, 'replacing')
     const record = await this.getBot(botId, signal)
     const id = SessionId(record.sessionId)
     const live = this.ctx.sessions.get(id)
@@ -289,7 +649,7 @@ export class BotController extends TypertRemoteService {
     return messages
   }
 
-  private async resolveAgent(record: BotRecord): Promise<Agent> {
+  private async resolveAgent(record: BotRecord, originalCwd = record.cwd): Promise<Agent> {
     const owned = this.handles.get(record.botId)
     if (owned !== undefined) return owned.agent
     const sessionId = SessionId(record.sessionId)
@@ -297,23 +657,37 @@ export class BotController extends TypertRemoteService {
     if (!this.presets.has(record.botId)) {
       this.presets.set(
         record.botId,
-        await this.ctx.agentPresets.register({ id: presetId, plugins: [] }),
+        await this.ctx.agentPresets.register({
+          id: presetId,
+          plugins: this.capabilityPlugins(record),
+        }),
       )
     }
     const selection = {
-      current: { provider: record.provider, model: record.model },
+      current: this.modelOptions(record),
       assembled: undefined,
     }
-    const setup = async (agentCtx: Context): Promise<void> => {
+    const setup = async (agentCtx: Context, agent: Agent): Promise<void> => {
       installModelSelection(agentCtx, selection)
       await this.ctx.agentPresets.mount(agentCtx, presetId)
+      if (record.instructions.length > 0)
+        agentCtx.effect(() =>
+          agentCtx.systemPrompt.section({
+            name: 'dsh-bot:instructions',
+            order: 10250,
+            text: record.instructions,
+            interpolate: false,
+          }),
+        )
+      if (this.ctx.workingDirectory.get(agent.session) !== record.cwd)
+        await this.ctx.workingDirectory.set(agent, record.cwd)
     }
-    const agentOptions = { provider: record.provider, model: record.model }
+    const agentOptions = this.modelOptions(record)
     const handle =
       (await this.ctx.sessionPersistence.stat(sessionId)) === undefined
         ? await this.ctx.agents.create({
             sessionId,
-            meta: { cwd: record.cwd, agentPreset: presetId },
+            meta: { cwd: originalCwd, agentPreset: presetId },
             agentOptions,
             setup,
           })
@@ -368,5 +742,5 @@ export const inject = BotController.inject
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const domain = await ctx.storageDomain.open(botDomain)
   ctx.effect(() => () => domain.close(), 'bot: record domain')
-  new BotController(ctx, config, domain.table('bots'))
+  new BotController(ctx, config, domain.table('bots'), domain.table('configuration_transactions'))
 }

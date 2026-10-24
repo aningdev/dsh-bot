@@ -1,6 +1,6 @@
 # Harness 到 dsh-bot 的映射方案
 
-本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、持久化及进程重启路径已实现；桌面接入、配置事务、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
+本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；官方 Session Controller 协调、桌面接入、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
 
 ## 推荐选择
 
@@ -137,12 +137,13 @@ Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Render
 
 ## 落地顺序与通过条件
 
-| 阶段                  | 工作                                             | 通过条件                                                   |
-| --------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
-| #3：标准插件组合      | 命名 profile、公开 npm、runtime/Bot bundle 加载  | 启动及清理成功，所需服务与 Remote 存在；不是只打开端口     |
-| #3：测试执行闭环      | 测试 overlay 注册确定性 adapter，调用 Bot Remote | 流式回复、真实日志、实际进程重启后同 Session 历史均通过    |
-| #4/#5：配置和生命周期 | Bot 配置事务、preset 替换、官方 Controller 协调  | 严格保存语义及所有冷激活入口验证通过                       |
-| #6 及后续桌面票       | Main 接入与现有 UI 操作                          | 经受控 oRPC 完成对话、工具和审批                           |
-| #11/#12：系统交付     | launchd、自带 Node、安装和升级                   | 桌面退出继续执行、异常拉起、主动停止及版本替换均有成品证据 |
+| 阶段              | 工作                                             | 通过条件                                                   |
+| ----------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| #3：标准插件组合  | 命名 profile、公开 npm、runtime/Bot bundle 加载  | 启动及清理成功，所需服务与 Remote 存在；不是只打开端口     |
+| #3：测试执行闭环  | 测试 overlay 注册确定性 adapter，调用 Bot Remote | 流式回复、真实日志、实际进程重启后同 Session 历史均通过    |
+| #4：配置事务      | Bot 配置事务、preset 替换、失败回退              | 已验证严格保存、五种拒绝、原 Session 连续及故障保持        |
+| #5：生命周期协调  | 官方 Controller 与 Bot 共享 Agent 所有者         | 所有冷激活入口验证通过                                     |
+| #6 及后续桌面票   | Main 接入与现有 UI 操作                          | 经受控 oRPC 完成对话、工具和审批                           |
+| #11/#12：系统交付 | launchd、自带 Node、安装和升级                   | 桌面退出继续执行、异常拉起、主动停止及版本替换均有成品证据 |
 
 手搭的生产 `createBotHost` 已移除，正式启动使用命名 profile，确定性模型仅由测试 overlay 加载。操作和当前验证范围见 [Runner README](../apps/runner/README.md)；原始失败基线见 [#3 失败记录](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)。

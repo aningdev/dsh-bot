@@ -149,4 +149,4 @@ Host 接到 `shutdown` 或父 IPC `disconnect` 后，合并并发停止操作，
 4. 停止实际 Runner 进程，重新启动后读取同一 Bot/Session 历史，并确认旧进程及日志句柄已经释放。
 5. 保持 #3 与 #11/#12 分工：#3 建立可运行后台及调用路径，launchd 注册、桌面退出存活和安装升级由后续票给出系统级证据。
 
-上述顺序是当时的实施建议；其中 #3 的 profile、Remote、日志与进程重启路径已有实现和通过证据，系统交付仍待 #11/#12。其余配置事务与生命周期问题继续由 [配置接入探索](./HARNESS_INTEGRATION.md) 和各自 issue 管理。
+上述顺序是当时的实施建议；#3 的 profile、Remote、日志与进程重启，以及 #4 的配置事务与同一 Session 替换已有实现和通过证据，系统交付仍待 #11/#12。官方 Session Controller 协调继续由 [配置接入探索](./HARNESS_INTEGRATION.md) 和 #5 管理。

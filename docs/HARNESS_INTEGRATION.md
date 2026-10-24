@@ -6,7 +6,7 @@
 
 每个 Bot 可以拥有稳定的运行时预设标识，并通过公开的 Agent create/resume setup 装配自己的配置。配置改变时，释放空闲 Agent 的句柄，再用同一 Session ID 恢复新的 Agent，可以保留历史并使下一轮使用新的工具、指令和模型；不需要重新启动整个 Runner。
 
-上述核心机制不要求修改上游执行循环或持久化实现。应用仍需实现 Bot 生命周期所有权、配置提交与恢复协调，以及跨客户端的操作互斥；现有 Web Session Controller 的自动恢复行为需要单独处理，不能据此承诺完整 Remote/API 接入零修改。
+上述核心机制不要求修改上游执行循环或持久化实现。应用已实现 Bot 生命周期所有权、配置事务、恢复与 Bot 接口操作互斥；现有 Web Session Controller 的自动恢复行为由 #5 单独处理。
 
 ## Bot 独立配置
 
@@ -22,14 +22,14 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 [AgentRegistry.create/resume](../references/deepseek-harness/packages/core/agent/src/index.ts) 返回 AgentHandle，只有持有句柄的创建方可以执行完整销毁。ResumeAgentOptions.setup 在发布前装配新的 Agent 作用域；[AgentLoop](../references/deepseek-harness/packages/core/agent-loop/src/index.ts) 使用 resumeSessionId 打开原持久日志，setup 成功后才发布。
 
-应用建议的保存流程如下。这个流程是实现方案，配置文件提交、并发与崩溃恢复尚未在应用中实现。
+#4 已在 BotController 和生成 Remote 中实现以下保存流程；当前所有入口均由 Bot 所有者协调，官方 Session Controller 未挂载。
 
 1. Runner 为该 Bot 独占处理此次配置修改，检查配置读取版本，阻止新的执行操作和冷恢复与替换过程交错。
 2. 执行中立即拒绝修改，不等待当前任务结束后悄悄保存。检查 nextTurn、nextStep 和其他执行资源，不能在仍有待处理输入时销毁 Agent。
 3. 解析并校验候选配置，尽可能提前验证模型、插件装配和服务引用；保留旧配置用于失败恢复。
-4. 等旧 Agent 确认空闲后释放其 AgentHandle，等待日志写入完成、写句柄关闭和身份从活动注册表移除。
+4. 写入持久事务记录与候选配置，再次确认无待处理输入，在维护回调中发起旧 AgentHandle 释放、退出回调后等待日志写入完成、写句柄关闭和身份从活动注册表移除。
 5. 替换该 Bot 的运行时预设声明，用原 Session ID 恢复新 Agent，在 setup 中挂载新配置并验证装配。
-6. 协调配置文件持久化与运行时发布，只有二者都完成才向客户端返回保存成功；客户端仍显示同一 Bot 和聊天历史。
+6. 新 Agent 就绪且 Session 持久化屏障完成后删除事务记录，才向客户端返回保存成功；应用期间查询保持返回旧配置，客户端仍显示同一 Bot 和聊天历史。
 7. 应用失败时恢复旧配置及旧配置下的 Agent；若恢复也失败，停止该 Bot 的执行接纳并报告故障，不伪装成已生效。
 
 销毁时上游会取消并清空 inbox，所以不能只检查公开 status === idle，也不能为了配置更新清空用户输入。上游 runMaintenance 能原子占用真正空闲阶段，且该阶段对外仍显示 idle；应用需要考虑维护操作。不能在 runMaintenance 回调里等待自己的 AgentHandle.dispose，因为销毁会等待维护结束。
@@ -48,7 +48,7 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 ## 当前 npm Runner 接入状态
 
-#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。配置事务、跨 Agent 替换和官方 Session Controller 协调仍由后续票实现。
+#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。#4 已补齐配置事务、同一 Session 替换、参数覆盖清除、能力选择、五种拒绝、回退及未完成事务重启后的停止接纳；公开 Controller 与真实 Runner Remote 均有通过的契约测试。官方 Session Controller 协调仍由 #5 实现。
 
 此前空回复的直接原因已通过 `agent/error` 定位为 adapter 精确模型元数据缺少 `id`、`name`，产生 `INVALID_MODEL_INFO`；修正后继续修复了历史字段、持久化读取及清理入口。原始失败基线保留在 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)，不与本次通过的契约测试混用。
 
@@ -64,4 +64,4 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 初次运行相关测试因缺少本机原生 flock 模块失败；执行 pnpm run build:native-system 后，预设注册测试、Agent 恢复测试与首个组合实验合计 84 项通过。新增失败恢复实验后，单独执行两个组合实验，2 项通过。临时实验没有作为上游包变更保留。
 
-尚未验证真实模型、同模型下全部参数清除语义、Remote/API 跟随跨 Agent 替换、配置文件提交的崩溃恢复、多个客户端并发保存，以及安装包。这里的结果证明公开机制可组合，不替代这些应用验收。
+这些早期实验仅证明公开机制可组合。当前 npm 接入另有上述 #3/#4 验证；真实模型、官方 Remote/API 跟随跨 Agent 替换、配置提交中途强制终止进程以及安装交付仍未验证。

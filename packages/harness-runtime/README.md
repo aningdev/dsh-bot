@@ -14,7 +14,7 @@ bun run harness --help
 
 ## Bundle 与 Runner
 
-`cordis.patch.yml` 在 `dsh-base` 上补充独立 WebServer、Connection、Remote 事件贡献和 AgentPresetRegistry，调整 Host 全局工具作用域。当前 standard preset 为空，各 Bot 使用自己的稳定 preset。官方 `dsh-web-app` 和页面不进入 profile；桌面与后续 Web 页面由本项目提供。
+`cordis.patch.yml` 在 `dsh-base` 上补充独立 WebServer、Connection、Remote 事件贡献和 AgentPresetRegistry，调整 Host 全局工具作用域。当前 standard preset 为空，各 Bot 使用自己的稳定 preset 和批准的能力 id；全局模型工具（包括 working-directory 工具）被禁用，working-directory 服务继续供配置应用使用。官方 `dsh-web-app` 和页面不进入 profile；桌面与后续 Web 页面由本项目提供。
 
 Runner 拥有应用入口、profile 选择、就绪/故障通知和进程级清理。此包只提供固定依赖和装配资源，不另建 `startHost()` 或根 Context。默认模型保持官方 provider；确定性模型只在 Runner 的测试 overlay 中注册。
 

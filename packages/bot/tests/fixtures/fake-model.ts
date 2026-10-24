@@ -1,6 +1,7 @@
 /** Deterministic external model replacement for automated tests. */
 import {
   LlmAdapter,
+  ReasoningEffortId,
   type GenerateOptions,
   type LlmModelInfo,
   type LlmResolvedModelInfo,
@@ -27,7 +28,20 @@ export function replyFor(options: GenerateOptions): string {
     .flatMap((message) => message.content)
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
   const last = texts.at(-1)?.text ?? ''
-  return `echo: ${last}`
+  if (last === 'inspect configuration')
+    return JSON.stringify({
+      model: options.model,
+      maxTokens: options.maxTokens ?? null,
+      reasoningEffort: options.reasoningEffort ?? null,
+      system: JSON.stringify(options.messages.filter((message) => message.role === 'system')),
+      context: JSON.stringify(
+        options.messages.filter(
+          (message) => message.role === 'user' && message.source?.kind !== 'user',
+        ),
+      ),
+      tools: options.tools?.map((tool) => tool.name).sort() ?? [],
+    })
+  return `${options.model === 'fake-2' ? 'echo-v2' : 'echo'}: ${last}`
 }
 
 /**
@@ -45,11 +59,11 @@ export class FakeModelAdapter extends LlmAdapter {
   }
 
   /**
-   * @param provider - registered route; the fake advertises one model.
-   * @returns the single advertised model.
+   * @param provider - registered route.
+   * @returns the two advertised models.
    */
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    return [{ provider, id: FAKE_MODEL, name: 'Fake model' }]
+    return [FAKE_MODEL, 'fake-2'].map((id) => ({ provider, id, name: id }))
   }
 
   /**
@@ -58,7 +72,16 @@ export class FakeModelAdapter extends LlmAdapter {
    * @returns resolved metadata for the fake route.
    */
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
-    return { provider, id: model, name: model, context: { contextWindow: CONTEXT_WINDOW } }
+    if (model !== FAKE_MODEL && model !== 'fake-2') throw new Error(`Unknown fake model: ${model}`)
+    return {
+      provider,
+      id: model,
+      name: model,
+      context: { contextWindow: CONTEXT_WINDOW },
+      ...(model === 'fake-2'
+        ? { reasoning: { efforts: [{ id: ReasoningEffortId('high'), name: 'High' }] } }
+        : {}),
+    }
   }
 
   /**

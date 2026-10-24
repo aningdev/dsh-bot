@@ -28,7 +28,7 @@ bun run --cwd apps/runner start --home /absolute/path/to/dsh-bot-dev
 
 profile 位于 `$DSH_HOME/profiles/runner`，组合顺序为 `dsh-base`、`@dsh-bot/harness-runtime`、`@dsh-bot/bot`。Bot 记录使用标准 `storageDomain` 的 `dsh_bot` domain；Session 日志由 JSONL 插件保存到 home 下的 `sessions`。历史读取不会为了查询而激活 Agent。
 
-Bot Remote 提供 `create`、`get`、`list`、`history` 和流式 `send`。当前骨架每个 Bot 同时接纳一个 turn，忙碌时返回 `bot/busy`；队列产品操作、配置修改和工具能力由后续票实现。`send` 的 `done` 表示执行已空闲且完成持久化屏障；模型失败会拒绝流，客户端取消观察不会取消已接纳执行。
+Bot Remote 提供 `create`、`get`、`list`、`saveConfiguration`、`history` 和流式 `send`。配置保存成功表示新配置已持久化且在同一 Session 的新 Agent 上生效；拒绝原因、版本冲突、失败回退与故障保持见 [Bot 插件](../../packages/bot/README.md)。每个 Bot 同时接纳一个 turn，忙碌时返回 `bot/busy`；队列产品操作和实际工具权限组合由后续票实现。`send` 的 `done` 表示执行已空闲且完成持久化屏障；模型失败会拒绝流，客户端取消观察不会取消已接纳执行。
 
 ## 验证
 
@@ -37,6 +37,6 @@ bun run --cwd apps/runner check
 bun run --cwd apps/runner test:unit
 ```
 
-测试构建后使用真实 Node 子进程、独立 home、标准 Connection/Gateway 和生成的 Bot Remote。覆盖逐段回复、真实 JSONL、实际进程重启后同 Session 继续对话、失败流、参数校验、未认证请求和客户端断连。测试模型只由 `tests/fixtures/model.overlay.yml` 加载，其构建产物放在 `.test-output/`，正常 build 不构建它。
+测试构建后使用真实 Node 子进程、独立 home、标准 Connection/Gateway 和生成的 Bot Remote。覆盖逐段回复、真实 JSONL、实际进程重启后同 Session 继续对话、配置应用与持久化、冷替换、失败流、参数校验、未认证请求和客户端断连。测试模型只由 `tests/fixtures/model.overlay.yml` 加载，其构建产物放在 `.test-output/`，正常 build 不构建它。
 
 架构职责见 [Harness 映射方案](../../docs/HARNESS_MAPPING_PLAN.md)，引擎资源见 [harness-runtime](../../packages/harness-runtime/README.md)。

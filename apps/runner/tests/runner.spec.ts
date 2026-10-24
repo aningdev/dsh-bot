@@ -195,6 +195,82 @@ test('Remote streams a turn, stores JSONL, and resumes the same Bot after a proc
   })
 })
 
+test('Remote configuration commits only after application and survives a process restart on the same Session', async () => {
+  const directory = await home()
+  const running = await start(directory)
+  const client = await connect(running.ready)
+  const created = await client.remote.bot.create({ name: 'configurable', cwd: directory })
+  if (!created.ok) throw created.error
+  const bot = created.value
+  for await (const _frame of client.remote.bot.send(bot.botId, 'before')) {
+    /* Finish the initial turn. */
+  }
+  const before = await client.remote.bot.history(bot.botId)
+  const request = {
+    expectedRevision: bot.revision,
+    configuration: {
+      cwd: bot.cwd,
+      provider: 'fake',
+      model: 'fake-2',
+      instructions: 'Keep {{literal}}.',
+      capabilities: [],
+      maxTokens: 17,
+      reasoningEffort: null,
+    },
+  }
+  const saved = await client.remote.bot.saveConfiguration(bot.botId, request)
+  if (!saved.ok) throw saved.error
+  expect(saved.value.revision).toBe(1)
+  expect(saved.value.sessionId).toBe(bot.sessionId)
+  expect(await client.remote.bot.history(bot.botId)).toEqual(before)
+  let inspection = ''
+  for await (const frame of client.remote.bot.send(bot.botId, 'inspect configuration'))
+    if (frame.type === 'text') inspection += frame.text
+  expect(JSON.parse(inspection)).toMatchObject({ model: 'fake-2', maxTokens: 17, tools: [] })
+  expect(inspection).toContain('{{literal}}')
+  expect(await client.remote.bot.saveConfiguration(bot.botId, request)).toMatchObject({
+    ok: false,
+    error: { code: 'bot/config-conflict', details: { actualRevision: 1 } },
+  })
+  const connection = client.get('connection') as ConnectionHandle
+  expect(
+    await connection.rpc.call('/api', 'bot/saveConfiguration', {
+      args: {
+        botId: bot.botId,
+        request: { expectedRevision: '1', configuration: request.configuration },
+      },
+    }),
+  ).toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
+  expect(
+    await client.remote.bot.saveConfiguration(bot.botId, {
+      expectedRevision: 1,
+      configuration: { ...request.configuration, maxTokens: 0 },
+    }),
+  ).toMatchObject({ ok: false, error: { code: 'bot/config-invalid' } })
+  const history = await client.remote.bot.history(bot.botId)
+  await client.fiber.dispose()
+  expect(await stop(running.child)).toEqual({ code: 0, acknowledged: true })
+  const restarted = await start(directory)
+  const reconnected = await connect(restarted.ready)
+  expect(await reconnected.remote.bot.get(bot.botId)).toEqual(saved)
+  expect(await reconnected.remote.bot.history(bot.botId)).toEqual(history)
+  const changed = await reconnected.remote.bot.saveConfiguration(bot.botId, {
+    expectedRevision: 1,
+    configuration: { ...request.configuration, model: 'fake-1', maxTokens: null, instructions: '' },
+  })
+  if (!changed.ok) throw changed.error
+  expect(changed.value.revision).toBe(2)
+  const frames: BotFrame[] = []
+  for await (const frame of reconnected.remote.bot.send(bot.botId, 'after')) frames.push(frame)
+  expect(
+    frames
+      .filter((frame) => frame.type === 'text')
+      .map((frame) => frame.text)
+      .join(''),
+  ).toBe('echo: after')
+  expect(frames.at(-1)).toEqual({ type: 'done' })
+})
+
 test('a model failure rejects the stream and leaves the Bot available for another turn', async () => {
   const directory = await home()
   const running = await start(directory)

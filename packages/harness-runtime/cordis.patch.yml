@@ -10,6 +10,8 @@
 # Bot presets own model-facing contributions; Host registries remain shared.
 - id: tool-plugin-manager
   disabled: true
+- id: tool-working-directory
+  disabled: true
 - id: tool-bash
   disabled: true
 - id: tool-pwsh
