@@ -1,5 +1,8 @@
+import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { BotFrame } from '@dsh-bot/bot/types'
@@ -8,6 +11,34 @@ import { expect, test } from 'vite-plus/test'
 import { runnerHarness } from './fixtures/runner.ts'
 
 const { home, start, stop, connect } = runnerHarness()
+
+function isClientConnection(value: unknown): value is ConnectionHandle {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'registerGenerationSource' in value &&
+    typeof value.registerGenerationSource === 'function' &&
+    'rpc' in value &&
+    typeof value.rpc === 'object' &&
+    value.rpc !== null &&
+    'call' in value.rpc &&
+    typeof value.rpc.call === 'function'
+  )
+}
+
+test('launcher reports a before-dispose failure with a nonzero exit status', async () => {
+  const directory = await home()
+  await expect(
+    promisify(execFile)(
+      process.execPath,
+      [fileURLToPath(new URL('../.test-output/shutdown-failure.js', import.meta.url)), directory],
+      { timeout: 10000, env: { ...process.env, DSH_TELEMETRY_DISABLED: '1' } },
+    ),
+  ).rejects.toMatchObject({
+    code: 1,
+    stderr: expect.stringContaining('Expected teardown failure'),
+  })
+})
 
 test('Remote streams a turn, stores JSONL, and resumes the same Bot after a process restart', async () => {
   const directory = await home()
@@ -102,7 +133,8 @@ test('Remote configuration commits only after application and survives a process
     ok: false,
     error: { code: 'bot/config-conflict', details: { actualRevision: 1 } },
   })
-  const connection = client.get('connection') as ConnectionHandle
+  const connection = client.get('connection')
+  if (!isClientConnection(connection)) throw new Error('Expected the client Connection service')
   expect(
     await connection.rpc.call('/api', 'bot/saveConfiguration', {
       args: {
@@ -168,7 +200,8 @@ test('the default profile uses the official selection and rejects malformed wire
   if (!created.ok) throw created.error
   expect(created.value.provider).toBe('deepseek-official')
   expect(created.value.model).toBe('deepseek-flash')
-  const connection = client.get('connection') as ConnectionHandle
+  const connection = client.get('connection')
+  if (!isClientConnection(connection)) throw new Error('Expected the client Connection service')
   const invalid = await connection.rpc.call('/api', 'bot/get', { args: { botId: 123 } })
   expect(invalid).toMatchObject({ ok: false, error: { code: 'gateway/input-invalid' } })
   expect(await client.remote.bot.get('../outside')).toMatchObject({

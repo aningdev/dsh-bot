@@ -24,19 +24,19 @@ Gateway 保留原有授权和参数校验顺序。通过授权后，先取得操
 
 ## 历史、上传和命令
 
-历史 page 与 projections 只读取，不为了查询激活 Agent。follow 的开场保护订阅与首个快照，首帧交出后释放窗口；已有长流不占用配置替换资格，并能在同一 Session 上继续收到新 Agent 的事件。冷 follow 的后台 promotion 独立重新取得窗口，覆盖恢复及 observation 清理。尚无日志的新 Bot 由所有者先建立空 Session，再返回快照。
+历史 page 与 projections 只读取，不为了查询激活 Agent。follow 的开场保护订阅与首个快照，首帧交出后仅释放配置窗口；guard 继续跟踪消费者，退出会主动驱动暂停在两次读取之间的流完成清理。首次读取之前调用 `return()` 也释放窗口。已有长流不占用配置替换资格，并能在同一 Session 上继续收到新 Agent 的事件。冷 follow 的后台 promotion 独立重新取得窗口，覆盖恢复及 observation 清理。尚无日志的新 Bot 由所有者先建立空 Session，再返回快照。
 
 原始上传在接收字节之前取得窗口，优先使用注册的普通 Session resolver；原有 subagent 所有权检查保留。`uploadStream` 接受原有 iterable 或接收完整取消信号的 source factory。HTTP 入口使用 source factory 和 Node `Readable.fromWeb`，让生命周期退役可以中断等待字节的 reader；租约到持久化、事件发布和回执暂存结束才释放。编码上传还受 Gateway 与暂存操作窗口保护。文件存储与回执继续使用上游实现，不额外承诺跨物理 Session 关闭保留暂存回执。
 
-标准 prompt、queue 更新、cancel 和 rename 经过相同所有者解析；cancel 保留标准输入队列语义。标准 create、fork、selectModel 在产品 profile 中返回 `bot/operation-unavailable`，避免独立创建第二个会话所有者或绕过完整配置事务。Bot 创建和模型更新仍使用 Bot Remote。传统 `bot.send` 保持单轮流式观察：有运行或待处理用户输入时返回 `bot/busy`，其观察期间不接受标准 prompt 混入另一轮；标准 prompt 自身继续使用上游队列。
+标准 prompt、queue 更新、cancel 和 rename 经过相同所有者解析；cancel 保留标准输入队列语义。标准 create、fork、selectModel 在产品 profile 中返回 `bot/operation-unavailable`，避免独立创建第二个会话所有者或绕过完整配置事务。Bot 创建和模型更新仍使用 Bot Remote。传统 `bot.send` 保持单轮流式观察：有运行或待处理用户输入时返回 `bot/busy`，其观察期间不接受标准 prompt 混入另一轮；标准 prompt 在异步准备期间也阻止 `bot.send` 抢先接纳。标准 prompt 自身继续使用上游队列。
 
 ## 退出顺序
 
-Runner 的退出前钩子先停止 Bot 接纳，再关闭三类操作 guard，取消并等待查询、lookup、上传和流的收尾。之后 Bot 等待已接纳配置与初始化任务、取消活动执行并等待其持久化、释放 Agent 和 preset，最后才调用上游插件树清理。记录域的关闭也明确等待 Bot 清理完成。
+Runner 的退出前钩子先停止 Bot 接纳，再关闭三类操作 guard，取消并等待查询、lookup、上传和流的收尾。之后 Bot 等待已接纳创建、配置与初始化任务、取消活动执行并等待其持久化、释放 Agent 和 preset，最后才调用上游插件树清理。记录域的关闭也明确等待 Bot 清理完成。
 
 这段顺序不能只靠 Cordis `inject`：整棵树销毁会并发启动兄弟清理，服务 withdrawal 的等待不保证其他资源关闭尚未开始。受控测试在消费者最后一次使用 Agent 与记录域之前暂停，再分别触发私有 IPC shutdown 和 SIGTERM；省略退出前钩子时观测到 Agent 已不活跃，恢复钩子后两种退出路径都等待清理完成并保留依赖可用。
 
-guard 退役后新的访问明确失败，不能落回官方自动恢复。取消或清理失败不会伪装成成功；已有配置事务失败、回退及故障保持继续使用 Bot 的既有错误与持久 intent。退出前钩子不改变进程强制终止的恢复保证。
+guard 退役后新的访问明确失败，不能落回官方自动恢复。取消或清理失败不会伪装成成功：流收尾失败进入 guard 排空结果，Launcher 记录清理错误或超时并返回非零退出码；已有配置事务失败、回退及故障保持继续使用 Bot 的既有错误与持久 intent。退出前钩子不改变进程强制终止的恢复保证。
 
 ## 自动化证据
 

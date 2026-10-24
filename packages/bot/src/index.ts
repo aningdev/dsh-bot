@@ -162,6 +162,7 @@ export class BotController extends TypertRemoteService {
   private readonly handles = new Map<string, AgentHandle>()
   private readonly presets = new Map<string, () => Promise<void>>()
   private readonly busy = new Set<string>()
+  private readonly prompts = new Map<string, number>()
   private readonly applying = new Map<string, BotRecord>()
   private readonly faults = new Set<string>()
   private readonly operations = new Set<Promise<BotRecord>>()
@@ -247,7 +248,22 @@ export class BotController extends TypertRemoteService {
    * @returns The committed Bot record.
    */
   @Remote('create')
-  async createBot(input: CreateBotRequest, signal: AbortSignal): Promise<BotRecord> {
+  createBot(input: CreateBotRequest, signal: AbortSignal): Promise<BotRecord> {
+    const operation = this.persistNewBot(input, signal)
+    this.operations.add(operation)
+    const release = (): void => {
+      this.operations.delete(operation)
+    }
+    void operation.then(release, release)
+    return operation
+  }
+
+  private async persistNewBot(input: CreateBotRequest, signal: AbortSignal): Promise<BotRecord> {
+    signal.throwIfAborted()
+    if (this.stopping)
+      throw new RemoteError('bot/operation-unavailable', 'Runner is stopping', {
+        operation: 'create',
+      })
     const parsed = createBotInput.safeParse(input)
     if (!parsed.success)
       throw new RemoteError('bot/invalid-input', 'Provide a name and absolute working directory', {
@@ -583,7 +599,12 @@ export class BotController extends TypertRemoteService {
     signal.throwIfAborted()
     if (this.faults.has(botId))
       throw new RemoteError('bot/faulted', 'Bot configuration recovery is required', { botId })
-    if (this.stopping || this.busy.has(botId) || this.applying.has(botId))
+    if (
+      this.stopping ||
+      this.busy.has(botId) ||
+      this.prompts.has(botId) ||
+      this.applying.has(botId)
+    )
       throw new RemoteError('bot/busy', 'Bot is busy or stopping', { botId })
     this.busy.add(botId)
     let accepted = false
@@ -748,11 +769,17 @@ export class BotController extends TypertRemoteService {
         botId: sessionId,
       })
     this.access.set(sessionId, (this.access.get(sessionId) ?? 0) + 1)
+    if (mode === 'prompt') this.prompts.set(sessionId, (this.prompts.get(sessionId) ?? 0) + 1)
     let released = false
     return {
       release: () => {
         if (released) return
         released = true
+        if (mode === 'prompt') {
+          const prompts = this.prompts.get(sessionId)! - 1
+          if (prompts === 0) this.prompts.delete(sessionId)
+          else this.prompts.set(sessionId, prompts)
+        }
         const remaining = this.access.get(sessionId)! - 1
         if (remaining === 0) this.access.delete(sessionId)
         else this.access.set(sessionId, remaining)

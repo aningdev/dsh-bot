@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index f0e7770f3b4e6515938e13e78bb38a153b890033..c65f24b1cc84eafe09a807bae6b72179b81c4a63 100644
+index f0e7770f3b4e6515938e13e78bb38a153b890033..f76d64f39b5a6231a71783a20d9bd844961d0fd4 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -3,7 +3,7 @@ import { Service, symbols } from "@deepseek-ai/cordis";
@@ -135,54 +135,107 @@ index f0e7770f3b4e6515938e13e78bb38a153b890033..c65f24b1cc84eafe09a807bae6b72179
  	}
  	resolveDescriptor(namespace, method, endpoint) {
  		const strict = this.ctx.typert.local.get(endpoint);
-@@ -1497,31 +1519,35 @@ function isIterable(value) {
+@@ -1495,34 +1517,72 @@ function assertPeerLive(peer, endpoint) {
+ function isIterable(value) {
+ 	return isObject(value) && (typeof Reflect.get(value, Symbol.iterator) === "function" || typeof Reflect.get(value, Symbol.asyncIterator) === "function");
  }
- async function* cancellableStream(source, endpoint, invocation) {
+-async function* cancellableStream(source, endpoint, invocation) {
++function cancellableStream(source, endpoint, invocation) {
  	const { signal } = invocation;
 -	const asyncFactory = Reflect.get(source, Symbol.asyncIterator);
 -	const syncFactory = Reflect.get(source, Symbol.iterator);
 -	const iterator = typeof asyncFactory === "function" ? Reflect.apply(asyncFactory, source, []) : Reflect.apply(syncFactory, source, []);
 +	let iterator;
  	let rejectAbort;
++	let started = false;
++	let ended = false;
++	let closing;
++	const close = () => closing ??= (async () => {
++		rejectAbort = void 0;
++		signal.removeEventListener("abort", onAbort);
++		const failures = [];
++		try { await invocation.close(); } catch (error) { failures.push(error); }
++		try { await iterator?.return?.(); } catch (error) { failures.push(error); }
++		const failure = failures.length > 0 ? new AggregateError(failures, "Stream cleanup failed") : undefined;
++		try { await invocation.releaseOperation(failure); } catch (error) { failures.push(error); }
++		if (failures.length > 0) throw new AggregateError(failures, "Stream cleanup failed");
++	})();
++	const generator = (async function* () {
++		try {
++			const asyncFactory = Reflect.get(source, Symbol.asyncIterator);
++			const syncFactory = Reflect.get(source, Symbol.iterator);
++			iterator = typeof asyncFactory === "function" ? Reflect.apply(asyncFactory, source, []) : Reflect.apply(syncFactory, source, []);
++			while (true) {
++				if (signal.aborted) throw streamAbortFailure(endpoint, signal.reason);
++				const aborted = new Promise((_resolve, reject) => { rejectAbort = reject; });
++				aborted.catch(() => void 0);
++				const pending = Promise.resolve().then(() => iterator.next());
++				const next = await Promise.race([pending, aborted]);
++				rejectAbort = void 0;
++				if (invocation.operation?.lifetime === "opening") await invocation.operation.releaseOpening?.();
++				if (next.done === true) return;
++				yield next.value;
++			}
++		} finally { await close(); }
++	})();
++	const stream = {
++		[Symbol.asyncIterator]() { return this; },
++		next(value) {
++			if (ended) return Promise.resolve({ done: true, value: undefined });
++			started = true;
++			return generator.next(value);
++		},
++		async return(value) {
++			ended = true;
++			if (!started) {
++				try { return await generator.return(value); } finally { await close(); }
++			}
++			return generator.return(value);
++		},
++		async throw(error) {
++			ended = true;
++			if (!started) {
++				try { return await generator.throw(error); } finally { await close(); }
++			}
++			return generator.throw(error);
++		}
++	};
  	const onAbort = () => {
  		rejectAbort?.(streamAbortFailure(endpoint, signal.reason));
++		// Drive cleanup even when a carrier is paused between reads. The registry
++		// retains the consumer until close completes and records release failures.
++		void stream.return().catch(() => void 0);
  	};
  	signal.addEventListener("abort", onAbort, { once: true });
- 	try {
-+		const asyncFactory = Reflect.get(source, Symbol.asyncIterator);
-+		const syncFactory = Reflect.get(source, Symbol.iterator);
-+		iterator = typeof asyncFactory === "function" ? Reflect.apply(asyncFactory, source, []) : Reflect.apply(syncFactory, source, []);
- 		while (true) {
- 			if (signal.aborted) throw streamAbortFailure(endpoint, signal.reason);
- 			const aborted = new Promise((_resolve, reject) => {
- 				rejectAbort = reject;
- 			});
- 			aborted.catch(() => void 0);
+-	try {
+-		while (true) {
+-			if (signal.aborted) throw streamAbortFailure(endpoint, signal.reason);
+-			const aborted = new Promise((_resolve, reject) => {
+-				rejectAbort = reject;
+-			});
+-			aborted.catch(() => void 0);
 -			const next = await Promise.race([Promise.resolve(iterator.next()), aborted]);
-+			const pending = Promise.resolve().then(() => iterator.next());
-+			const next = await Promise.race([pending, aborted]);
- 			rejectAbort = void 0;
-+			if (invocation.operation?.lifetime === "opening") await invocation.releaseOperation();
- 			if (next.done === true) return;
- 			yield next.value;
- 		}
- 	} finally {
- 		rejectAbort = void 0;
- 		signal.removeEventListener("abort", onAbort);
+-			rejectAbort = void 0;
+-			if (next.done === true) return;
+-			yield next.value;
+-		}
+-	} finally {
+-		rejectAbort = void 0;
+-		signal.removeEventListener("abort", onAbort);
 -		await invocation.close();
 -		await iterator.return?.();
-+		try { await invocation.close(); } finally {
-+			try { await iterator?.return?.(); } finally { await invocation.releaseOperation(); }
-+		}
- 	}
+-	}
++	if (signal.aborted) onAbort();
++	return stream;
  }
  /**
-@@ -1615,6 +1641,8 @@ var UplinkDecoder = class {
+ * The failure a stream surfaces for its abort: a Remote failure used as the
+@@ -1615,6 +1675,8 @@ var UplinkDecoder = class {
  * the call's downlink finishes.
  */
  var GatewayInvocation = class {
 +	operation;
-+	releaseOperation() { return this.operation?.release(); }
++	releaseOperation(failure) { return this.operation?.release(failure); }
  	request;
  	service;
  	peer;

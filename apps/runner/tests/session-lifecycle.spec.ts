@@ -110,6 +110,25 @@ async function rawUpload(
   return response.json()
 }
 
+test('returning a Gateway stream before its first read releases replacement admission', async () => {
+  const directory = await home()
+  const bot = await storedBot(directory)
+  const running = await start(directory, true, [await integrationPatch(directory)])
+  const client = await connect(running.ready)
+  await control(running.child, 'compatibility:close-unstarted-stream', { sessionId: bot.sessionId })
+  await expect
+    .poll(() => running.probes)
+    .toContainEqual(expect.objectContaining({ event: 'unstarted-stream-closed' }))
+  expect(
+    (
+      await client.remote.bot.saveConfiguration(bot.botId, {
+        expectedRevision: bot.revision,
+        configuration: configuration(bot, 'fake-1'),
+      })
+    ).ok,
+  ).toBe(true)
+})
+
 test('cold Controller activation belongs to Bot and uses the latest configuration before another turn', async () => {
   const directory = await home()
   const bot = await storedBot(directory)

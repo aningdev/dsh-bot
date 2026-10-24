@@ -1,8 +1,27 @@
 diff --git a/lib/profile-boot-C14i-8IN.js b/lib/profile-boot-C14i-8IN.js
-index a21f351c7a152344fd8c90a70af0a76972d5998e..058469ab9e0157e5c0c45e828d85b931bba546fa 100644
+index a21f351c7a152344fd8c90a70af0a76972d5998e..de7861a8b0f2f8457b55b8808d92336a770cca12 100644
 --- a/lib/profile-boot-C14i-8IN.js
 +++ b/lib/profile-boot-C14i-8IN.js
-@@ -260,7 +260,7 @@ async function runProfile(options) {
+@@ -46,13 +46,15 @@ function createProcessShutdown(dispose, forceExit = (code) => {
+ 	const start = (code, forceAfterDispose) => {
+ 		if (pending !== void 0) return pending;
+ 		timeout = setTimeout(() => {
+-			forceExitOnce(code);
++			console.error("Application shutdown timed out");
++			forceExitOnce(code === 0 ? 1 : code);
+ 		}, timeoutMs);
+ 		pending = Promise.resolve().then(dispose).then(() => {
+ 			if (forceAfterDispose) forceExitOnce(code);
+ 			else completeOnce(code);
+-		}, () => {
+-			forceExitOnce(code);
++		}, (error) => {
++			console.error("Application shutdown failed:", error);
++			forceExitOnce(code === 0 ? 1 : code);
+ 		});
+ 		return pending;
+ 	};
+@@ -260,7 +262,7 @@ async function runProfile(options) {
  	let disposal;
  	const dispose = () => disposal ??= (async () => {
  		const failures = [];
@@ -11,7 +30,7 @@ index a21f351c7a152344fd8c90a70af0a76972d5998e..058469ab9e0157e5c0c45e828d85b931
  			await release();
  		} catch (error) {
  			failures.push(error);
-@@ -283,9 +283,7 @@ async function runProfile(options) {
+@@ -283,9 +285,7 @@ async function runProfile(options) {
  		process.on("SIGINT", () => {
  			interrupt(130);
  		});

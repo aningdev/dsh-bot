@@ -9,10 +9,10 @@ index 9edc8744d2819d69ffbce79c6fdd5e475cbc4169..8385794bec72917cec8f24838fb82fd3
  /** The one Remote failure class shared by owners, the Gateway, and consumers. */
 diff --git a/lib/operation-guard.js b/lib/operation-guard.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..b5688a363dd5447d256dc8cd6338d1d9dba643ec
+index 0000000000000000000000000000000000000000..d47b45a660371758616f20f531392f15e2a9ca9b
 --- /dev/null
 +++ b/lib/operation-guard.js
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,57 @@
 +/** Single-owner operation guards with retirement and invocation-owned release. */
 +export class OperationGuardRegistry {
 +  neverAborted = new AbortController().signal;
@@ -22,7 +22,7 @@ index 0000000000000000000000000000000000000000..b5688a363dd5447d256dc8cd6338d1d9
 +  constructor(unavailable) { this.unavailable = unavailable; }
 +  register(guard) {
 +    if (this.registration !== undefined) throw new Error('An operation guard is already registered');
-+    const registration = { guard, lifetime: new AbortController(), active: 0, drained: undefined };
++    const registration = { guard, lifetime: new AbortController(), active: 0, drained: undefined, failures: [] };
 +    this.registration = registration;
 +    this.retired = false;
 +    let closing;
@@ -31,6 +31,7 @@ index 0000000000000000000000000000000000000000..b5688a363dd5447d256dc8cd6338d1d9
 +      this.retired = true;
 +      if (registration.active > 0) await new Promise(resolve => { registration.drained = resolve; });
 +      if (this.registration === registration) this.registration = undefined;
++      if (registration.failures.length > 0) throw new AggregateError(registration.failures, 'Operation cleanup failed');
 +    })();
 +  }
 +  async acquire(request) {
@@ -54,10 +55,13 @@ index 0000000000000000000000000000000000000000..b5688a363dd5447d256dc8cd6338d1d9
 +    }
 +    if (lease === undefined) { finish(); return undefined; }
 +    let closing;
++    let released;
++    const releaseOwned = () => released ??= Promise.resolve().then(() => lease.release()).catch(error => { registration.failures.push(error); throw error; });
 +    return {
 +      signal,
 +      lifetime: lease.lifetime,
-+      release: () => closing ??= (async () => { try { await lease.release(); } finally { finish(); } })(),
++      releaseOpening: lease.lifetime === 'opening' ? releaseOwned : undefined,
++      release: failure => closing ??= (async () => { if (failure !== undefined) registration.failures.push(failure); try { await releaseOwned(); } finally { finish(); } })(),
 +    };
 +  }
 +  async run(request, operation) {
@@ -80,18 +84,20 @@ index 6e8c39db44e6baa771ae811849bbf83ef56465bc..3facc080c39194e69969c12bb2122aa2
  export { RemoteError, remoteErrorOf } from './remote-error.ts';
 diff --git a/lib/types/operation-guard.d.ts b/lib/types/operation-guard.d.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..bbc40f985125f8e5cffde614aae1c3f6eaefa1fe
+index 0000000000000000000000000000000000000000..f49dc07ed7063bf41dac058a338f185aac3f64d9
 --- /dev/null
 +++ b/lib/types/operation-guard.d.ts
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,24 @@
 +/** A bounded Host operation; release is idempotent and awaited by its caller. */
 +export interface OperationLease {
 +  /** Invocation cancellation, including withdrawal of its owner. */
 +  readonly signal?: AbortSignal;
-+  /** Streams may release after their first completed next() instead of their lifetime. */
++  /** Opening streams release replacement access early, while consumer cleanup remains tracked. */
 +  readonly lifetime?: 'call' | 'opening';
-+  /** Release owned resources after the operation and its cleanup settle. */
-+  release(): void | Promise<void>;
++  /** Release opening access without ending cancellation and consumer tracking. */
++  releaseOpening?(): void | Promise<void>;
++  /** Release after cleanup; an optional cleanup failure is also reported by retirement. */
++  release(failure?: unknown): void | Promise<void>;
 +}
 +/** Acquire before using Host objects; undefined delegates an unmanaged operation. */
 +export type OperationGuard<Request> = (request: Request & { readonly signal: AbortSignal }) => OperationLease | undefined | Promise<OperationLease | undefined>;

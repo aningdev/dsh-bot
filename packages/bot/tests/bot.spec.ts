@@ -72,6 +72,53 @@ afterEach(async () => {
 })
 
 describe('Bot Controller public contract', () => {
+  test('a standard prompt admission prevents streamed send from overtaking asynchronous preparation', async () => {
+    const directory = await home()
+    const ctx = await host(directory)
+    const bot = await ctx.botController.createBot({ name: 'admission', cwd: directory }, signal)
+    const first = ctx.botController.acquireSessionAccess(SessionId(bot.sessionId), 'prompt', signal)
+    const second = ctx.botController.acquireSessionAccess(
+      SessionId(bot.sessionId),
+      'prompt',
+      signal,
+    )
+    try {
+      await expect(answer(ctx, bot.botId, 'must not overtake')).rejects.toMatchObject({
+        code: 'bot/busy',
+      })
+      await first.release()
+      await expect(answer(ctx, bot.botId, 'still must wait')).rejects.toMatchObject({
+        code: 'bot/busy',
+      })
+      expect(await ctx.botController.history(bot.botId, signal)).toEqual([])
+    } finally {
+      await first.release()
+      await second.release()
+    }
+    expect(await answer(ctx, bot.botId, 'accepted after release')).toBe(
+      'echo: accepted after release',
+    )
+  })
+
+  test('shutdown settles accepted creation and rejects later creation', async () => {
+    const directory = await home()
+    const ctx = await host(directory)
+    let created: BotRecord | undefined
+    const pending = ctx.botController
+      .createBot({ name: 'accepted before shutdown', cwd: directory }, signal)
+      .then((record) => {
+        created = record
+        return record
+      })
+    await ctx.botController.quiesce()
+    const settledAtShutdown = created
+    await pending
+    expect(settledAtShutdown).toBeDefined()
+    await expect(
+      ctx.botController.createBot({ name: 'after shutdown', cwd: directory }, signal),
+    ).rejects.toMatchObject({ code: 'bot/operation-unavailable', details: { operation: 'create' } })
+  })
+
   test('original version-1 records acquire empty configuration defaults without changing Bot or Session identity', async () => {
     const directory = await home()
     const botId = randomUUID()

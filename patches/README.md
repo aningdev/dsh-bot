@@ -14,7 +14,7 @@
 | dsh-client-file-upload     | 上传操作 guard、外部普通 Session resolver 优先、带取消信号的原始 source factory 与 HTTP reader 取消 |
 | dsh                        | `runProfile.beforeDispose` 在 Launcher 销毁插件树之前执行；退出与 fail-loud 共用同一个清理任务      |
 
-`apps/runner` 在退出钩子中先停止接纳，排空间接调用与上传，再清理 Bot 资源。仅增加 `inject` 不能保护整棵树并发销毁中的消费者。真实 Node/profile 正向测试、故障基线和范围见 [共存验证](../docs/SESSION_CONTROLLER_COMPATIBILITY.md)。
+`apps/runner` 在退出钩子中先停止接纳，排空间接调用与上传，再清理 Bot 资源。历史流首帧只释放配置占用，消费者仍受取消与排空管理；未开始读取的流也有关闭路径。流清理错误汇入退出结果，Launcher 清理失败或超时记录原因并以非零状态退出。仅增加 `inject` 不能保护整棵树并发销毁中的消费者。真实 Node/profile 正向测试、故障基线和范围见 [共存验证](../docs/SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 上游提供等价可消费接口后，统一升级同版 DSH 包、移除这五个补丁，并重新通过冷恢复、最新模型、长流跨替换、lookup 后使用、上传取消及 IPC/SIGTERM 退出测试。无提供者时 guard 保持原路径；当前产品不以缺失提供者的 profile 报告就绪。补丁只针对根锁文件中的发行版，不能将未经兼容验证的新依赖与它们混用。
 

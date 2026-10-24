@@ -2,6 +2,59 @@
 import { OperationGuardRegistry } from '@deepseek-ai/dsh-typert-protocol'
 import { expect, test } from 'vite-plus/test'
 
+test('opening releases replacement access while retirement still drains the consumer', async () => {
+  const registry = new OperationGuardRegistry<{ signal?: AbortSignal }>(
+    () => new Error('withdrawn'),
+  )
+  let released = false
+  const withdraw = registry.register(() => ({
+    lifetime: 'opening',
+    release() {
+      released = true
+    },
+  }))
+  const lease = await registry.acquire({})
+  await lease?.releaseOpening?.()
+  expect(released).toBe(true)
+  let retired = false
+  const retiring = withdraw().then(() => {
+    retired = true
+  })
+  await Promise.resolve()
+  expect(lease?.signal?.aborted).toBe(true)
+  expect(retired).toBe(false)
+  await lease?.release()
+  await retiring
+})
+
+test('retirement reports an accepted consumer cleanup failure', async () => {
+  const registry = new OperationGuardRegistry<{ signal?: AbortSignal }>(
+    () => new Error('withdrawn'),
+  )
+  const failure = new Error('consumer cleanup failed')
+  const withdraw = registry.register(() => ({
+    release() {
+      throw failure
+    },
+  }))
+  const lease = await registry.acquire({})
+  const retiring = withdraw()
+  await expect(lease?.release()).rejects.toBe(failure)
+  await expect(retiring).rejects.toThrow('Operation cleanup failed')
+})
+
+test('retirement includes stream cleanup failures after opening access was released', async () => {
+  const registry = new OperationGuardRegistry<{ signal?: AbortSignal }>(
+    () => new Error('withdrawn'),
+  )
+  const withdraw = registry.register(() => ({ lifetime: 'opening', release() {} }))
+  const lease = await registry.acquire({})
+  await lease?.releaseOpening?.()
+  const retiring = withdraw()
+  await lease?.release(new Error('stream cleanup failed'))
+  await expect(retiring).rejects.toThrow('Operation cleanup failed')
+})
+
 test('unmanaged operations preserve the caller signal and result', async () => {
   const registry = new OperationGuardRegistry<{ signal?: AbortSignal }>(
     () => new Error('withdrawn'),

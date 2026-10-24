@@ -1,7 +1,9 @@
 /** Test-only lifecycle observations and deterministic operation barriers. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-api-gateway'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-client-file-upload'
 import { FileReferenceService } from '@deepseek-ai/dsh-file-reference'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -10,7 +12,7 @@ import schema from '@deepseek-ai/schemastery'
 import type {} from '@dsh-bot/bot'
 
 export const name = 'session-controller-compatibility-probe'
-export const inject = ['botController', 'sessionController', 'fileUploads']
+export const inject = ['botController', 'sessionController', 'fileUploads', 'typertGateway']
 
 /** Experimental setup; production never loads this plugin. */
 export interface Config {
@@ -144,6 +146,34 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         () => report('bridge-withdrawn', ''),
         (error) => report('probe-error', '', String(error)),
       )
+    }
+    if (
+      message.type === 'compatibility:close-unstarted-stream' &&
+      'sessionId' in message &&
+      typeof message.sessionId === 'string'
+    ) {
+      const sessionId = SessionId(message.sessionId)
+      void track(
+        (async () => {
+          const peer = new Peer(ctx, { principal: { kind: 'owner' } })
+          try {
+            const stream = await ctx.typertGateway.stream({
+              namespace: 'session',
+              method: 'follow',
+              args: { request: { address: { kind: 'session', sessionId } } },
+              peer,
+            })
+            const iterator = stream[Symbol.asyncIterator]()
+            const closing = iterator.return?.()
+            const next = iterator.next()
+            await closing
+            if (!(await next).done) throw new Error('Closed stream executed a later read')
+            report('unstarted-stream-closed', sessionId)
+          } finally {
+            await peer.dispose()
+          }
+        })(),
+      ).catch((error: unknown) => report('probe-error', sessionId, String(error)))
     }
     if (
       message.type === 'compatibility:upload' &&
