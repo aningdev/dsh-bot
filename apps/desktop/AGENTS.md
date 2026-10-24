@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件只记录代码看不出来的工程约束。使用与发布见 [`README.md`](./README.md)，领域术语见 [`GLOSSARY.md`](../../GLOSSARY.md)；脚本与检查规则以 [`package.json`](./package.json) 和 [`vite.config.ts`](./vite.config.ts) 为准。
+本文件只记录代码看不出来的工程约束。使用与发布见 [`README.md`](./README.md)，领域术语见 [`GLOSSARY.md`](../../GLOSSARY.md)；脚本以 [`package.json`](./package.json) 为准；lint、格式化和进程边界见根 [`vite.config.ts`](../../vite.config.ts)，应用测试配置见 [`vite.config.ts`](./vite.config.ts)。
 
 ## 架构基线
 

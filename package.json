@@ -16,13 +16,23 @@
     "package": "bun run --filter dsh-bot package",
     "make": "bun run --filter dsh-bot make",
     "release": "bun run --filter dsh-bot release",
-    "check": "bun run --workspaces --if-present check",
+    "check": "vp check && bun run --filter @dsh-bot/harness-runtime check",
     "test": "bun run test:unit",
     "test:unit": "bun run --workspaces --if-present test:unit",
     "test:e2e": "bun run --filter dsh-bot test:e2e",
     "test:smoke": "bun run --filter dsh-bot test:smoke",
     "test:all": "bun run check && bun run test:unit && bun run test:e2e && bun run test:smoke",
-    "harness": "bun run --cwd packages/harness-runtime dsh"
+    "harness": "bun run --cwd packages/harness-runtime dsh",
+    "fix": "vp check --fix",
+    "prepare": "vp config --no-agent",
+    "hooks:enable": "vp hooks enable",
+    "hooks:status": "vp hooks status"
+  },
+  "devDependencies": {
+    "@shadcn/lint": "^0.2.3",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vite-plus": "1.3.0"
   },
   "overrides": {
     "vitest": "5.0.5"
@@ -31,11 +41,11 @@
     "bun": ">=1.3.0",
     "node": "^24.15.0 || >=26.0.0"
   },
+  "patchedDependencies": {
+    "@electron-forge/core-utils@8.0.1": "patches/@electron-forge%2Fcore-utils@8.0.1.patch"
+  },
   "trustedDependencies": [
     "electron",
     "esbuild"
-  ],
-  "patchedDependencies": {
-    "@electron-forge/core-utils@8.0.1": "patches/@electron-forge%2Fcore-utils@8.0.1.patch"
-  }
+  ]
 }

@@ -31,6 +31,12 @@ bun run test:e2e
 bun run test:smoke
 ```
 
+通用 lint、格式化和工作区边界规则统一维护在根 [`vite.config.ts`](vite.config.ts)，排除 `references/` 与构建产物；子包配置只保留运行和测试设置。`bun run check` 检查整个产品工作区，`bun run fix` 写回修复。
+
+安装依赖时，`prepare` 通过 Vite Plus 配置 Git hooks；提交前运行 `vp staged`，对暂存文件执行 `vp check --fix` 并检查空白错误。修复会自动更新暂存内容，部分暂存文件的其他改动由 staged 工具暂存并恢复。使用 `bun run hooks:status` 查看状态、`bun run hooks:enable` 启用；生成的 `.vite-hooks/_/` 不纳入版本控制。若已有其他 `core.hooksPath`，安装会保留它，需要先整合旧 hooks 再启用。
+
+上游使用 Lefthook 管理其检查脚本，本项目采用已有 Vite Plus 的 hooks 与 staged 能力。
+
 `test:e2e` 会先构建桌面产物，`test:smoke` 检查当前产物；完整验证用 `bun run test:all`。桌面详情、签名与发布说明见 [应用 README](apps/desktop/README.md)。
 
 使用 VS Code 时以仓库根目录打开项目。[工作区设置](.vscode/settings.json) 将 Vitest 扩展指向桌面应用的 `vite.config.ts`，并排除 `references/` 中的上游配置和测试脚本，避免加载未安装开发依赖的参考子模块。桌面 E2E 使用 Playwright，仍通过 `bun run test:e2e` 运行。
