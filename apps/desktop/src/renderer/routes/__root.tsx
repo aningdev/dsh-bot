@@ -9,21 +9,13 @@ import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { Activity } from 'react'
 const inDevelopment = import.meta.env.DEV
+import BotList from '@/renderer/components/bot-list'
 import BaseLayout from '@/renderer/layouts/base-layout'
 
 function Root() {
   return (
     <BaseLayout
-      leftPanel={
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-            <SidebarGroupContent className="text-muted-foreground px-2 text-xs">
-              Add navigation or a file tree here.
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      }
+      leftPanel={<BotList />}
       rightPanel={
         <SidebarContent>
           <SidebarGroup>

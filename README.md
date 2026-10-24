@@ -1,6 +1,6 @@
 # dsh-bot
 
-由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含 Electron 桌面应用、固定版本的 Harness npm 运行时和可独立启动的 Runner 骨架；桌面后台接入、launchd 和移动客户端尚未实现，目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)。
+由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含可连接独立 Runner 的 Electron 桌面应用、固定版本的 Harness npm 运行时，以及 Bot 列表、流式对话与历史恢复；Bot 创建和配置界面、launchd 与安装运行时仍在后续任务中，目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)。
 
 ## 工作区
 

@@ -17,6 +17,8 @@ import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@dsh-bot/bot'
 import type {} from '@dsh-bot/bot/session-controller'
 
+import { publishConnection } from './connection-file.ts'
+
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: { home: { type: 'string' }, patch: { type: 'string', multiple: true, default: [] } },
@@ -32,6 +34,8 @@ async function main(): Promise<void> {
   reportSkippedBundles('dsh', profile)
   if (profile.skippedBundles.length > 0)
     throw new Error('Runner profile contains unavailable bundles')
+  let connectionPublication: Promise<() => Promise<void>> | undefined
+  let shuttingDown = false
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
     profile: 'runner',
@@ -39,10 +43,18 @@ async function main(): Promise<void> {
     patchFiles: values.patch,
     args: [],
     beforeDispose: async (ctx) => {
+      shuttingDown = true
       const bot = ctx.get('botController')
       bot?.stopAdmission()
       const failures: unknown[] = []
-      for (const close of [() => ctx.get('botSessionController')?.close(), () => bot?.quiesce()]) {
+      for (const close of [
+        async () => {
+          const withdraw = await connectionPublication
+          await withdraw?.()
+        },
+        () => ctx.get('botSessionController')?.close(),
+        () => bot?.quiesce(),
+      ]) {
         try {
           await close()
         } catch (error) {
@@ -94,8 +106,15 @@ async function main(): Promise<void> {
         throw new Error(`Runner required service is unavailable: ${service}`)
     }
     await ctx.agentPresets.resolve()
+    if (stopping || shuttingDown) return
     const origin = ctx.webServer.getOrigin()
     const connectUrl = ctx.connection.authenticatedUrl(origin + '/connect')
+    connectionPublication = publishConnection(values.home, { origin, connectUrl })
+    const withdraw = await connectionPublication
+    if (stopping || shuttingDown) {
+      await withdraw()
+      return
+    }
     if (process.connected) process.send?.({ type: 'ready', origin, connectUrl })
     else console.log(JSON.stringify({ type: 'ready', origin }))
   } catch (error) {

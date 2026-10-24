@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "build": "bun run --cwd ../../packages/bot build && node scripts/build.mjs",
+    "build:test": "bun run build && node scripts/build.mjs --test-fixtures",
     "start": "node --expose-internals lib/index.js",
     "check": "bun run --cwd ../../packages/bot build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
-    "test:unit": "bun run build && node scripts/build.mjs --test-fixtures && vp test run"
+    "test:unit": "bun run build:test && vp test run"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.1-rc.2",

@@ -7,6 +7,7 @@ import { APP_CONFIG, updateRepository } from '@/shared/app-config'
 import { IPC_CHANNELS } from '@/shared/constants'
 
 import { rpcHandler } from './ipc/handler'
+import { runnerClient } from './runner'
 import { isTrustedIpcSender } from './security'
 import { createAppWindow } from './window'
 
@@ -78,6 +79,23 @@ async function initializeApp() {
 if (squirrelStartup) {
   app.quit()
 } else {
+  let quitRequested = false
+  let cleanupComplete = false
+  app.on('before-quit', (event) => {
+    if (cleanupComplete) return
+    event.preventDefault()
+    if (quitRequested) return
+    quitRequested = true
+    void runnerClient
+      .close()
+      .catch(() => {
+        console.error('后台连接清理失败，应用将退出。')
+      })
+      .finally(() => {
+        cleanupComplete = true
+        app.quit()
+      })
+  })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })

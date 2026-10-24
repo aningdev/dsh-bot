@@ -19,7 +19,7 @@
     "check": "bun run --filter @dsh-bot/bot build && vp check && bun run --filter @dsh-bot/harness-runtime check",
     "test": "bun run test:unit",
     "test:unit": "bun run --workspaces --if-present test:unit",
-    "test:e2e": "bun run --filter dsh-bot test:e2e",
+    "test:e2e": "bun run --cwd apps/runner build:test && bun run --filter dsh-bot test:e2e",
     "test:smoke": "bun run --filter dsh-bot test:smoke",
     "test:all": "bun run check && bun run test:unit && bun run test:e2e && bun run test:smoke",
     "harness": "bun run --cwd packages/harness-runtime dsh",

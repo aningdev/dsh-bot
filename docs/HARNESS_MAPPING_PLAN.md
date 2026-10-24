@@ -1,6 +1,6 @@
 # Harness 到 dsh-bot 的映射方案
 
-本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调；桌面接入、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
+本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调。桌面 Main 已消费认证 Remote，提供 Bot 列表与流式对话；创建和配置界面、工具与审批交互、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
 
 ## 推荐选择
 
@@ -79,6 +79,14 @@ profile 的 bundle 顺序建议如下；这是部署 profile 清单的一部分�
 此处“不使用官方 Web”表示不加载其应用 bundle 或交付其页面。已核对当前安装的 `@deepseek-ai/dsh@0.2.1-rc.2` 清单，它直接依赖 `@deepseek-ai/dsh-web-app@0.2.1-rc.2`；因此依赖树仍包含官方 Web 包。继续消费公开 DSH launcher，同时将本项目的 profile 装配与页面交付独立管理，不为删除这项传递依赖而维护 launcher 分支。
 
 配置 HMR 不能绕过 Bot 严格保存语义；可能自行创建或冷恢复 Agent 的官方接口，在完成统一生命周期协调前不开放给产品调用。只装配需要的 Controller 与标准服务，不引入官方 Desktop 产品遥测和页面能力。
+
+## 桌面 Main 的当前接入
+
+Runner 完成就绪检查后，在独立 home 的 `run/connection.json` 发布私有实例连接资料。Main 校验私有目录、相对发现链接与实例文件、loopback URL 后，通过上游 `/connect` 握手取得 Cookie；HTTP 与 WebSocket 使用同一认证上下文。socket 失效或 Runner 实例变化后，需要重新认证，不重放已提交输入。
+
+Main 通过公开 `installConnection`、Gateway client、Typert Registry 与生成的 Bot Remote 组合客户端；普通 renderer 仍沿用已有 actions → oRPC → Main 边界，仅取得 Bot 摘要、消息与回复片段。没有加载官方前端或将 Harness 的连接资料注入页面，也没有引入第二套执行协议。默认 home 位于桌面 userData 内，开发和测试可显式指定绝对 home；launchd 管理和自带运行时仍待后续任务。
+
+上游 UI Conversation 已有完整 Session 跟随和插件呈现，依赖其界面服务与事件协议。本阶段自有桌面消费简化 Bot DTO，以 Query 管理权威历史和组件局部状态显示流片段；后续工具、审批与输入控制继续接入已有 Session 服务，不复制执行状态。
 
 ## Bot 插件负责的最小产品差异
 

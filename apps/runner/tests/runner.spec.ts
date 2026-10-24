@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -25,6 +25,22 @@ function isClientConnection(value: unknown): value is ConnectionHandle {
     typeof value.rpc.call === 'function'
   )
 }
+
+test('Runner publishes private connection readiness and withdraws it on shutdown', async () => {
+  const directory = await home()
+  const running = await start(directory)
+  const filename = join(directory, 'run', 'connection.json')
+  const published: unknown = JSON.parse(await readFile(filename, 'utf8'))
+  expect(published).toMatchObject({
+    version: 1,
+    origin: running.ready.origin,
+    connectUrl: running.ready.connectUrl,
+  })
+  expect((await stat(filename)).mode & 0o777).toBe(0o600)
+  expect((await stat(join(directory, 'run'))).mode & 0o777).toBe(0o700)
+  expect(await stop(running.child)).toEqual({ code: 0, acknowledged: true })
+  await expect(readFile(filename)).rejects.toMatchObject({ code: 'ENOENT' })
+})
 
 test('launcher reports a before-dispose failure with a nonzero exit status', async () => {
   const directory = await home()

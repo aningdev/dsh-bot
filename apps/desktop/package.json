@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/zhuxining/dsh-bot.git"
   },
-  "main": ".vite/build/main.cjs",
+  "main": ".vite/build/main.mjs",
   "scripts": {
     "check": "vp check",
     "fix": "vp check --fix",
@@ -26,6 +26,11 @@
     "test:smoke": "tsx scripts/smoke-package.ts"
   },
   "dependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.2",
+    "@dsh-bot/bot": "workspace:*",
     "@dsh-bot/ui": "workspace:*",
     "@icons-pack/react-simple-icons": "^13.15.1",
     "@orpc/client": "^2.0.0-beta.45",
@@ -48,6 +53,7 @@
     "tailwindcss": "^4.3.3",
     "tw-shimmer": "^0.4.14",
     "update-electron-app": "^3.3.0",
+    "ws": "^8.21.3",
     "zod": "^4.6.7",
     "zustand": "^5.0.16"
   },
@@ -74,6 +80,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-v8": "5.0.5",
     "electron": "^45.0.0",
