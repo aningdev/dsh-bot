@@ -37,6 +37,8 @@ bun run --cwd apps/runner check
 bun run --cwd apps/runner test:unit
 ```
 
-测试构建后使用真实 Node 子进程、独立 home、标准 Connection/Gateway 和生成的 Bot Remote。覆盖逐段回复、真实 JSONL、实际进程重启后同 Session 继续对话、配置应用与持久化、冷替换、失败流、参数校验、未认证请求和客户端断连。测试模型只由 `tests/fixtures/model.overlay.yml` 加载，其构建产物放在 `.test-output/`，正常 build 不构建它。
+测试构建后使用真实 Node 子进程、独立 home、标准 Connection/Gateway 和生成的 Bot Remote。覆盖逐段回复、真实 JSONL、实际进程重启后同 Session 继续对话、配置应用与持久化、冷替换、失败流、参数校验、未认证请求和客户端断连。测试模型由 `tests/fixtures/model.overlay.yml` 加载；`--test-fixtures` 构建的模型和兼容性观察插件放在 `.test-output/`，正常 build 不构建它们。
+
+`session-controller-compatibility.spec.ts` 额外通过测试 overlay 装配发布版 Session Controller，复现冷 preset 缺失、官方激活未交接所有权与模型选择，以及历史开场绕过配置替换拒绝。正式 profile 继续关闭该 Controller，扩展点与验证边界见 [共存验证](../../docs/SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 架构职责见 [Harness 映射方案](../../docs/HARNESS_MAPPING_PLAN.md)，引擎资源见 [harness-runtime](../../packages/harness-runtime/README.md)。

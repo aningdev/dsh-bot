@@ -100,9 +100,9 @@ Bot 包的 Host 实现与客户端贡献分开。沿用上游的 `./typert`、`.
 
 ## 生命周期协调的取舍
 
-优先复用 Session Controller 的业务方法，但必须先让 Bot 与它共享同一 Agent 生命周期所有者。上游当前内部 create/resume 后仅返回 Agent，历史 follow 还可能触发冷恢复；公开机制尚未验证能完整满足 Bot 持有 AgentHandle 和严格配置替换的要求。[源码](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)、[已有接入约束](./HARNESS_INTEGRATION.md#remoteapi-接入约束)。
+优先复用 Session Controller 的业务方法，并通过统一委托保持 Bot 的 Agent 生命周期所有权。#5 已在固定 npm 版复现 preset 缺失、官方激活句柄未交给 Bot，以及历史开场绕过替换拒绝；当前公开接口不足。扩展点、替代方案和可执行证据见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
-实施原则是：#3 的 Bot Remote 只实现该票需要的最小路径，执行本身调用公开 Agent/Session 能力；不能因此声称已经复用完整 Session Controller。#5 专门验证官方控制器和 Bot 所有权的协调，若公开入口不足，优先提出小范围的生命周期委托扩展，并评估独立 npm 发布或上游接受后的可消费版本。未经确认的扩展不视为现有能力，不直接修改参考子模块来交付产品。
+#3/#4 的 Bot Remote 继续调用公开 Agent/Session 能力。#5 按其替代验收交付扩展点结论；正式装配保持关闭官方 Controller，待包含 Host 生命周期委托的可消费版本通过验收后启用。产品构建不修改参考子模块或复制 Controller。
 
 在协调完成前，所有会自行激活 Bot Session 的非 Bot 入口必须关闭或拒绝该类访问，并验证冷历史跟随、文件和上传等间接入口；仅让 UI 隐藏按钮不够。产品 patch 可以暂时禁用相应 Controller 条目，其余标准服务继续保留；若依赖分析表明无法这样隔离，应将该问题作为明确的实施阻塞处理，不复制 Controller 绕过。
 
@@ -142,7 +142,7 @@ Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Render
 | #3：标准插件组合  | 命名 profile、公开 npm、runtime/Bot bundle 加载  | 启动及清理成功，所需服务与 Remote 存在；不是只打开端口     |
 | #3：测试执行闭环  | 测试 overlay 注册确定性 adapter，调用 Bot Remote | 流式回复、真实日志、实际进程重启后同 Session 历史均通过    |
 | #4：配置事务      | Bot 配置事务、preset 替换、失败回退              | 已验证严格保存、五种拒绝、原 Session 连续及故障保持        |
-| #5：生命周期协调  | 官方 Controller 与 Bot 共享 Agent 所有者         | 所有冷激活入口验证通过                                     |
+| #5：生命周期协调  | 官方 Controller 与 Bot 共享 Agent 所有者         | 已完成缺口复现和最小扩展结论；正式共存待扩展版本验收       |
 | #6 及后续桌面票   | Main 接入与现有 UI 操作                          | 经受控 oRPC 完成对话、工具和审批                           |
 | #11/#12：系统交付 | launchd、自带 Node、安装和升级                   | 桌面退出继续执行、异常拉起、主动停止及版本替换均有成品证据 |
 

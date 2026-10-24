@@ -39,7 +39,7 @@ Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfi
 
 版本过期返回 `bot/config-conflict`，校验失败返回 `bot/config-invalid`。装配或提交失败后恢复旧配置与旧配置下的 Agent，返回 `bot/config-failed`；清理或恢复失败则返回 `bot/faulted` 并停止接纳。待处理输入不会为了保存而被清空。
 
-持久事务记录用于识别中断或恢复失败。重启遇到未完成记录时，该 Bot 保持停止接纳，读取仍返回旧配置；当前尚无产品故障恢复入口。事务保证覆盖同一 Runner 中 BotController 协调的入口；官方 Session Controller 的激活协调和 Runner 跨进程单实例分别由 #5、#11 验证。
+持久事务记录用于识别中断或恢复失败。重启遇到未完成记录时，该 Bot 保持停止接纳，读取仍返回旧配置；当前尚无产品故障恢复入口。事务保证覆盖同一 Runner 中 BotController 协调的入口；官方 Session Controller 在 #5 中已确认缺少统一生命周期委托，正式接入等待扩展版本，见 [共存验证](../../docs/SESSION_CONTROLLER_COMPATIBILITY.md)；Runner 跨进程单实例由 #11 验证。
 
 ## 记录与执行
 

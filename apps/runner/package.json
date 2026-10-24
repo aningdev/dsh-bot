@@ -8,7 +8,7 @@
     "build": "bun run --cwd ../../packages/bot build && node scripts/build.mjs",
     "start": "node --expose-internals lib/index.js",
     "check": "bun run --cwd ../../packages/bot build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
-    "test:unit": "bun run build && node scripts/build.mjs --test-model && vp test run"
+    "test:unit": "bun run build && node scripts/build.mjs --test-fixtures && vp test run"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.1-rc.2",
@@ -22,9 +22,15 @@
     "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
     "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2",
     "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.2",
     "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-file-upload": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-file-reference-local": "0.2.1-rc.2",
     "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
     "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-workspace": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.5",
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.1",

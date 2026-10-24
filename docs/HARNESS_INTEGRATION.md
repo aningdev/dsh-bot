@@ -44,11 +44,11 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 推荐应用 Bot 生命周期插件从首次创建开始持有所有 AgentHandle。复用官方查询、跟随、审批和输入能力时，所有会激活或修改 Bot 的入口都必须受同一个生命周期所有者协调，包括历史跟随触发的冷恢复、文件引用与上传等间接入口。不能只串行化保存按钮，也不能在配置替换窗口直接暴露未受协调的官方接口。
 
-首版可以先验证应用管理的 Bot 创建与恢复，再接入官方 Remote/API。如果官方控制器缺少可用的生命周期委托接口，优先评估一个小范围的上游扩展接口，让它委托 Bot 生命周期所有者；不要复制整套 Session Controller、绕过其私有字段或依赖未发布的源码导出。是否需要该扩展由下一步真实组合验证决定。
+当前由 Bot 服务管理创建、恢复和句柄，正式 profile 关闭官方 Session Controller。#5 的实际进程验证确认需要 Host 生命周期委托扩展，覆盖历史开场、后台 promotion、命令、lookup 和 upload 解析；具体证据和替代方案见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 ## 当前 npm Runner 接入状态
 
-#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。#4 已补齐配置事务、同一 Session 替换、参数覆盖清除、能力选择、五种拒绝、回退及未完成事务重启后的停止接纳；公开 Controller 与真实 Runner Remote 均有通过的契约测试。官方 Session Controller 协调仍由 #5 实现。
+#3 已建立真实 Node Runner profile、标准 Bot 插件、生成 Remote、JSONL 与实际进程重启闭环。Bot 记录复用 storageDomain，测试通过 overlay 注册确定性模型；默认 profile 不加载测试模型或官方 Web 应用。覆盖范围和操作命令见 [Runner README](../apps/runner/README.md)。#4 已补齐配置事务、同一 Session 替换、参数覆盖清除、能力选择、五种拒绝、回退及未完成事务重启后的停止接纳；公开 Controller 与真实 Runner Remote 均有通过的契约测试。#5 已完成公开接口缺口的可执行复现；正式共存仍需带生命周期委托的可消费发行版，详见 [共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
 此前空回复的直接原因已通过 `agent/error` 定位为 adapter 精确模型元数据缺少 `id`、`name`，产生 `INVALID_MODEL_INFO`；修正后继续修复了历史字段、持久化读取及清理入口。原始失败基线保留在 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)，不与本次通过的契约测试混用。
 

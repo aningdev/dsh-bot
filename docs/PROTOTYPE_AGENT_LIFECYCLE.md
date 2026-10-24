@@ -35,6 +35,6 @@
 
 ## 边界
 
-此原型验证的是**协调规则**，不是 API 可行性。官方 Session Controller 自行恢复 Agent 而不交出句柄，这一冲突仍未通过真实代码验证；原型的阶段模型假定应用能够独占替换 Agent。若该假定不成立，阶段划分不变，但「正在更换 Agent」由谁驱动需要重新确定。
+此原型验证的是**协调规则**，不是 API 可行性。#5 已用公开 npm 版复现官方 Controller 的独立冷恢复与历史开场绕过替换拒绝；直接装配不能满足原型假定的统一所有者。真实证据、扩展点和替代方案见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。
 
-原型未覆盖多个客户端同时保存、持久化中断、真实维护与模型执行。#4 的公开接口测试已验证五种拒绝、并发保存、真正的维护占用、同一 Session 替换、失败回退及未完成事务在 Host 重启后的停止接纳；真实 Node Remote 测试覆盖配置应用与进程重启。实现与验证范围见 [Bot 插件](../packages/bot/README.md) 和 [Runner](../apps/runner/README.md)。真实模型、保存中途强制终止进程和官方 Session Controller 共存仍未验证。
+原型未覆盖多个客户端同时保存、持久化中断、真实维护与模型执行。#4 的公开接口测试已验证五种拒绝、并发保存、真正的维护占用、同一 Session 替换、失败回退及未完成事务在 Host 重启后的停止接纳；真实 Node Remote 测试覆盖配置应用与进程重启。实现与验证范围见 [Bot 插件](../packages/bot/README.md) 和 [Runner](../apps/runner/README.md)。真实模型、保存中途强制终止进程，以及扩展后的官方 Session Controller 共存仍需验证。

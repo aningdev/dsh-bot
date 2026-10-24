@@ -59,7 +59,7 @@ macOS 用用户级 launchd LaunchAgent 管理 Runner，支持异常自动拉起�
 
 packages/bot 通过 Harness/Cordis 标准插件机制加载，提供 Bot 档案与配置持久化、模板具体化、Bot 与 Session 的关联、AgentHandle 生命周期，以及配置变更与新输入接纳的协调。模型循环、队列、会话日志、权限与工具执行继续使用 Harness。
 
-该包拥有产品服务实现及其必要的 Remote 声明、错误类型和生成贡献。后台实现入口与客户端安全的类型和 Remote 贡献入口分别导出；前端只消费对应的客户端入口。Bot 配置存储与 Session 日志的所有权分别明确，存储选型及一致性实现待详细设计。
+该包拥有产品服务实现及其必要的 Remote 声明、错误类型和生成贡献。后台实现入口与客户端安全的类型和 Remote 贡献入口分别导出；前端只消费对应的客户端入口。Bot 配置使用 storageDomain，Session 日志使用上游 JSONL，事务和同一 Session 替换已实现；官方 Controller 接入受下述已验证的生命周期缺口限制。
 
 首次发送前由 Bot 服务建立唯一 Session 关联。配置更新时，服务协调真正空闲的检查、旧 Agent 释放、预设更新、同一 Session 的恢复、持久化与失败恢复；完整要求与实验依据见 [Harness 配置接入探索](./HARNESS_INTEGRATION.md)。所有可能触发 Agent 激活的入口都必须经过同一生命周期所有者协调。
 
@@ -131,10 +131,10 @@ Relay 首次交付仅支持客户端与 Runner 同时在线，不承担离线请
 
 ## 实施前需要验证的接入点
 
-1. Session Controller 自带的冷恢复与 Bot 所有的 AgentHandle 如何统一。公开接口不足时，评估最小上游扩展或明确版本的兼容包，继续避免复制控制器或改动执行循环。
+1. 已验证：当前固定发行版缺少统一的生命周期委托，直接装配官方 Session Controller 会绕过 Bot 所有权与替换拒绝；三个实际进程复现和最小扩展点见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)。正式 profile 继续使用 Bot 所有者；扩展版本中的冷恢复、历史开场及全部间接入口仍需验收。
 2. 官方客户端的浏览器工厂、Node ESM 与 Expo/Hermes 能否在所需最小组合中使用；跨端模块产物和生成工具需要实测。
 3. 非 owner Peer 的授权、审批回答和文件路由能否覆盖配对设备能力。现有 owner 限制不能通过换传输地址解决，优先复用上游服务并按标准插件接口补充必要适配。
 4. 消息接纳去重、配置持久化与运行时应用的崩溃恢复，需要区分现成保证和应用必须补足的协调。
 5. 独立后台的随包运行时、用户级安装、签名、更新与启动停止，需要在真实 macOS 成品中验证。
 
-现有独立 npm profile 启动及 Agent 替换实验支持上述接入方向，但尚未覆盖这些完整场景。原始证据保留在 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md) 和 [Harness 配置接入探索](./HARNESS_INTEGRATION.md)。
+现有独立 npm profile 启动及 Agent 替换已验证；#5 还确认当前官方 Controller 缺少所需委托入口，其余跨端、授权和系统交付场景仍需验证。证据见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)、[Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md) 和 [Harness 配置接入探索](./HARNESS_INTEGRATION.md)。

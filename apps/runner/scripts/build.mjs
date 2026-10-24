@@ -1,12 +1,14 @@
-/** Compile the application, or the explicitly requested test-only model fixture. */
+/** Compile the application, or the explicitly requested test-only profile fixtures. */
 import { fileURLToPath } from 'node:url'
 
 import { build } from 'esbuild'
 const root = fileURLToPath(new URL('../', import.meta.url))
-const fixture = process.argv.includes('--test-model')
+const fixture = process.argv.includes('--test-fixtures')
 await build({
-  entryPoints: [root + (fixture ? 'tests/fixtures/model.ts' : 'src/index.ts')],
-  outfile: root + (fixture ? '.test-output/model.js' : 'lib/index.js'),
+  entryPoints: fixture
+    ? [root + 'tests/fixtures/model.ts', root + 'tests/fixtures/session-controller-probe.ts']
+    : [root + 'src/index.ts'],
+  outdir: root + (fixture ? '.test-output' : 'lib'),
   platform: 'node',
   format: 'esm',
   bundle: true,
