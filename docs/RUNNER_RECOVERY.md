@@ -15,6 +15,7 @@ Bot 的 `inputState.interrupted` 从最后一轮的持久结束原因计算：�
 ## 本机验证
 
 - `packages/bot/tests/bot.spec.ts` 重建进程退出时的持久日志前缀，验证冷恢复后状态为中断、队列身份不变、读取不执行输入，以及主动新请求后的状态。
+- `apps/runner/tests/session-lifecycle.spec.ts` 在候选 Agent 初始化阶段暂停配置替换，SIGKILL 真实 Runner 后用同一 home 冷启动：读取仍为旧配置，未完成保存未报告成功；再次保存、发送及标准 Session API 均遵守故障保护。Runner 22 项契约和类型检查通过，日志 `/tmp/dsh-bot-save-sigkill-{runner,check}.log`。当前不自动修复未完成事务。
 - `apps/desktop/tests/e2e/runner-service.test.ts` 使用成品随包 Node 和真实用户 launchd，SIGKILL 后验证新实例连接资料产生，并可停止和卸载。
 - `apps/desktop/tests/e2e/bot-recovery.test.ts` 在确定性工具等待结果期间 SIGKILL 真实 Runner 进程；用同一 home 重启 Runner、重新打开打包桌面，验证中断提示、未重复用户消息、保留输入及主动恢复。模型与工具为测试适配器；此用例不声称经过 launchd 重启，launchd 由前一用例单独验证。
 

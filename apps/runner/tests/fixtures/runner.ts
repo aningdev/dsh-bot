@@ -162,6 +162,15 @@ export function runnerHarness() {
       clearTimeout(timer)
     }
   }
+  async function crash(child: ChildProcess): Promise<void> {
+    const index = children.indexOf(child)
+    if (index < 0) throw new Error('Runner is not owned by this harness')
+    const exited = once(child, 'exit')
+    if (!child.kill('SIGKILL')) throw new Error('Runner could not be terminated')
+    const [code, signal] = await exited
+    expect({ code, signal }).toEqual({ code: null, signal: 'SIGKILL' })
+    children.splice(index, 1)
+  }
   async function connect(ready: Ready): Promise<Context> {
     const response = await fetch(ready.connectUrl, { redirect: 'manual' })
     expect(response.status).toBe(302)
@@ -216,5 +225,5 @@ export function runnerHarness() {
     if (failures.length > 0) throw new AggregateError(failures, 'Runner test cleanup failed')
   })
 
-  return { start, startFailure, stop, connect, home }
+  return { start, startFailure, stop, crash, connect, home }
 }

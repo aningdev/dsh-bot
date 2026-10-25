@@ -14,7 +14,7 @@ import { expect, test } from 'vite-plus/test'
 
 import { runnerHarness } from './fixtures/runner.ts'
 
-const { home, start, startFailure, stop, connect } = runnerHarness()
+const { home, start, startFailure, stop, crash, connect } = runnerHarness()
 
 async function integrationPatch(
   directory: string,
@@ -282,6 +282,59 @@ test('replacement rejects standard history, Agent lookup, encoded upload, and ra
     ok: true,
     value: { file: { name: 'raw.txt', bytes: 14 } },
   })
+})
+
+test('SIGKILL during configuration replacement preserves the previous record and stops admission after restart', async () => {
+  const directory = await home()
+  const running = await start(directory, true, [
+    await integrationPatch(directory, { holdModel: 'fake-2' }),
+  ])
+  const client = await connect(running.ready)
+  const created = await client.remote.bot.create({ name: 'unfinished save', cwd: directory })
+  if (!created.ok) throw created.error
+  const bot = created.value
+  for await (const _frame of client.remote.bot.send(bot.botId, 'before')) {
+    /* Establish the original Agent and durable history. */
+  }
+  const saving = Promise.allSettled([
+    client.remote.bot.saveConfiguration(bot.botId, {
+      expectedRevision: bot.revision,
+      configuration: configuration(bot),
+    }),
+  ])
+  await expect
+    .poll(() => running.probes.some((event) => event.event === 'initialization-blocked'))
+    .toBe(true)
+  await crash(running.child)
+  await client.fiber.dispose()
+  const [saved] = await saving
+  expect(saved?.status === 'fulfilled' && saved.value.ok).toBe(false)
+
+  const restarted = await start(directory)
+  const reconnected = await connect(restarted.ready)
+  await reconnected.remote.$mount(SessionRemote)
+  expect(await reconnected.remote.bot.get(bot.botId)).toEqual({ ok: true, value: bot })
+  expect(
+    await reconnected.remote.bot.saveConfiguration(bot.botId, {
+      expectedRevision: bot.revision,
+      configuration: configuration(bot),
+    }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: 'bot/config-rejected', details: { reason: 'unavailable' } },
+  })
+  const send = async () => {
+    for await (const _frame of reconnected.remote.bot.send(bot.botId, 'must not execute')) {
+      /* Any successful execution violates the unfinished-transaction guard. */
+    }
+  }
+  await expect(send()).rejects.toMatchObject({ code: 'bot/faulted' })
+  expect(
+    await reconnected.remote.session.rename({
+      sessionId: SessionId(bot.sessionId),
+      title: 'must not activate',
+    }),
+  ).toMatchObject({ ok: false, error: { code: 'bot/faulted' } })
 })
 
 test('an asynchronous Agent lookup protects initialization until the receiver is ready', async () => {
