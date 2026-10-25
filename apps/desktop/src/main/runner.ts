@@ -15,6 +15,16 @@ import { RunnerService } from './runner-service'
 // No filesystem or network access until an IPC operation asks for a connection.
 export const runnerClient = new RunnerClient({ home: () => runnerHome(app.getPath('userData')) })
 
+/** Reuse a reachable Runner before installing the bundled local service. */
+export async function startLocalRunner(): Promise<void> {
+  try {
+    await runnerClient.list()
+    return
+  } catch {
+    await getRunnerService().autoStart()
+  }
+}
+
 let service: RunnerService | undefined
 export function getRunnerService(): RunnerService {
   if (process.platform !== 'darwin') throw new RunnerError('后台服务管理目前仅支持 macOS。')

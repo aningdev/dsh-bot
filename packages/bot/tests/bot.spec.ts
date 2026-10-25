@@ -149,6 +149,74 @@ describe('Bot Controller public contract', () => {
       ),
     ).rejects.toMatchObject({ code: 'bot/invalid-input' })
   })
+  test('capability options stay private and independent after deployment edits or removal', async () => {
+    const directory = await home()
+    const plugins = (toolName: string) => ({
+      probe: [
+        { name: new URL('./fixtures/capability.mjs', import.meta.url).href, config: { toolName } },
+      ],
+    })
+    const first = await createBotHost(directory, new FakeModelAdapter(), [], plugins('original'))
+    hosts.push(first)
+    const created = await first.botController.createBot(
+      { name: 'copied capability', cwd: directory },
+      signal,
+    )
+    const saved = await first.botController.saveConfiguration(
+      created.botId,
+      edited(created, { capabilities: ['probe'] }),
+      signal,
+    )
+    expect(saved).not.toHaveProperty('capabilityConfiguration')
+    expect(JSON.parse(await answer(first, created.botId, 'inspect configuration')).tools).toEqual([
+      'original',
+    ])
+    await closeHost(first)
+
+    const second = await createBotHost(
+      directory,
+      new FakeModelAdapter(),
+      [],
+      plugins('replacement'),
+    )
+    hosts.push(second)
+    const existing = await second.botController.getBot(created.botId, signal)
+    expect(existing).toEqual(saved)
+    const editedExisting = await second.botController.saveConfiguration(
+      existing.botId,
+      edited(existing, { instructions: 'unrelated edit' }),
+      signal,
+    )
+    expect(JSON.parse(await answer(second, existing.botId, 'inspect configuration')).tools).toEqual(
+      ['original'],
+    )
+    const fresh = await second.botController.createBot(
+      { name: 'new capability', cwd: directory },
+      signal,
+    )
+    await second.botController.saveConfiguration(
+      fresh.botId,
+      edited(fresh, { capabilities: ['probe'] }),
+      signal,
+    )
+    expect(JSON.parse(await answer(second, fresh.botId, 'inspect configuration')).tools).toEqual([
+      'replacement',
+    ])
+    await closeHost(second)
+
+    const third = await createBotHost(directory, new FakeModelAdapter(), [], {})
+    hosts.push(third)
+    expect(await third.botController.getBot(existing.botId, signal)).toEqual(editedExisting)
+    expect(await third.botController.listBots(signal)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ capabilityConfiguration: expect.anything() }),
+      ]),
+    )
+    expect(JSON.parse(await answer(third, existing.botId, 'inspect configuration')).tools).toEqual([
+      'original',
+    ])
+  })
+
   test('a standard prompt admission prevents streamed send from overtaking asynchronous preparation', async () => {
     const directory = await home()
     const ctx = await host(directory)
@@ -302,6 +370,7 @@ describe('Bot Controller public contract', () => {
     const stream = ctx.botController.send(created.botId, 'hold', signal)[Symbol.asyncIterator]()
     expect((await stream.next()).done).toBe(false)
     const agent = ctx.agents.get(SessionId(created.sessionId))!
+    expect(await ctx.botController.listBots(signal)).toEqual([{ ...created, status: 'running' }])
     try {
       await expect(
         ctx.botController.saveConfiguration(
@@ -495,7 +564,9 @@ describe('Bot Controller public contract', () => {
       ctx.botController.saveConfiguration(created.botId, edited(created), signal),
     ).rejects.toMatchObject({ code: 'bot/config-rejected', details: { reason: 'replacing' } })
     expect(await ctx.botController.getBot(created.botId, signal)).toEqual(created)
-    expect(await ctx.botController.listBots(signal)).toEqual([created])
+    expect(await ctx.botController.listBots(signal)).toEqual([
+      { ...created, status: 'unavailable' },
+    ])
     await expect(answer(ctx, created.botId, 'blocked')).rejects.toMatchObject({ code: 'bot/busy' })
     await expect(ctx.botController.history(created.botId, signal)).rejects.toMatchObject({
       code: 'bot/config-rejected',

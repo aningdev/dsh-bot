@@ -36,7 +36,11 @@ import {
 } from './runner-connection'
 import { ToolActivityProjection } from './tool-activity'
 
-const summarySchema = z.object({ botId: z.uuid(), name: z.string() })
+const summarySchema = z.object({
+  botId: z.uuid(),
+  name: z.string(),
+  status: z.enum(['idle', 'running', 'unavailable']),
+})
 const detailsSchema = botConfigurationSchema.extend({
   botId: z.uuid(),
   name: z.string(),

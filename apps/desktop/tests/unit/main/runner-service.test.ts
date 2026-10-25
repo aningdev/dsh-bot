@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -39,6 +39,12 @@ test('installing without login startup stays stopped; concurrent starts share on
       return { code: 0, stdout: '' }
     },
   })
+  // A fresh desktop installs and starts once; explicit stops survive reopening.
+  await service.autoStart()
+  expect((await service.status()).loaded).toBe(true)
+  await service.stop()
+  await service.autoStart()
+  expect((await service.status()).loaded).toBe(false)
   await service.install()
   expect(await service.status()).toEqual({
     installed: true,
@@ -122,14 +128,26 @@ test('upgrade waits for the old process, retains login preference, and leaves fa
   })
   await service.start()
   await service.setLoginAtStartup(true)
+  const runnerHome = path.join(directory, 'runner')
+  await mkdir(path.join(runnerHome, 'storages'))
+  await writeFile(path.join(runnerHome, 'storages/bots.json'), 'before shutdown')
   const beforePreparation = preparationCount
   replacement = true
   oldAlive = true
   const upgrading = service.upgrade()
   await stopped
   expect(preparationCount).toBe(beforePreparation)
+  await writeFile(path.join(runnerHome, 'storages/bots.json'), 'durable after shutdown')
+  const backups = path.join(runnerHome, 'service/backups')
+  await expect(readdir(backups)).rejects.toMatchObject({ code: 'ENOENT' })
   oldAlive = false
   await upgrading
+  const [backup] = await readdir(backups)
+  if (!backup) throw new Error('Upgrade did not publish a backup')
+  expect(await readFile(path.join(backups, backup, 'data/storages/bots.json'), 'utf8')).toBe(
+    'durable after shutdown',
+  )
+  expect(await readdir(path.join(backups, backup, 'data'))).not.toContain('service')
   expect(preparationCount).toBe(beforePreparation + 1)
   expect(readyCount).toBe(1)
   expect(await service.status()).toMatchObject({ loaded: true, loginAtStartup: true })
@@ -149,4 +167,17 @@ test('upgrade waits for the old process, retains login preference, and leaves fa
     loaded: false,
     loginAtStartup: true,
   })
+  // Disabling login startup must work even when replacement runtime preparation fails.
+  await service.setLoginAtStartup(false)
+  expect(await service.status()).toMatchObject({ loaded: false, loginAtStartup: false })
+  // A backup failure must prevent runtime publication and automatic restart.
+  preparationFails = false
+  await service.start()
+  await rm(backups, { recursive: true })
+  await writeFile(backups, 'blocks backup creation')
+  const beforeFailedBackup = preparationCount
+  await expect(service.upgrade()).rejects.toThrow('应用数据备份失败')
+  expect(preparationCount).toBe(beforeFailedBackup)
+  await service.autoStart()
+  expect((await service.status()).loaded).toBe(false)
 })

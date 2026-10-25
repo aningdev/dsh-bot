@@ -151,7 +151,7 @@ test('packaged Electron IPC returns only Bot DTOs for successful list, history a
       { botId, text },
     )
     expectCredentialFree(received, secrets)
-    expect(received.list).toEqual([{ botId, name }])
+    expect(received.list).toEqual([{ botId, name, status: 'idle' }])
     const before = [
       { role: 'user', text: seed },
       { role: 'assistant', text: 'echo: ' + seed },

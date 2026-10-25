@@ -9,10 +9,10 @@
 launchd 行为依据本机 `man launchd.plist`、`launchctl help bootstrap`、`launchctl help bootout` 与 `launchctl help print`。产品实现位于 [`runner-service.ts`](../apps/desktop/src/main/runner-service.ts)，环境组装和惰性实例位于 [`runner.ts`](../apps/desktop/src/main/runner.ts)。
 
 - 同一 Runner home 使用稳定 label：应用 ID 加 home 的 SHA-256 前 12 位。开发、测试、正式 home 可独立管理；重复 bootstrap 由 launchd label 保证单 job。
-- 主配置保存在 `<home>/service/runner.plist`。安装只写配置，不启动后台，也不启用登录启动。
+- 主配置保存在 `<home>/service/runner.plist`。单独安装只写配置，不启动后台，也不启用登录启动。成品桌面启动时先连接已有 Runner；连接不可用且没有明确停止标记时，自动安装、启动并等待就绪。开发环境仅在指定 `DSH_BOT_RUNTIME_ROOT` 时执行该流程。
 - 启动先检查运行时文件，再 bootstrap 当前用户 `gui/<uid>`。重复启动读取既有 job，不使用会重启进程的 `kickstart -k`。
 - `KeepAlive=true` 负责意外退出后的重新拉起；节流为 10 秒。模型执行、恢复和输入语义仍由 Runner/Harness 管理，不通过重发消息恢复。
-- 主动停止使用 `bootout` 移除 job，并确认其不再加载且先前 PID 已退出。保留主配置，直到再次手动启动；若已开启登录启动，下次登录也会启动。
+- 主动停止使用 `bootout` 移除 job，并确认其不再加载且先前 PID 已退出。保留主配置并写入 `<home>/service/stopped`，重开桌面不会撤销主动停止；明确启动成功后移除标记；若已开启登录启动，下次登录也会启动。
 - 登录启动通过 `~/Library/LaunchAgents/<label>.plist` 的配置副本控制。切换只更新文件，不改变当前运行或停止状态。两个副本以私有临时文件原子替换；重复安装会修复中断后尚未更新的登录副本。
 - 卸载先停止 job，再删除两个 plist，保留 Bot、Session、凭据、连接目录与日志。
 - 状态分别表达配置已安装、登录启动已开启、job 已加载和 PID。已加载但没有 PID 显示正在启动或等待恢复，不能据此声称连接已就绪。模型和认证连接就绪仍以 Runner 发布的私有连接资料为准。
@@ -22,7 +22,7 @@ launchd 行为依据本机 `man launchd.plist`、`launchctl help bootstrap`、`l
 
 Main 默认从 `process.resourcesPath/runner` 准备随包资源，再复制校验到 `<home>/service/runtimes/<sha256>`，launchd 使用该独立目录内的 Node 和入口。桌面同一会话复用已校验的版本；替换应用后重新打开新桌面，再通过「更新后台」应用新版本。开发诊断可用绝对 `DSH_BOT_RUNTIME_ROOT` 指向同样布局；该变量仅由 Main 环境读取，renderer 不提供路径或命令。缺少运行时会返回可操作错误，不将写入文件视为成功运行。
 
-**已实现随包 Node 与生产依赖资源。** 构建和迁移检查见[随包运行时](PACKAGED_RUNTIME.md)。本机 arm64 的桌面验收使用资源内 Node，移除开发工具 PATH 后验证安装、启停、关闭桌面后 PID 保持及重开，再卸载清理。「更新后台」已实现先停止、等待旧 PID 退出、替换启动配置和按原状态重启，详见[恢复与更新](RUNNER_RECOVERY.md)。它不代替干净目标机、真实模型、实际登录和人工升级验收，此阶段不代表首次交付完成。
+**已实现随包 Node 与生产依赖资源。** 构建和迁移检查见[随包运行时](PACKAGED_RUNTIME.md)。本机 arm64 的桌面验收使用资源内 Node，移除开发工具 PATH 后验证安装、启停、关闭桌面后 PID 保持及重开，再卸载清理。「停止后台」和「更新后台」均需在界面确认。「更新后台」先停止、等待旧 PID 退出、备份应用数据，再替换启动配置和按原状态重启；备份失败时不继续更新，详见[恢复与更新](RUNNER_RECOVERY.md)。它不代替干净目标机、真实模型、实际登录和人工升级验收，此阶段不代表首次交付完成。
 
 ## 本机证据
 

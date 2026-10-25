@@ -36,6 +36,7 @@ import type {
   BotConfiguration,
   BotConfigurationOptions,
   BotTemplate,
+  BotListEntry,
   BotFrame,
   BotRecord,
   ChatMessage,
@@ -94,6 +95,15 @@ export const Config: schema<Config> = schema.object({
     .default({}),
 })
 
+const storedCapabilityPlugins = z.array(
+  z.object({ name: z.string().min(1), config: z.record(z.string(), z.json()) }),
+)
+
+/** Execution-only configuration; never exposed through Bot Remote results. */
+interface StoredBot extends BotRecord {
+  readonly capabilityConfiguration?: Record<string, CapabilityPlugin[]>
+}
+
 const storedBot = z.object({
   botId: z.uuid(),
   name: z.string().trim().min(1),
@@ -105,6 +115,7 @@ const storedBot = z.object({
   baseInstructions: z.string().default(''),
   instructions: z.string().default(''),
   capabilities: z.array(z.string().min(1)).default([]),
+  capabilityConfiguration: z.record(z.string(), storedCapabilityPlugins).optional(),
   maxTokens: z.number().int().positive().nullable().default(null),
   reasoningEffort: z.string().min(1).nullable().default(null),
   inputMode: z.enum(['queue', 'steer']).default('queue'),
@@ -133,8 +144,8 @@ const saveConfigurationInput = z.object({
 })
 const storedTransaction = z.object({ previous: storedBot, candidate: storedBot })
 interface ConfigurationTransaction {
-  readonly previous: BotRecord
-  readonly candidate: BotRecord
+  readonly previous: StoredBot
+  readonly candidate: StoredBot
 }
 
 const templateInput = z.object({
@@ -185,7 +196,7 @@ export class BotController extends TypertRemoteService {
   private readonly busy = new Set<string>()
   private readonly stoppingTurns = new Set<string>()
   private readonly prompts = new Map<string, number>()
-  private readonly applying = new Map<string, BotRecord>()
+  private readonly applying = new Map<string, StoredBot>()
   private readonly faults = new Set<string>()
   private readonly operations = new Set<Promise<BotRecord>>()
   private readonly turns = new Set<Promise<void>>()
@@ -206,7 +217,7 @@ export class BotController extends TypertRemoteService {
   constructor(
     ctx: Context,
     private readonly config: Config,
-    private readonly records: KvTable<string, BotRecord>,
+    private readonly records: KvTable<string, StoredBot>,
     private readonly transactions: KvTable<string, ConfigurationTransaction>,
   ) {
     super(ctx, 'botController', { namespace: 'bot' })
@@ -308,8 +319,13 @@ export class BotController extends TypertRemoteService {
         field: 'templateId',
       })
     const botId = randomUUID()
-    const record: BotRecord = {
+    const record: StoredBot = {
       ...template.configuration,
+      capabilityConfiguration: snapshotCapabilities(
+        template.configuration.capabilities,
+        this.config,
+        botId,
+      ),
       name,
       cwd,
       botId,
@@ -318,7 +334,7 @@ export class BotController extends TypertRemoteService {
     }
     await this.validateConfiguration(record, signal)
     await this.records.put(botId, record)
-    return record
+    return this.publicRecord(record)
   }
 
   private templateChoices(): BotTemplate[] {
@@ -368,10 +384,14 @@ export class BotController extends TypertRemoteService {
   @Remote('get')
   async getBot(botId: string, signal: AbortSignal): Promise<BotRecord> {
     signal.throwIfAborted()
-    return this.readBot(botId)
+    return this.publicRecord(this.readBot(botId))
   }
 
-  private readBot(botId: string): BotRecord {
+  private publicRecord(record: StoredBot): BotRecord {
+    return storedBot.omit({ capabilityConfiguration: true }).parse(record)
+  }
+
+  private readBot(botId: string): StoredBot {
     this.validateBotId(botId)
     const record =
       this.applying.get(botId) ?? this.transactions.get(botId)?.previous ?? this.records.get(botId)
@@ -387,10 +407,18 @@ export class BotController extends TypertRemoteService {
    * @returns The stored records in stable identity order.
    */
   @Remote('list')
-  async listBots(signal: AbortSignal): Promise<readonly BotRecord[]> {
-    const records: BotRecord[] = []
-    for (const id of [...new Set([...this.records.keys(), ...this.transactions.keys()])].sort())
-      records.push(await this.getBot(id, signal))
+  async listBots(signal: AbortSignal): Promise<readonly BotListEntry[]> {
+    const records: BotListEntry[] = []
+    for (const id of [...new Set([...this.records.keys(), ...this.transactions.keys()])].sort()) {
+      const record = await this.getBot(id, signal)
+      records.push({
+        ...record,
+        status:
+          this.stopping || this.faults.has(id) || this.applying.has(id)
+            ? 'unavailable'
+            : (this.handles.get(id)?.agent.status ?? 'idle'),
+      })
+    }
     return records
   }
 
@@ -451,9 +479,15 @@ export class BotController extends TypertRemoteService {
           actualRevision: previous.revision,
         },
       )
-    const candidate: BotRecord = {
+    const candidate: StoredBot = {
       ...previous,
       ...parsed.data.configuration,
+      capabilityConfiguration: snapshotCapabilities(
+        parsed.data.configuration.capabilities,
+        this.config,
+        botId,
+        previous.capabilityConfiguration,
+      ),
       revision: previous.revision + 1,
     }
     this.applying.set(botId, previous)
@@ -507,7 +541,7 @@ export class BotController extends TypertRemoteService {
       if (!(await this.ctx.sessions.flush(agent.session)))
         throw new Error('Bot Session has no durability listener')
       await this.transactions.delete(botId)
-      return candidate
+      return this.publicRecord(candidate)
     } catch (error: unknown) {
       if (disposalFailed) {
         this.faults.add(botId)
@@ -619,15 +653,15 @@ export class BotController extends TypertRemoteService {
     }
   }
 
-  private capabilityPlugins(configuration: BotConfiguration): CapabilityPlugin[] {
+  private capabilityPlugins(configuration: StoredBot): CapabilityPlugin[] {
     return configuration.capabilities.flatMap((id) => {
-      if (!Object.hasOwn(this.config.capabilities, id))
-        throw new Error(`Unknown Bot capability: ${id}`)
-      return this.config.capabilities[id]!
+      const plugins = configuration.capabilityConfiguration?.[id]
+      if (plugins === undefined) throw new Error(`Missing Bot capability snapshot: ${id}`)
+      return structuredClone(plugins)
     })
   }
 
-  private async validateConfiguration(candidate: BotRecord, signal: AbortSignal): Promise<void> {
+  private async validateConfiguration(candidate: StoredBot, signal: AbortSignal): Promise<void> {
     try {
       const directory = await stat(candidate.cwd)
       if (!directory.isDirectory()) throw new Error('Working directory is not a directory')
@@ -831,7 +865,7 @@ export class BotController extends TypertRemoteService {
     this.busy.add(botId)
     let accepted = false
     try {
-      const record = await this.getBot(botId, signal)
+      const record = this.readBot(botId)
       const agent = await this.resolveAgent(record)
       signal.throwIfAborted()
       if (this.stopping) throw new RemoteError('bot/busy', 'Bot is stopping', { botId })
@@ -1069,7 +1103,7 @@ export class BotController extends TypertRemoteService {
     }
   }
 
-  private async resolveAgent(record: BotRecord, originalCwd = record.cwd): Promise<Agent> {
+  private async resolveAgent(record: StoredBot, originalCwd = record.cwd): Promise<Agent> {
     if (this.stopping) this.rejectConfiguration(record.botId, 'unavailable')
     const pending = this.activations.get(record.botId)
     if (pending !== undefined) return pending
@@ -1082,7 +1116,7 @@ export class BotController extends TypertRemoteService {
     }
   }
 
-  private async createOwnedAgent(record: BotRecord, originalCwd: string): Promise<Agent> {
+  private async createOwnedAgent(record: StoredBot, originalCwd: string): Promise<Agent> {
     const owned = this.handles.get(record.botId)
     if (owned !== undefined) return owned.agent
     const foreign = this.owner.agents.get(SessionId(record.sessionId))
@@ -1180,6 +1214,30 @@ class TextQueue implements AsyncIterable<string> {
   }
 }
 
+/** Copy approved configurations; retained capabilities keep their original values. */
+function snapshotCapabilities(
+  ids: readonly string[],
+  config: Config,
+  botId: string,
+  previous: Record<string, CapabilityPlugin[]> = {},
+): Record<string, CapabilityPlugin[]> {
+  return Object.fromEntries(
+    ids.map((id) => {
+      const plugins = Object.hasOwn(previous, id)
+        ? previous[id]
+        : Object.hasOwn(config.capabilities, id)
+          ? config.capabilities[id]
+          : undefined
+      if (plugins === undefined)
+        throw new RemoteError('bot/config-invalid', 'Unknown Bot capability', {
+          botId,
+          field: 'capabilities',
+        })
+      return [id, structuredClone(plugins)]
+    }),
+  )
+}
+
 /** Stable Loader plugin name. */
 export const name = 'bot'
 /** Required execution services; dependency disposal follows the Bot controller. */
@@ -1192,6 +1250,36 @@ export const inject = BotController.inject
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const domain = await ctx.storageDomain.open(botDomain)
+  try {
+    // Legacy records cannot recover historical options; freeze installed values once.
+    const migrate = (record: z.output<typeof storedBot>) => ({
+      ...record,
+      capabilityConfiguration: snapshotCapabilities(
+        record.capabilities,
+        config,
+        record.botId,
+        record.capabilityConfiguration,
+      ),
+    })
+    const records = domain.table('bots')
+    for (const id of records.keys()) {
+      const record = records.get(id)
+      if (record !== undefined && record.capabilityConfiguration === undefined)
+        await records.put(id, migrate(record))
+    }
+    const transactions = domain.table('configuration_transactions')
+    for (const id of transactions.keys()) {
+      const transaction = transactions.get(id)
+      if (transaction !== undefined)
+        await transactions.put(id, {
+          previous: migrate(transaction.previous),
+          candidate: migrate(transaction.candidate),
+        })
+    }
+  } catch (error) {
+    await domain.close()
+    throw error
+  }
   const controller = new BotController(
     ctx,
     config,

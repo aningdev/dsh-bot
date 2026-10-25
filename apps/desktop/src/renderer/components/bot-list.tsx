@@ -13,8 +13,10 @@ import { botListQueryOptions } from '@/renderer/actions/bot'
 import { CreateBotButton } from '@/renderer/components/bot-configuration'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 
+const statusLabels = { idle: '空闲', running: '运行中', unavailable: '暂不可用' }
+
 export default function BotList() {
-  const bots = useQuery(botListQueryOptions())
+  const bots = useQuery({ ...botListQueryOptions(), refetchInterval: 1000 })
   const selectedBotId = useWindowLayoutStore((state) => state.selectedBotId)
   const setSelectedBotId = useWindowLayoutStore((state) => state.setSelectedBotId)
   const navigate = useNavigate()
@@ -69,6 +71,7 @@ export default function BotList() {
                   <Button
                     className="w-full justify-start text-left whitespace-normal"
                     variant={selectedBotId === bot.botId ? 'secondary' : 'ghost'}
+                    aria-label={bot.name}
                     aria-pressed={selectedBotId === bot.botId}
                     onClick={() => {
                       setSelectedBotId(bot.botId)
@@ -76,6 +79,15 @@ export default function BotList() {
                     }}
                   >
                     <span className="truncate">{bot.name}</span>
+                    <span
+                      className="text-muted-foreground ml-auto shrink-0 text-xs"
+                      aria-hidden="true"
+                    >
+                      {statusLabels[bot.status]}
+                    </span>
+                    <span className="sr-only" role="status">
+                      {bot.name}：{statusLabels[bot.status]}
+                    </span>
                   </Button>
                 </li>
               ))}

@@ -1,7 +1,17 @@
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import {
+  access,
+  cp,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
@@ -72,6 +82,7 @@ export class RunnerService {
   private readonly directory: string
   private readonly plist: string
   private readonly loginPlist: string
+  private readonly stoppedFile: string
   private readonly domain: string
   private readonly target: string
   private pending: Promise<unknown> = Promise.resolve()
@@ -99,6 +110,7 @@ export class RunnerService {
       throw new Error('后台服务身份无效；请以当前桌面用户运行。')
     this.directory = path.join(options.home, 'service')
     this.plist = path.join(this.directory, 'runner.plist')
+    this.stoppedFile = path.join(this.directory, 'stopped')
     this.loginPlist = path.join(options.loginDirectory, options.label + '.plist')
     this.domain = 'gui/' + String(options.uid)
     this.target = this.domain + '/' + options.label
@@ -189,11 +201,60 @@ export class RunnerService {
       throw new Error('后台服务启动失败，请检查运行时安装后重试。')
   }
 
-  start(): Promise<void> {
+  /** First desktop launch starts the service unless the user explicitly stopped it. */
+  autoStart(): Promise<void> {
     return this.serialize(async () => {
+      if ((await this.inspect()).loaded || (await exists(this.stoppedFile))) return
       await this.installFiles()
       await this.bootstrap()
+      await this.options.waitReady?.()
     })
+  }
+
+  start(): Promise<void> {
+    return this.serialize(async () => {
+      if (!(await this.inspect()).loaded) {
+        await this.installFiles()
+        await this.bootstrap()
+      }
+      await rm(this.stoppedFile, { force: true })
+    })
+  }
+
+  private async markStopped(): Promise<void> {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 })
+    await this.atomicWrite(this.stoppedFile, 'stopped\n')
+  }
+
+  /** Back up quiescent application data, excluding runtime payloads and live connection files. */
+  private async backupData(): Promise<void> {
+    const root = path.join(this.directory, 'backups')
+    const id = new Date().toISOString().replaceAll(':', '-') + '-' + randomUUID()
+    const temporary = path.join(root, '.' + id + '.tmp')
+    const data = path.join(temporary, 'data')
+    let staged = false
+    try {
+      await mkdir(root, { recursive: true, mode: 0o700 })
+      await mkdir(temporary, { mode: 0o700 })
+      staged = true
+      await mkdir(data, { mode: 0o700 })
+      for (const entry of await readdir(this.options.home)) {
+        if (entry === 'service' || entry === 'run') continue
+        await cp(path.join(this.options.home, entry), path.join(data, entry), {
+          recursive: true,
+          verbatimSymlinks: true,
+          preserveTimestamps: true,
+        })
+      }
+      await this.atomicWrite(
+        path.join(temporary, 'backup.json'),
+        JSON.stringify({ createdAt: new Date().toISOString(), format: 1 }) + '\n',
+      )
+      await rename(temporary, path.join(root, id))
+    } catch (error) {
+      if (staged) await rm(temporary, { recursive: true, force: true })
+      throw new Error('应用数据备份失败，后台保持停止，未更新运行时。', { cause: error })
+    }
   }
 
   private alive(pid: number): boolean {
@@ -223,24 +284,30 @@ export class RunnerService {
     return this.serialize(async () => {
       const previous = await this.inspect()
       if (!previous.installed) throw new Error('请先安装后台。')
+      await this.markStopped()
       await this.stopJob()
+      await this.backupData()
       await this.installFiles()
       if (previous.loaded) {
         await this.bootstrap()
         await this.options.waitReady?.()
+        await rm(this.stoppedFile, { force: true })
       }
     })
   }
 
   /** Removing the job suppresses KeepAlive until an explicit start or enabled next login. */
   stop(): Promise<void> {
-    return this.serialize(() => this.stopJob())
+    return this.serialize(async () => {
+      await this.markStopped()
+      await this.stopJob()
+    })
   }
 
   setLoginAtStartup(enabled: boolean): Promise<void> {
     return this.serialize(async () => {
-      await this.installFiles()
       if (enabled) {
+        await this.installFiles()
         await mkdir(this.options.loginDirectory, { recursive: true, mode: 0o700 })
         await this.atomicWrite(this.loginPlist, await readFile(this.plist, 'utf8'))
       } else await rm(this.loginPlist, { force: true })
@@ -249,6 +316,7 @@ export class RunnerService {
 
   uninstall(): Promise<void> {
     return this.serialize(async () => {
+      await this.markStopped()
       await this.stopJob()
       await rm(this.loginPlist, { force: true })
       await rm(this.plist, { force: true })

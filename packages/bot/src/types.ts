@@ -22,6 +22,11 @@ export interface BotRecord extends BotConfiguration {
   readonly revision: number
 }
 
+/** Current execution state projected without activating a stored Bot. */
+export interface BotListEntry extends BotRecord {
+  readonly status: 'idle' | 'running' | 'unavailable'
+}
+
 /** Input for a new independent Bot. */
 export interface CreateBotRequest {
   readonly name: string

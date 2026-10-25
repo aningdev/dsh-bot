@@ -7,7 +7,7 @@ import { APP_CONFIG, updateRepository } from '@/shared/app-config'
 import { IPC_CHANNELS } from '@/shared/constants'
 
 import { rpcHandler } from './ipc/handler'
-import { runnerClient } from './runner'
+import { runnerClient, startLocalRunner } from './runner'
 import { isTrustedIpcSender } from './security'
 import { createAppWindow } from './window'
 
@@ -68,6 +68,17 @@ async function initializeApp() {
     rpcHandler.upgrade(port, { context: { window } })
     port.start()
   })
+  if (
+    process.platform === 'darwin' &&
+    !smokeTest &&
+    (app.isPackaged || process.env.DSH_BOT_RUNTIME_ROOT)
+  ) {
+    try {
+      await startLocalRunner()
+    } catch {
+      console.error('后台自动启动失败，请在后台服务中重试。')
+    }
+  }
   createWindow()
   if (app.isPackaged && !smokeTest && process.platform !== 'linux') {
     updateElectronApp({

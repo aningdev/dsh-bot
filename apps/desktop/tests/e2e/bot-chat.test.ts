@@ -82,6 +82,13 @@ test('a desktop opened during execution queues input without resending it', asyn
       const opened = await launchTestApp({ runnerHome: runner.home })
       try {
         const page = await opened.app.firstWindow()
+        const list = page.getByRole('list', { name: 'Bot 列表', exact: true })
+        await expect(list.getByRole('status').filter({ hasText: '忙碌的助手' })).toHaveText(
+          '忙碌的助手：运行中',
+        )
+        await expect(list.getByRole('status').filter({ hasText: '解锁助手' })).toHaveText(
+          '解锁助手：空闲',
+        )
         await page.getByRole('button', { name: '忙碌的助手', exact: true }).click()
         await page.getByRole('textbox', { name: '消息', exact: true }).fill('retry this draft')
         await page.getByRole('button', { name: '发送', exact: true }).click()
@@ -96,6 +103,9 @@ test('a desktop opened during execution queues input without resending it', asyn
           /* Drain the held observation. */
         }
         await expect(page.getByText('echo: retry this draft', { exact: true })).toBeVisible()
+        await expect(list.getByRole('status').filter({ hasText: '忙碌的助手' })).toHaveText(
+          '忙碌的助手：空闲',
+        )
         const history = await runner.client.remote.bot.history(bot.value.botId)
         expect(history).toEqual({
           ok: true,

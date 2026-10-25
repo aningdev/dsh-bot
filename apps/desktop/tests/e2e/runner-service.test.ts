@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -36,7 +36,7 @@ test('background controls show service state without starting or enabling login 
   }
 })
 
-test('shipped runtime installs and starts without developer tools and survives desktop reopening', async () => {
+test('shipped runtime starts automatically, backs up upgrades, and respects explicit stop after reopening', async () => {
   test.setTimeout(120_000)
   test.skip(process.platform !== 'darwin', 'LaunchAgent management is macOS only')
   const home = await mkdtemp(path.join(tmpdir(), 'runner-delivery-'))
@@ -44,7 +44,7 @@ test('shipped runtime installs and starts without developer tools and survives d
     path.dirname(readPackagedApp().executable),
     '../Resources/runner',
   )
-  const runtimeRoot = path.join(home, 'application-runtime')
+  const runtimeRoot = await mkdtemp(path.join(tmpdir(), 'runner-application-'))
   await cp(packagedRoot, runtimeRoot, { recursive: true, verbatimSymlinks: true })
   const uid = process.getuid?.()
   if (!uid) throw new Error('Run this acceptance test as a logged-in desktop user')
@@ -64,15 +64,13 @@ test('shipped runtime installs and starts without developer tools and survives d
     let page = await opened.app.firstWindow()
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
     let dialog = page.getByRole('dialog', { name: '后台服务', exact: true })
-    await dialog.getByRole('button', { name: '安装后台', exact: true }).click()
-    await expect(dialog.getByRole('status')).toHaveText('后台已停止', { timeout: 30_000 })
+    await expect(dialog.getByRole('status')).toHaveText('后台正在运行', { timeout: 30_000 })
     const loginStartup = dialog.getByRole('checkbox', { name: '登录时启动后台', exact: true })
     // Checked state follows the completed Main operation, not the click itself.
     await loginStartup.click()
     await expect(loginStartup).toBeChecked()
     await expect.poll(async () => (await service.status()).loginAtStartup).toBe(true)
-    expect((await service.status()).loaded).toBe(false)
-    await dialog.getByRole('button', { name: '启动后台', exact: true }).click()
+    expect((await service.status()).loaded).toBe(true)
     await expect(dialog.getByRole('status')).toHaveText('后台正在运行')
     await expect.poll(async () => (await service.status()).pid).not.toBeNull()
     await expect
@@ -126,11 +124,27 @@ test('shipped runtime installs and starts without developer tools and survives d
     await expect(create).toHaveCount(0)
     const beforeUpgrade = await readRunnerDescriptor(home)
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
+    await writeFile(path.join(home, 'backup-probe.txt'), 'preserved application data')
     await dialog.getByRole('button', { name: '更新后台', exact: true }).click()
+    const upgradeConfirmation = page.getByRole('alertdialog', { name: '更新后台？', exact: true })
+    await expect(upgradeConfirmation).toBeVisible()
+    await upgradeConfirmation.getByRole('button', { name: '取消', exact: true }).click()
+    expect((await readRunnerDescriptor(home)).instanceId).toBe(beforeUpgrade.instanceId)
+    await dialog.getByRole('button', { name: '更新后台', exact: true }).click()
+    await page.keyboard.press('Tab')
+    await upgradeConfirmation.getByRole('button', { name: '确认更新', exact: true }).focus()
+    await page.keyboard.press('Enter')
     await expect(dialog.getByText('后台运行时已更新。', { exact: true })).toBeVisible({
       timeout: 30_000,
     })
     expect((await readRunnerDescriptor(home)).instanceId).not.toBe(beforeUpgrade.instanceId)
+    const backups = path.join(home, 'service/backups')
+    const [backup] = await readdir(backups)
+    if (!backup) throw new Error('Upgrade must publish an application data backup')
+    expect(await readFile(path.join(backups, backup, 'data/backup-probe.txt'), 'utf8')).toBe(
+      'preserved application data',
+    )
+    expect(await readdir(path.join(backups, backup, 'data'))).not.toContain('run')
     await expect(dialog.getByRole('status')).toHaveText('后台正在运行')
     await expect(
       dialog.getByRole('checkbox', { name: '登录时启动后台', exact: true }),
@@ -141,6 +155,17 @@ test('shipped runtime installs and starts without developer tools and survives d
     expect(plist).not.toContain(runtimeRoot)
     expect(plist).not.toBe(previousPlist)
     await dialog.getByRole('button', { name: '停止后台', exact: true }).click()
+    const stopConfirmation = page.getByRole('alertdialog', { name: '停止后台？', exact: true })
+    await stopConfirmation.getByRole('button', { name: '取消', exact: true }).click()
+    expect((await service.status()).loaded).toBe(true)
+    await dialog.getByRole('button', { name: '停止后台', exact: true }).click()
+    await stopConfirmation.getByRole('button', { name: '确认停止', exact: true }).click()
+    await expect(dialog.getByRole('status')).toHaveText('后台已停止')
+    await opened.dispose()
+    opened = await launchTestApp({ runnerHome: home, runtimeRoot, withoutDevelopmentTools: true })
+    page = await opened.app.firstWindow()
+    await page.getByRole('button', { name: '后台服务', exact: true }).click()
+    dialog = page.getByRole('dialog', { name: '后台服务', exact: true })
     await expect(dialog.getByRole('status')).toHaveText('后台已停止')
     const reopenedLoginStartup = dialog.getByRole('checkbox', {
       name: '登录时启动后台',
@@ -158,6 +183,9 @@ test('shipped runtime installs and starts without developer tools and survives d
     } finally {
       await opened.dispose()
     }
-    await rm(home, { recursive: true, force: true, maxRetries: 5 })
+    await Promise.all([
+      rm(home, { recursive: true, force: true, maxRetries: 5 }),
+      rm(runtimeRoot, { recursive: true, force: true, maxRetries: 5 }),
+    ])
   }
 })

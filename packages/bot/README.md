@@ -33,7 +33,7 @@ Remote namespace 为 `bot`，方法包括 `create`、`configurationOptions`、`g
 | `capabilities`                     | 已部署能力的唯一 id 列表，映射为该 Bot 的 preset 插件                                 |
 | `inputMode`                        | `queue` 在下一轮处理，`steer` 在下一步进入；缺省为 `queue`                            |
 
-插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。产品 bundle 已批准 `files`（上游 read、read_image、write、edit）及 `commands`（上游 bash）能力，并提供复制这两项能力的「工作区助手」模板。省略模板仍创建无工具的空白 Bot。文件与进程操作沿用基础 profile 的 sandbox、read-before-write 和审批服务；命令能力关闭后台运行与超时转后台，不提供未配套的后台任务控制。sandbox 权限根仍遵循 Session 原始 header，修改工作目录不扩大权限。
+插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。创建或首次启用能力时，执行侧将批准的插件配置复制为该 Bot 的私有快照；保留的能力在编辑和重启后继续使用原值，部署表修改或删除不影响它。停用后再次启用会复制当前批准值。快照不通过 Remote 返回；旧记录首次升级时只能复制当时部署值，无法追溯历史配置。产品 bundle 已批准 `files`（上游 read、read_image、write、edit）及 `commands`（上游 bash）能力，并提供复制这两项能力的「工作区助手」模板。省略模板仍创建无工具的空白 Bot。文件与进程操作沿用基础 profile 的 sandbox、read-before-write 和审批服务；命令能力关闭后台运行与超时转后台，不提供未配套的后台任务控制。sandbox 权限根仍遵循 Session 原始 header，修改工作目录不扩大权限。
 
 保存先占用该 Bot 的替换状态，并通过上游 `runMaintenance()` 原子占用真正空闲的阶段。校验目录、模型和候选 preset 后写入持久事务记录及候选配置；再次检查 inbox，再在维护回调内发起旧句柄释放，退出回调后等待释放完成。随后替换稳定 preset，在同一 Session 上恢复 Agent；尚无日志时创建该 Session。确认持久化后删除事务记录，返回成功。应用期间 `get`、`list` 保持返回旧的已提交配置，发送及历史读取被拒绝。
 
@@ -54,6 +54,8 @@ Remote namespace 为 `bot`，方法包括 `create`、`configurationOptions`、`g
 ## 记录与执行
 
 Bot 记录使用上游 `storageDomain`，domain 为 `dsh_bot`，版本 1，表为 `bots` 和 `configuration_transactions`。原始六字段记录仍可读取，新增字段补为版本 0、空指令、空能力及空参数覆盖；Bot 和 Session 身份不变。domain 在插件激活时打开并校验，插件清理等待配置、冷初始化、操作窗口、轮次持久化、Agent 和 preset 释放，再关闭 domain；Runner 先在 profile 退出钩子中完成排空。Zod 固定为上游使用的 4.4.3。
+
+`list` 在公开配置之外返回 `status`（`idle`、`running` 或 `unavailable`），直接读取现有 Agent 状态，冷 Bot 不会因列表查询被激活；配置替换、故障或停止接纳时显示不可用。
 
 每个 Bot 以 `dsh-bot:<botId>` 注册独立 preset，Session ID 稳定。发送时按持久存储状态选择 create/resume；控制器持有并释放所有创建的句柄。标准 Session Controller 通过 Host 委托调用同一个所有者，不能独立冷恢复 Bot 或覆盖其模型选择。
 

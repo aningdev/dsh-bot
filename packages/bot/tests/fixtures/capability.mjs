@@ -3,10 +3,10 @@ export const name = 'probe-capability'
 export const inject = ['tools']
 
 /** Register one inert tool so tests can observe the model-facing capability set. */
-export function apply(ctx) {
+export function apply(ctx, config) {
   ctx.effect(() =>
     ctx.tools.register({
-      name: 'probe',
+      name: config.toolName ?? 'probe',
       description: 'Report that the probe capability is enabled.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
       output: {

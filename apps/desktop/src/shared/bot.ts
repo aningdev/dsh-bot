@@ -4,6 +4,7 @@ export const MAX_MESSAGE_LENGTH = 32_768
 export interface BotSummary {
   readonly botId: string
   readonly name: string
+  readonly status: 'idle' | 'running' | 'unavailable'
 }
 
 export interface BotConfiguration {
@@ -18,7 +19,7 @@ export interface BotConfiguration {
   readonly inputMode: InputMode
 }
 
-export interface BotDetails extends BotSummary, BotConfiguration {
+export interface BotDetails extends Omit<BotSummary, 'status'>, BotConfiguration {
   readonly sessionId: string
   readonly revision: number
 }

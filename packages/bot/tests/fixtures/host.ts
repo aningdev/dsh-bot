@@ -60,6 +60,9 @@ export async function createBotHost(
   home: string,
   adapter: LlmAdapter = new FakeModelAdapter(),
   templates: readonly BotTemplate[] = [],
+  capabilities: Config['capabilities'] = {
+    probe: [{ name: new URL('./capability.mjs', import.meta.url).href, config: {} }],
+  },
 ): Promise<Context> {
   const ctx = new Context()
   ctx.baseUrl = new URL('./', import.meta.url).href
@@ -85,9 +88,7 @@ export async function createBotHost(
       provider: 'fake',
       model: 'fake-1',
       templates: [...templates],
-      capabilities: {
-        probe: [{ name: new URL('./capability.mjs', import.meta.url).href, config: {} }],
-      },
+      capabilities,
     }
     await ctx.plugin({ name: 'bot', inject, apply }, config)
     return ctx
