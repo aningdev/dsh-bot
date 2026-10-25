@@ -1,6 +1,7 @@
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test'
 
 import { launchTestApp } from './fixtures'
+import { lockedScreenReason } from './session-lock'
 
 /*
  * Using Playwright with Electron:
@@ -60,6 +61,8 @@ test('three columns span the viewport and their content fills the available heig
 })
 
 test('native fullscreen adapts both panel buttons and preserves full content height', async () => {
+  const lockedReason = lockedScreenReason()
+  test.skip(lockedReason !== false, lockedReason || undefined)
   const page = await electronApp.firstWindow()
   const frame = page.locator('.window-frame')
   const leftToggle = page.getByRole('button', { name: 'Toggle left panel' })
