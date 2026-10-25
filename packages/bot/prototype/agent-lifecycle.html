@@ -15,88 +15,278 @@
         --danger: #a23b32;
         --warn: #8a6a1f;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         padding: 48px 24px 96px;
         background: var(--bg);
         color: var(--ink);
-        font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font:
+          15px/1.7 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'PingFang SC',
+          'Hiragino Sans GB',
+          'Microsoft YaHei',
+          sans-serif;
       }
-      main { max-width: 880px; margin: 0 auto; }
-      h1 { font-size: 24px; line-height: 1.35; margin: 0 0 8px; letter-spacing: -0.01em; }
-      .lede { margin: 0 0 8px; color: var(--muted); }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 24px;
+        line-height: 1.35;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
       .question {
-        margin: 16px 0 40px; padding: 16px 20px; background: var(--panel);
-        border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px;
+        margin: 16px 0 40px;
+        padding: 16px 20px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 4px;
       }
-      .question strong { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); letter-spacing: 0.04em; }
-      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
-      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px 24px; }
-      .field { min-width: 0; }
-      .field dt { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
-      .field dd { margin: 0; font-weight: 500; }
-      .field dd.mono { font-variant-numeric: tabular-nums; }
-      .notice { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line); }
-      .notice span { color: var(--muted); font-size: 12px; display: block; margin-bottom: 2px; }
-      .tag { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid var(--line); }
-      .tag.ok { color: var(--accent); border-color: #cfded8; background: #f1f6f4; }
-      .tag.bad { color: var(--danger); border-color: #e6cdc9; background: #fbf1ef; }
-      .tag.wait { color: var(--warn); border-color: #e8ddc2; background: #fbf7ec; }
-      .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+      .question strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin: 40px 0 12px;
+        font-weight: 600;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 20px 24px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 18px 24px;
+      }
+      .field {
+        min-width: 0;
+      }
+      .field dt {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .field dd {
+        margin: 0;
+        font-weight: 500;
+      }
+      .field dd.mono {
+        font-variant-numeric: tabular-nums;
+      }
+      .notice {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px dashed var(--line);
+      }
+      .notice span {
+        color: var(--muted);
+        font-size: 12px;
+        display: block;
+        margin-bottom: 2px;
+      }
+      .tag {
+        display: inline-block;
+        margin-right: 8px;
+        padding: 1px 8px;
+        border-radius: 99px;
+        font-size: 12px;
+        border: 1px solid var(--line);
+      }
+      .tag.ok {
+        color: var(--accent);
+        border-color: #cfded8;
+        background: #f1f6f4;
+      }
+      .tag.bad {
+        color: var(--danger);
+        border-color: #e6cdc9;
+        background: #fbf1ef;
+      }
+      .tag.wait {
+        color: var(--warn);
+        border-color: #e8ddc2;
+        background: #fbf7ec;
+      }
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
       button {
-        font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 5px; cursor: pointer;
-        background: var(--panel); border: 1px solid #d4d4cf; color: var(--ink);
+        font: inherit;
+        font-size: 14px;
+        padding: 7px 14px;
+        border-radius: 5px;
+        cursor: pointer;
+        background: var(--panel);
+        border: 1px solid #d4d4cf;
+        color: var(--ink);
       }
-      button:hover:not(:disabled) { border-color: #b9b9b2; }
-      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-      button.primary:hover:not(:disabled) { background: #274d43; }
-      button:disabled { opacity: 0.45; cursor: not-allowed; }
-      .effects { margin-top: 16px; font-size: 14px; }
-      .effects ol { margin: 6px 0 0; padding-left: 20px; }
-      .effects li { color: var(--muted); }
-      .effects li.current { color: var(--ink); font-weight: 500; }
-      .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
-      .tabs button { border-radius: 5px 5px 0 0; border-bottom-color: transparent; background: transparent; color: var(--muted); font-size: 13px; }
-      .tabs button[aria-selected="true"] { background: var(--panel); border-color: var(--line); border-bottom-color: var(--panel); color: var(--ink); }
-      .scenario { border: 1px solid var(--line); border-radius: 0 6px 6px 6px; background: var(--panel); padding: 20px 24px; }
-      .scenario p { margin: 0 0 14px; color: var(--muted); }
-      .steps { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-      .steps button.done { color: var(--muted); text-decoration: line-through; }
-      .hint { margin-top: 12px; font-size: 12px; color: var(--muted); }
-      .log { margin-top: 16px; font-size: 13px; color: var(--muted); max-height: 150px; overflow: auto; }
-      .log div { padding: 1px 0; }
-      .log div:first-child { color: var(--ink); }
-      .toggle { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+      button:hover:not(:disabled) {
+        border-color: #b9b9b2;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.primary:hover:not(:disabled) {
+        background: #274d43;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .effects {
+        margin-top: 16px;
+        font-size: 14px;
+      }
+      .effects ol {
+        margin: 6px 0 0;
+        padding-left: 20px;
+      }
+      .effects li {
+        color: var(--muted);
+      }
+      .effects li.current {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .tabs button {
+        border-radius: 5px 5px 0 0;
+        border-bottom-color: transparent;
+        background: transparent;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .tabs button[aria-selected='true'] {
+        background: var(--panel);
+        border-color: var(--line);
+        border-bottom-color: var(--panel);
+        color: var(--ink);
+      }
+      .scenario {
+        border: 1px solid var(--line);
+        border-radius: 0 6px 6px 6px;
+        background: var(--panel);
+        padding: 20px 24px;
+      }
+      .scenario p {
+        margin: 0 0 14px;
+        color: var(--muted);
+      }
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+      }
+      .steps button.done {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      .hint {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .log {
+        margin-top: 16px;
+        font-size: 13px;
+        color: var(--muted);
+        max-height: 150px;
+        overflow: auto;
+      }
+      .log div {
+        padding: 1px 0;
+      }
+      .log div:first-child {
+        color: var(--ink);
+      }
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Bot 配置保存与 Agent 生命周期</h1>
-      <p class="lede">原型 · 不是生产代码。用一个可点的状态模型检查：用户保存 Bot 配置的同时又存在执行、待处理输入、上下文压缩和冷恢复请求时，Bot 服务到底允许发生什么。</p>
+      <p class="lede">
+        原型 · 不是生产代码。用一个可点的状态模型检查：用户保存 Bot
+        配置的同时又存在执行、待处理输入、上下文压缩和冷恢复请求时，Bot 服务到底允许发生什么。
+      </p>
 
       <div class="question">
         <strong>要回答的问题</strong>
-        保存 Bot 配置要求「没有执行、也没有待处理输入」，而销毁旧 Agent 会取消并清空 inbox。但停止执行会保留待处理输入，维护期又占用真正的空闲窗口，读取历史还会触发冷恢复。这四种情况交错时，哪些操作应立刻生效、哪些必须排队、哪些必须明确拒绝？客户端在这个过程中应该看到什么？
+        保存 Bot 配置要求「没有执行、也没有待处理输入」，而销毁旧 Agent 会取消并清空
+        inbox。但停止执行会保留待处理输入，维护期又占用真正的空闲窗口，读取历史还会触发冷恢复。这四种情况交错时，哪些操作应立刻生效、哪些必须排队、哪些必须明确拒绝？客户端在这个过程中应该看到什么？
       </div>
 
       <h2>当前状态</h2>
       <div class="panel">
         <dl class="grid">
-          <div class="field"><dt>Agent 阶段</dt><dd id="s-phase"></dd></div>
-          <div class="field"><dt>已生效配置</dt><dd id="s-applied"></dd></div>
-          <div class="field"><dt>已保存配置</dt><dd id="s-saved"></dd></div>
-          <div class="field"><dt>待处理输入</dt><dd id="s-inbox"></dd></div>
-          <div class="field"><dt>待完成的系统动作</dt><dd id="s-effects"></dd></div>
+          <div class="field">
+            <dt>Agent 阶段</dt>
+            <dd id="s-phase"></dd>
+          </div>
+          <div class="field">
+            <dt>已生效配置</dt>
+            <dd id="s-applied"></dd>
+          </div>
+          <div class="field">
+            <dt>已保存配置</dt>
+            <dd id="s-saved"></dd>
+          </div>
+          <div class="field">
+            <dt>待处理输入</dt>
+            <dd id="s-inbox"></dd>
+          </div>
+          <div class="field">
+            <dt>待完成的系统动作</dt>
+            <dd id="s-effects"></dd>
+          </div>
         </dl>
         <div class="notice">
           <span>客户端此刻看到</span>
           <div id="s-client"></div>
         </div>
         <div class="effects" id="s-effectlist"></div>
-        <label class="toggle"><input type="checkbox" id="fail-toggle" /> 模拟下一次配置装配失败（用于看回退行为）</label>
+        <label class="toggle"
+          ><input type="checkbox" id="fail-toggle" />
+          模拟下一次配置装配失败（用于看回退行为）</label
+        >
       </div>
 
       <h2>自由操作</h2>
@@ -163,11 +353,17 @@
       }
 
       function beginReplace(s, version) {
-        const effects = s.phase === 'cold'
-          ? [{ kind: 'persist', version }, { kind: 'resume', version }]
-          : [{ kind: 'persist', version }, { kind: 'dispose' }, { kind: 'resume', version }]
-        return say(plan({ ...s, phase: 'replacing' }, ...effects),
-          `正在把配置应用到第 ${version} 版`)
+        const effects =
+          s.phase === 'cold'
+            ? [
+                { kind: 'persist', version },
+                { kind: 'resume', version },
+              ]
+            : [{ kind: 'persist', version }, { kind: 'dispose' }, { kind: 'resume', version }]
+        return say(
+          plan({ ...s, phase: 'replacing' }, ...effects),
+          `正在把配置应用到第 ${version} 版`,
+        )
       }
 
       function react(state, action) {
@@ -179,13 +375,23 @@
           case 'QUEUE_MESSAGE':
           case 'STEER_MESSAGE': {
             if (s.phase === 'faulted') return say(s, '执行已停止接纳，消息被拒绝')
-            if (s.phase === 'replacing') return say(s, '正在更换 Agent，消息被拒绝：此刻接纳会被销毁的 inbox 吞掉')
+            if (s.phase === 'replacing')
+              return say(s, '正在更换 Agent，消息被拒绝：此刻接纳会被销毁的 inbox 吞掉')
             const key = action.type === 'STEER_MESSAGE' ? 'step' : 'turn'
             const added = { ...s, inbox: { ...s.inbox, [key]: s.inbox[key] + 1 } }
-            if (s.phase === 'cold') return say(plan(added, { kind: 'resume', version: null }), '收到第一条消息，正在初始化')
+            if (s.phase === 'cold')
+              return say(
+                plan(added, { kind: 'resume', version: null }),
+                '收到第一条消息，正在初始化',
+              )
             if (s.phase === 'maintenance') return say(added, '已排入待处理输入，等维护结束再继续')
             if (s.phase === 'ready') return say(startTurn(added), '开始执行这一轮')
-            return say(added, key === 'step' ? '已排入下一步，执行到这个边界时取用' : '已排入下一轮，当前执行完成后继续')
+            return say(
+              added,
+              key === 'step'
+                ? '已排入下一步，执行到这个边界时取用'
+                : '已排入下一轮，当前执行完成后继续',
+            )
           }
 
           case 'TURN_COMPLETE': {
@@ -210,21 +416,28 @@
           }
 
           case 'START_MAINTENANCE': {
-            if (s.phase !== 'ready') return say(s, `维护只能从真正空闲开始；当前是「${PHASE_LABEL[s.phase]}」`)
-            return say({ ...s, phase: 'maintenance' }, queued(s)
-              ? '已占用空闲期做维护；待处理输入会等维护结束'
-              : '已占用空闲期做维护')
+            if (s.phase !== 'ready')
+              return say(s, `维护只能从真正空闲开始；当前是「${PHASE_LABEL[s.phase]}」`)
+            return say(
+              { ...s, phase: 'maintenance' },
+              queued(s) ? '已占用空闲期做维护；待处理输入会等维护结束' : '已占用空闲期做维护',
+            )
           }
 
           case 'END_MAINTENANCE': {
             if (s.phase !== 'maintenance') return say(s, '当前没有维护在进行')
             const after = startTurn({ ...s, phase: 'ready' })
-            return say(after, after.phase === 'running' ? '维护结束，接着执行待处理输入' : '维护结束')
+            return say(
+              after,
+              after.phase === 'running' ? '维护结束，接着执行待处理输入' : '维护结束',
+            )
           }
 
           case 'READ_HISTORY': {
-            if (s.phase === 'cold') return say(plan(s, { kind: 'resume', version: null }), '读取历史触发冷恢复')
-            if (s.phase === 'replacing') return say(s, '配置更换中，读取历史被拒绝：冷恢复必须由同一所有者协调')
+            if (s.phase === 'cold')
+              return say(plan(s, { kind: 'resume', version: null }), '读取历史触发冷恢复')
+            if (s.phase === 'replacing')
+              return say(s, '配置更换中，读取历史被拒绝：冷恢复必须由同一所有者协调')
             if (s.phase === 'faulted') return say(s, '执行已停止接纳')
             return say(s, '已有活动 Agent，直接读历史，不触发恢复')
           }
@@ -232,7 +445,8 @@
           case 'SAVE_CONFIG': {
             const version = Math.max(s.applied, s.saved) + 1
             const blocked = idleWindowBlockedBy(s)
-            if (blocked !== null) return say(s, `保存被拒绝：${blocked}。没有「已保存待应用」这种状态`)
+            if (blocked !== null)
+              return say(s, `保存被拒绝：${blocked}。没有「已保存待应用」这种状态`)
             return beginReplace(s, version)
           }
 
@@ -241,7 +455,10 @@
             const [head, ...rest] = s.effects
             const working = { ...s, effects: rest }
             if (head.kind === 'persist') {
-              return say({ ...working, saved: head.version }, `第 ${head.version} 版配置已写入，但还没生效`)
+              return say(
+                { ...working, saved: head.version },
+                `第 ${head.version} 版配置已写入，但还没生效`,
+              )
             }
             if (head.kind === 'dispose') return say(working, '旧 Agent 已销毁，待处理输入随之清空')
             // resume: version === null is the plain first initialization.
@@ -250,10 +467,16 @@
               return say(after, after.phase === 'running' ? '已初始化，开始执行' : '已初始化')
             }
             if (s.failNextConfigApply) {
-              return say({ ...working, phase: 'faulted', failNextConfigApply: false, saved: s.applied },
-                '新配置装配失败：已回退旧配置并停止接纳，客户端不能显示已生效')
+              return say(
+                { ...working, phase: 'faulted', failNextConfigApply: false, saved: s.applied },
+                '新配置装配失败：已回退旧配置并停止接纳，客户端不能显示已生效',
+              )
             }
-            const applied = { ...working, applied: head.version, saved: Math.max(s.saved, head.version) }
+            const applied = {
+              ...working,
+              applied: head.version,
+              saved: Math.max(s.saved, head.version),
+            }
             const after = startTurn({ ...applied, phase: 'ready' })
             return say(after, `第 ${head.version} 版配置已生效，下一次执行使用新配置`)
           }
@@ -378,12 +601,15 @@
         el('s-phase').textContent = PHASE_LABEL[state.phase]
         el('s-applied').textContent = `第 ${state.applied} 版`
         el('s-saved').textContent =
-          state.saved === state.applied ? `第 ${state.saved} 版（与生效一致）` : `第 ${state.saved} 版（尚未生效）`
+          state.saved === state.applied
+            ? `第 ${state.saved} 版（与生效一致）`
+            : `第 ${state.saved} 版（尚未生效）`
         el('s-inbox').textContent =
           state.inbox.turn + state.inbox.step === 0
             ? '无'
             : `下一轮 ${state.inbox.turn} 条 · 下一步 ${state.inbox.step} 条`
-        el('s-effects').textContent = state.effects.length === 0 ? '无' : `${state.effects.length} 个`
+        el('s-effects').textContent =
+          state.effects.length === 0 ? '无' : `${state.effects.length} 个`
 
         const client = el('s-client')
         client.textContent = state.client

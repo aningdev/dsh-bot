@@ -1,3 +1,6 @@
+# Local agent goal state
+.pi/
+
 # Harness and Runner build artifacts
 packages/bot/lib/
 apps/runner/lib/
