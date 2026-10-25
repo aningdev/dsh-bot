@@ -704,23 +704,31 @@ export class BotController extends TypertRemoteService {
    */
   @Remote('inputState')
   async inputState(botId: string, signal: AbortSignal): Promise<BotInputState> {
-    return this.withInputAgent(botId, signal, async (agent, record) => ({
-      status: agent.status,
-      mode: record.inputMode ?? 'queue',
-      pending: [
-        ...agent.inbox.nextTurn.map((message) => ({ message, mode: 'queue' as const })),
-        ...agent.inbox.nextStep.map((message) => ({ message, mode: 'steer' as const })),
-      ]
-        .filter(({ message }) => message.source.kind === 'user')
-        .map(({ message, mode }) => ({
-          id: message.id,
-          text: message.content
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join(''),
-          mode,
-        })),
-    }))
+    return this.withInputAgent(botId, signal, async (agent, record) => {
+      const lastTurn = agent.session.snapshotEvents().findLast((event) => event.type === 'turn/end')
+      const reason = lastTurn?.data.reason
+      return {
+        interrupted:
+          agent.status === 'idle' &&
+          (reason?.kind === 'interrupted' ||
+            (reason?.kind === 'aborted' && reason.reason.kind === 'disposed')),
+        status: agent.status,
+        mode: record.inputMode ?? 'queue',
+        pending: [
+          ...agent.inbox.nextTurn.map((message) => ({ message, mode: 'queue' as const })),
+          ...agent.inbox.nextStep.map((message) => ({ message, mode: 'steer' as const })),
+        ]
+          .filter(({ message }) => message.source.kind === 'user')
+          .map(({ message, mode }) => ({
+            id: message.id,
+            text: message.content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join(''),
+            mode,
+          })),
+      }
+    })
   }
 
   /**

@@ -50,6 +50,8 @@ export interface PendingInput {
 }
 
 export interface BotInputState {
+  /** The last durable turn was interrupted by process loss or lifecycle disposal. */
+  readonly interrupted: boolean
   readonly status: 'idle' | 'running'
   readonly mode: InputMode
   readonly pending: readonly PendingInput[]

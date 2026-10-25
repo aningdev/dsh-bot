@@ -72,6 +72,40 @@ afterEach(async () => {
 })
 
 describe('Bot Controller public contract', () => {
+  test('a durable unfinished turn restores as interrupted without waking retained input', async () => {
+    const directory = await home()
+    const first = await host(directory)
+    const bot = await first.botController.createBot({ name: 'interrupted', cwd: directory }, signal)
+    await first.botController.inputState(bot.botId, signal)
+    const agent = first.agents.get(SessionId(bot.sessionId))!
+    // Reconstruct the durable prefix left when a process dies before turn/end.
+    agent.session.append('turn/start', { turn: 1 })
+    const queued = createUserMessage({
+      content: [{ type: 'text', text: 'retained input' }],
+      source: { kind: 'user' },
+    })
+    agent.send(queued, 'next-turn', false)
+    await first.sessions.flush(agent.session)
+    await closeHost(first)
+    const second = await host(directory)
+    const recovered = await second.botController.inputState(bot.botId, signal)
+    expect(recovered).toMatchObject({
+      status: 'idle',
+      interrupted: true,
+      pending: [{ id: queued.id, text: 'retained input' }],
+    })
+    expect(await second.botController.history(bot.botId, signal)).toEqual([])
+    expect(await second.botController.inputState(bot.botId, signal)).toEqual(recovered)
+    await second.botController.withdraw(bot.botId, queued.id, signal)
+    expect(await answer(second, bot.botId, 'new explicit request')).toBe(
+      'echo: new explicit request',
+    )
+    expect(await second.botController.inputState(bot.botId, signal)).toMatchObject({
+      status: 'idle',
+      interrupted: false,
+      pending: [],
+    })
+  })
   test('template creation copies configuration and survives template changes after restart', async () => {
     const directory = await home()
     const first = await createBotHost(directory, new FakeModelAdapter(), [

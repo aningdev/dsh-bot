@@ -68,6 +68,8 @@ export interface PendingInput {
 
 /** Current execution and canonical pending input; reading does not start work. */
 export interface BotInputState {
+  /** The last durable turn was interrupted by process loss or lifecycle disposal. */
+  readonly interrupted: boolean
   readonly status: 'idle' | 'running'
   readonly mode: 'queue' | 'steer'
   readonly pending: readonly PendingInput[]

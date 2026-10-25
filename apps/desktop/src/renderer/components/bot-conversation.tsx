@@ -237,6 +237,11 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
           </Button>
         </div>
       </div>
+      {inputState.data?.interrupted && (
+        <p role="status" className="text-muted-foreground text-sm">
+          上次执行已中断。不会自动重发消息或重跑工具；待处理消息仍保留，请先查看记录。
+        </p>
+      )}
       <div
         ref={transcript}
         role="log"

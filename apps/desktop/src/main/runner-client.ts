@@ -58,6 +58,7 @@ const pendingInputSchema = z.object({
   mode: z.enum(['queue', 'steer']),
 })
 const inputStateSchema = z.object({
+  interrupted: z.boolean().default(false),
   status: z.enum(['idle', 'running']),
   mode: z.enum(['queue', 'steer']),
   pending: z.array(pendingInputSchema),

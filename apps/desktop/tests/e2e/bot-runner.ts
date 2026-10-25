@@ -38,6 +38,14 @@ export async function startTestRunner(existingHome?: string) {
   })
   const client = new Context()
   let disposed = false
+  let crashed = false
+  const crash = async () => {
+    const exited = once(child, 'exit')
+    if (!child.kill('SIGKILL')) throw new Error('Runner crash probe could not send SIGKILL')
+    const [, signal] = await exited
+    if (signal !== 'SIGKILL') throw new Error('Runner did not exit from the crash probe')
+    crashed = true
+  }
   const dispose = async (options: { keepHome?: boolean } = {}) => {
     if (disposed) return
     disposed = true
@@ -71,7 +79,7 @@ export async function startTestRunner(existingHome?: string) {
       } finally {
         clearTimeout(timer)
       }
-    } else if (child.exitCode !== 0)
+    } else if (child.exitCode !== 0 && !(crashed && child.signalCode === 'SIGKILL'))
       failures.push(new Error('Runner exited unexpectedly: ' + stderr))
     try {
       if (!options.keepHome) await rm(home, { recursive: true, force: true })
@@ -148,7 +156,7 @@ export async function startTestRunner(existingHome?: string) {
           else resolve()
         })
       })
-    return { home, client, child, dispose, releaseTool, diagnostics: () => stderr }
+    return { home, client, child, dispose, crash, releaseTool, diagnostics: () => stderr }
   } catch (error) {
     try {
       await dispose()

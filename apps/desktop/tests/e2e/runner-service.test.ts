@@ -89,6 +89,29 @@ test('shipped runtime installs and starts without developer tools and survives d
     await expect(
       page.getByText('暂无 Bot。新建 Bot 后即可开始对话。', { exact: true }),
     ).toBeVisible()
+    // A dead instance's endpoint must not be reused after launchd restarts it.
+    const previous = await readRunnerDescriptor(home)
+    if (pid === null) throw new Error('Runner must be running before the crash probe')
+    process.kill(pid, 'SIGKILL')
+    await expect.poll(async () => (await service.status()).pid, { timeout: 25_000 }).not.toBe(pid)
+    await expect
+      .poll(
+        async () => {
+          try {
+            return (await readRunnerDescriptor(home)).instanceId !== previous.instanceId
+          } catch {
+            return false
+          }
+        },
+        { timeout: 25_000 },
+      )
+      .toBe(true)
+    // This first catalog request must authenticate against the replacement instance.
+    await page.getByRole('button', { name: '新建 Bot', exact: true }).click()
+    const create = page.getByRole('dialog', { name: '新建 Bot', exact: true })
+    await expect(create.getByLabel('模板', { exact: true })).toContainText('空白助手')
+    await page.keyboard.press('Escape')
+    await expect(create).toHaveCount(0)
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
     await dialog.getByRole('button', { name: '停止后台', exact: true }).click()
     await expect(dialog.getByRole('status')).toHaveText('后台已停止')
