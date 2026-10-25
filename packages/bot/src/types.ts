@@ -8,6 +8,8 @@ export interface BotConfiguration {
   readonly instructions: string
   readonly capabilities: readonly string[]
   readonly maxTokens: number | null
+  /** Pending inputs join the next turn by default, or the next step when steering. */
+  readonly inputMode?: 'queue' | 'steer'
   readonly reasoningEffort: string | null
 }
 
@@ -41,6 +43,20 @@ export type ConfigurationRejectionReason =
 
 /** Text published by an executing turn, followed by a durability acknowledgement. */
 export type BotFrame = { readonly type: 'text'; readonly text: string } | { readonly type: 'done' }
+
+/** A text input still owned by the standard Harness inbox. */
+export interface PendingInput {
+  readonly id: string
+  readonly text: string
+  readonly mode: 'queue' | 'steer'
+}
+
+/** Current execution and canonical pending input; reading does not start work. */
+export interface BotInputState {
+  readonly status: 'idle' | 'running'
+  readonly mode: 'queue' | 'steer'
+  readonly pending: readonly PendingInput[]
+}
 
 /** A user or assistant message projected from the canonical Session log. */
 export interface ChatMessage {

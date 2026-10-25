@@ -48,7 +48,8 @@
     "@deepseek-ai/dsh-api-gateway@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-api-gateway@0.2.1-rc.2.patch",
     "@deepseek-ai/dsh-api-session-controller@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-api-session-controller@0.2.1-rc.2.patch",
     "@deepseek-ai/dsh-client-file-upload@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-client-file-upload@0.2.1-rc.2.patch",
-    "@deepseek-ai/dsh@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh@0.2.1-rc.2.patch"
+    "@deepseek-ai/dsh@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh@0.2.1-rc.2.patch",
+    "@deepseek-ai/dsh-agent-loop@0.2.1-rc.2": "patches/@deepseek-ai%2Fdsh-agent-loop@0.2.1-rc.2.patch"
   },
   "trustedDependencies": [
     "electron",

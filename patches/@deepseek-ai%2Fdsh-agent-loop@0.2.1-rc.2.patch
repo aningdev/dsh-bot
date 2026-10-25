@@ -1,0 +1,13 @@
+diff --git a/lib/index.js b/lib/index.js
+index 332c382bc90be78ab38b595c99f046f9d15d3f27..77b51ef5ccb8452e74accaf7bc7adfa300658e6c 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1711,7 +1711,7 @@ var AgentLoop = class extends Service {
+ 				if (machine === void 0) await machineReady.promise;
+ 				/* v8 ignore next -- setup failure untracks this disposer before resolving without a machine. */
+ 				if (machine !== void 0) {
+-					machine.cancel({ kind: "disposed" });
++					machine.cancel({ kind: "disposed" }, { keepInbox: true });
+ 					await machine.whenIdle();
+ 				}
+ 			} catch (error) {

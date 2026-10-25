@@ -13,6 +13,20 @@ export interface ChatMessage {
 
 export type BotFrame = { readonly type: 'text'; readonly text: string } | { readonly type: 'done' }
 
+export type InputMode = 'queue' | 'steer'
+
+export interface PendingInput {
+  readonly id: string
+  readonly text: string
+  readonly mode: InputMode
+}
+
+export interface BotInputState {
+  readonly status: 'idle' | 'running'
+  readonly mode: InputMode
+  readonly pending: readonly PendingInput[]
+}
+
 export type ApprovalDecision = 'allowed-once' | 'rejected'
 
 export interface PendingApproval {

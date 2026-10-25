@@ -16,6 +16,8 @@ export const acknowledgeToolsInputSchema = z.strictObject({
   revision: z.number().int().positive(),
 })
 
+export const withdrawInputSchema = historyInputSchema.extend({ messageId: z.uuid() })
+
 export const sendInputSchema = historyInputSchema.extend({
   text: z
     .string({ error: '请输入消息内容。' })

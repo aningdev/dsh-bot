@@ -9,6 +9,7 @@ import {
   decideApprovalInputSchema,
   historyInputSchema,
   sendInputSchema,
+  withdrawInputSchema,
 } from './schemas'
 
 function ipcError(error: unknown): ORPCError<string, unknown> {
@@ -29,6 +30,34 @@ export function createBotHandlers(client: RunnerClient) {
     history: os.input(historyInputSchema).handler(async ({ input }) => {
       try {
         return await client.history(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    inputState: os.input(historyInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.inputState(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    submit: os.input(sendInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.submit(input.botId, input.text)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    stop: os.input(historyInputSchema).handler(async ({ input }) => {
+      try {
+        await client.stop(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    withdraw: os.input(withdrawInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.withdraw(input.botId, input.messageId)
       } catch (error) {
         throw ipcError(error)
       }

@@ -45,7 +45,7 @@ bun run --cwd apps/runner start --home "$HOME/.dsh-bot/dev"
 DSH_BOT_RUNNER_HOME="$HOME/.dsh-bot/dev" bun run dev
 ```
 
-Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。对话中的工具活动显示调用名称、参数、结果与失败原因，随标准 Session 事件实时更新；重新打开应用后从同一 Session 恢复。需要授权时，对话显示工具名称和操作说明，可选择「允许一次」或「拒绝」；下一次调用仍会单独询问。Bot 创建与配置界面、凭据设置、后台安装和自带运行时由后续任务完成；当前列表显示已有的 Bot。
+Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。对话中的工具活动显示调用名称、参数、结果与失败原因，随标准 Session 事件实时更新；重新打开应用后从同一 Session 恢复。需要授权时，对话显示工具名称和操作说明，可选择「允许一次」或「拒绝」；下一次调用仍会单独询问。执行中可继续发送，按 Bot 已保存的模式排队或追加到下一步；待处理消息显示模式并可单独撤回。「停止执行」保留未处理消息，重新打开桌面后仍可查看或撤回。Bot 创建与配置界面、凭据设置、后台安装和自带运行时由后续任务完成；当前列表显示已有的 Bot。
 
 Main 读取 home 下的私有连接资料，校验文件权限、实例身份与本机 loopback URL，交换标准认证 Cookie 后装配 Harness Connection/Gateway 和生成的 Bot Remote。认证信息留在 Main；renderer 只能通过已有受控 oRPC 调用列表、历史与发送，不能取得 origin、连接 URL 或 Cookie。正式退出应用会清理 Main 连接，不停止独立 Runner。
 
@@ -124,7 +124,7 @@ bun run test:smoke
 
 E2E 通过 [`launchTestApp`](./tests/e2e/fixtures.ts) 启动应用，使用隔离的临时 profile，启用沙箱，并关闭 Playwright 的主题模拟。重启持久化场景复用 profile，关闭使用它的实例后再删除目录，避免 Windows 文件锁导致清理失败。Bot 对话 E2E 额外启动带确定性模型的真实 Runner；根 `bun run test:e2e` 会先构建 Runner 与测试 fixture；在桌面目录单独运行时，先从根执行 `bun run --cwd apps/runner build:test`。流式验证在首字符处暂停模型，再从另一个 Bot 显式释放；使用真实 Cookie 认证与打包应用，未调用真实 DeepSeek API。
 
-工具活动 E2E 通过测试 profile 批准的真实工具注册，使用 IPC 门闩分别释放成功与抛错调用，验证等待、结果及重开恢复；审批 E2E 由同一工具调用真实审批服务，验证允许一次、下一次仍需授权、拒绝结果及执行结束。该工具只随 `--test-fixtures` 构建，不进入生产 profile。
+工具活动 E2E 通过测试 profile 批准的真实工具注册，使用 IPC 门闩分别释放成功与抛错调用，验证等待、结果及重开恢复；审批 E2E 由同一工具调用真实审批服务，验证允许一次、下一次仍需授权、拒绝结果及执行结束。输入控制 E2E 分别验证排队与追加模式，覆盖执行中接纳、独立撤回、停止保留、重开恢复及释放工具后的实际执行顺序。该工具只随 `--test-fixtures` 构建，不进入生产 profile。
 
 [testing.yaml](../../.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行测试，并上传 Playwright 报告；[check.yaml](../../.github/workflows/check.yaml) 执行代码检查。工作流从根目录安装与运行，参考子模块不参与构建。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
 

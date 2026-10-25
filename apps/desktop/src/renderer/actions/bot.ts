@@ -8,6 +8,22 @@ export function botHistoryQueryOptions(botId: string) {
   return ipc.utils.bot.history.queryOptions({ input: { botId } })
 }
 
+export function botInputQueryOptions(botId: string) {
+  return ipc.utils.bot.inputState.queryOptions({ input: { botId } })
+}
+
+export function submitBotInput(botId: string, text: string, signal: AbortSignal) {
+  return ipc.client.bot.submit({ botId, text }, { signal })
+}
+
+export function stopBotMutationOptions() {
+  return ipc.utils.bot.stop.mutationOptions()
+}
+
+export function withdrawBotInputMutationOptions() {
+  return ipc.utils.bot.withdraw.mutationOptions()
+}
+
 export function botApprovalsQueryOptions(botId: string) {
   return ipc.utils.bot.pendingApprovals.queryOptions({ input: { botId } })
 }

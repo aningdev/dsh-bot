@@ -1,9 +1,16 @@
 import { Button } from '@dsh-bot/ui/components/ui/button'
 import { Textarea } from '@dsh-bot/ui/components/ui/textarea'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { botHistoryQueryOptions, sendBotMessage } from '@/renderer/actions/bot'
+import {
+  botHistoryQueryOptions,
+  botInputQueryOptions,
+  sendBotMessage,
+  submitBotInput,
+  stopBotMutationOptions,
+  withdrawBotInputMutationOptions,
+} from '@/renderer/actions/bot'
 import BotApprovals from '@/renderer/components/bot-approvals'
 import BotToolActivities from '@/renderer/components/bot-tool-activities'
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
@@ -27,6 +34,21 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
   const [pending, setPending] = useState<PendingMessage | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [inputError, setInputError] = useState('')
+  const inputState = useQuery({ ...botInputQueryOptions(bot.botId), refetchInterval: 500 })
+  const refreshInput = () =>
+    queryClient.invalidateQueries({ queryKey: botInputQueryOptions(bot.botId).queryKey })
+  const stop = useMutation({
+    ...stopBotMutationOptions(),
+    onSuccess: async () => {
+      await Promise.all([
+        refreshInput(),
+        queryClient.invalidateQueries({ queryKey: botHistoryQueryOptions(bot.botId).queryKey }),
+      ])
+    },
+  })
+  const withdraw = useMutation({ ...withdrawBotInputMutationOptions(), onSuccess: refreshInput })
   const history = useQuery({
     ...botHistoryQueryOptions(bot.botId),
     staleTime: Infinity,
@@ -34,7 +56,7 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
     refetchOnWindowFocus: !pending,
     refetchOnReconnect: !pending,
     // Execution can outlive this page's stream observation.
-    refetchInterval: pending ? false : 5_000,
+    refetchInterval: pending ? false : inputState.data?.status === 'running' ? 500 : 5_000,
   })
   const observation = useRef<Observation | null>(null)
   const transcript = useRef<HTMLDivElement>(null)
@@ -99,14 +121,37 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
     if (
       !current ||
       current.controller.signal.aborted ||
-      current.busy ||
-      pending ||
+      submitting ||
       !text ||
       text.length > MAX_MESSAGE_LENGTH ||
       !history.isSuccess ||
-      history.isFetching
+      !inputState.isSuccess ||
+      stop.isPending ||
+      pending?.phase === 'error'
     )
       return
+    if (
+      pending?.phase === 'sending' ||
+      inputState.data.status === 'running' ||
+      inputState.data.pending.length > 0
+    ) {
+      setSubmitting(true)
+      setInputError('')
+      try {
+        await submitBotInput(bot.botId, text, current.controller.signal)
+        if (!current.controller.signal.aborted) {
+          setDraft((value) => (value.trim() === text ? '' : value))
+          await refreshInput()
+        }
+      } catch {
+        if (!current.controller.signal.aborted)
+          setInputError('发送结果尚未确认，请查看待处理消息和对话记录；不会自动重发。')
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+    if (current.busy || pending || history.isFetching) return
     current.busy = true
     followsTail.current = true
     setDraft('')
@@ -155,6 +200,7 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
       await close().catch(() => {})
       current.close = undefined
       current.busy = false
+      void refreshInput()
     }
   }
 
@@ -168,14 +214,26 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
     <section aria-label={`${bot.name} 对话`} className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{bot.name}</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={history.isFetching || sending}
-          onClick={() => void refreshHistory()}
-        >
-          {history.isError || pending?.phase === 'error' ? '重新加载记录' : '刷新记录'}
-        </Button>
+        <div className="flex gap-2">
+          {inputState.data?.status === 'running' && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={stop.isPending}
+              onClick={() => stop.mutate({ botId: bot.botId })}
+            >
+              {stop.isPending ? '正在停止…' : '停止执行'}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={history.isFetching || sending}
+            onClick={() => void refreshHistory()}
+          >
+            {history.isError || pending?.phase === 'error' ? '重新加载记录' : '刷新记录'}
+          </Button>
+        </div>
       </div>
       <div
         ref={transcript}
@@ -230,6 +288,39 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
           historyUpdatedAt={history.dataUpdatedAt}
         />
       </div>
+      {!!inputState.data?.pending.length && (
+        <section aria-label="待处理消息" className="space-y-2">
+          <h3 className="text-sm font-semibold">待处理消息</h3>
+          <ul className="max-h-40 space-y-2 overflow-auto">
+            {inputState.data.pending.map((input) => (
+              <li key={input.id} className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-muted-foreground text-xs">
+                    {input.mode === 'queue' ? '排队' : '追加到下一步'}
+                  </p>
+                  <p className="text-sm break-words whitespace-pre-wrap">{input.text}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={withdraw.isPending}
+                  onClick={() => withdraw.mutate({ botId: bot.botId, messageId: input.id })}
+                >
+                  撤回
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {(inputError || inputState.isError || stop.isError || withdraw.isError) && (
+        <p role="alert" className="text-sm">
+          {inputError ||
+            stop.error?.message ||
+            withdraw.error?.message ||
+            '无法更新执行状态，请稍后重试。'}
+        </p>
+      )}
       <BotApprovals key={bot.botId} botId={bot.botId} />
       {(history.isError || pending?.phase === 'error') && (
         <div className="space-y-2 text-sm">
@@ -264,7 +355,7 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
         <Textarea
           id="bot-message"
           value={draft}
-          readOnly={!!pending}
+          readOnly={submitting}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="输入消息"
           aria-invalid={tooLong || undefined}
@@ -276,11 +367,24 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
             消息过长，请缩短到 32768 个字符以内。
           </p>
         )}
+        {inputState.data && (
+          <p className="text-muted-foreground text-xs">
+            执行中发送：{inputState.data.mode === 'queue' ? '排队' : '追加到下一步'}
+          </p>
+        )}
         <Button
           className="self-end"
           type="submit"
           disabled={
-            !draft.trim() || tooLong || !!pending || !history.isSuccess || history.isFetching
+            !draft.trim() ||
+            tooLong ||
+            submitting ||
+            stop.isPending ||
+            pending?.phase === 'error' ||
+            pending?.phase === 'syncing' ||
+            !inputState.isSuccess ||
+            !history.isSuccess ||
+            (!pending && history.isFetching)
           }
         >
           发送

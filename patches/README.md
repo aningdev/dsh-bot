@@ -26,6 +26,14 @@
 
 上游版本支持独立 npm protocol 后，移除此补丁，重建 Bot 并通过 profile、Remote、输入拒绝和进程重启测试。
 
+## AgentLoop 释放时保留待处理输入
+
+固定发行版的 `AgentLoop` disposer 调用 `machine.cancel({ kind: "disposed" })`，默认清空 inbox。因此产品显式停止时即使使用 `keepInbox: true`，随后正常关闭 Runner 仍会删除已接纳、尚未认领的消息。真实进程测试先停止执行，再关闭并重启同一 home，原实现丢失待处理输入。
+
+`dsh-agent-loop` 补丁只在这一处释放调用传入 `{ keepInbox: true }`，继续由上游取消执行、等待空闲、记录 inbox 事件与释放 Session。没有另建队列或修改执行状态机；调用方明确撤回输入仍使用原有 splice，已认领的输入也不会退回。影响范围包括同一 runtime 中的普通 Agent 释放；配置替换本来就拒绝存在待处理输入，不依赖清空行为。Runner 契约验证真实关闭、重启保留与独立撤回；桌面打包 E2E 覆盖排队和下一步追加。
+
+上游提供释放保留语义或明确的所有者选项后，移除此补丁，并重新验证正常关闭、重启、停止和配置替换。当前验证覆盖正常退出，不表示强制终止尚未完成持久化的输入也不会丢失。
+
 ## Electron Forge 8.0.1
 
 core-utils 的 Electron 查找只识别 package-lock.json、yarn.lock 与 pnpm-lock.yaml。Bun hoisted 工作区将 Electron 安装在根 node_modules，应用目录查找不到它时，需要通过根锁文件定位依赖。

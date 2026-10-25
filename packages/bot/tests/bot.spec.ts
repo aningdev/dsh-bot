@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, type LlmAdapter } from '@deepseek-ai/dsh-llm'
-import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { Config as DeploymentConfig } from '@dsh-bot/bot'
@@ -140,6 +140,7 @@ describe('Bot Controller public contract', () => {
       capabilities: [],
       maxTokens: null,
       reasoningEffort: null,
+      inputMode: 'queue',
     })
     const saved = await ctx.botController.saveConfiguration(
       botId,
@@ -334,21 +335,15 @@ describe('Bot Controller public contract', () => {
       source: { kind: 'user' },
     })
     agent.send(message, 'next-turn', false)
-    const splice = agent.session.snapshotEvents().at(-1)!
-    if (splice.type !== 'agent/inbox/spliced') throw new Error('Expected a durable inbox splice')
     await closeHost(ctx)
     const restarted = await host(directory)
     let prefix
     {
-      await using write = await restarted.sessionPersistence.open(
+      await using stored = await restarted.sessionPersistence.open(
         SessionId(created.sessionId),
-        'write',
+        'read',
       )
-      const { events } = await write.read()
-      // A valid pending splice models durable input left by a process that exited before activation.
-      await write.append([{ ...splice, seq: SessionSeq(events.length) }])
-      await write.flush()
-      prefix = (await write.read()).events
+      prefix = (await stored.read()).events
     }
     await expect(
       restarted.botController.saveConfiguration(

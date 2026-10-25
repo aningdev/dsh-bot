@@ -31,6 +31,8 @@ import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 
 import type {
+  BotInputState,
+  PendingInput,
   BotConfiguration,
   BotFrame,
   BotRecord,
@@ -100,6 +102,7 @@ const storedBot = z.object({
   capabilities: z.array(z.string().min(1)).default([]),
   maxTokens: z.number().int().positive().nullable().default(null),
   reasoningEffort: z.string().min(1).nullable().default(null),
+  inputMode: z.enum(['queue', 'steer']).default('queue'),
 })
 
 const configurationInput = storedBot
@@ -111,8 +114,10 @@ const configurationInput = storedBot
     capabilities: true,
     maxTokens: true,
     reasoningEffort: true,
+    inputMode: true,
   })
   .required()
+  .extend({ inputMode: storedBot.shape.inputMode })
 const saveConfigurationInput = z.object({
   expectedRevision: z.number().int().nonnegative(),
   configuration: configurationInput,
@@ -162,6 +167,7 @@ export class BotController extends TypertRemoteService {
   private readonly handles = new Map<string, AgentHandle>()
   private readonly presets = new Map<string, () => Promise<void>>()
   private readonly busy = new Set<string>()
+  private readonly stoppingTurns = new Set<string>()
   private readonly prompts = new Map<string, number>()
   private readonly applying = new Map<string, BotRecord>()
   private readonly faults = new Set<string>()
@@ -291,6 +297,7 @@ export class BotController extends TypertRemoteService {
       capabilities: [],
       maxTokens: null,
       reasoningEffort: null,
+      inputMode: 'queue',
     }
     await this.records.put(botId, record)
     return record
@@ -586,6 +593,145 @@ export class BotController extends TypertRemoteService {
   }
 
   /**
+   * Submit into the standard inbox using the Bot's committed input mode.
+   * @param botId - Target Bot.
+   * @param text - Text admitted once; callers must not retry an uncertain result.
+   * @param signal - Cancellation before admission; accepted input remains owned by Runner.
+   * @returns Durable identity and the actual mode used.
+   */
+  @Remote('submit')
+  async submit(botId: string, text: string, signal: AbortSignal): Promise<PendingInput> {
+    if (typeof text !== 'string' || text.trim().length === 0 || text.length > 32_768)
+      throw new RemoteError('bot/invalid-input', 'Message must contain 1 to 32768 characters', {
+        field: 'text',
+      })
+    return this.withInputAgent(botId, signal, async (agent, record) => {
+      if (this.stoppingTurns.has(botId))
+        throw new RemoteError('bot/busy', 'Bot is stopping its current execution', { botId })
+      const message = createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'user' },
+      })
+      const mode = record.inputMode ?? 'queue'
+      if (mode === 'steer') agent.steer(message)
+      else agent.followup(message)
+      // The execution belongs to Runner even if the submitting observer goes away.
+      const settled = agent
+        .whenIdle()
+        .then(() => this.flushInput(agent))
+        .catch(() => {
+          this.faults.add(botId)
+        })
+      this.turns.add(settled)
+      void settled.finally(() => this.turns.delete(settled))
+      await this.flushInput(agent)
+      return { id: message.id, text, mode }
+    })
+  }
+
+  /**
+   * Observe the canonical inbox without waking its driver.
+   * @param botId - Target Bot.
+   * @param signal - Caller cancellation before reading.
+   * @returns Current execution state and removable pending identities.
+   */
+  @Remote('inputState')
+  async inputState(botId: string, signal: AbortSignal): Promise<BotInputState> {
+    return this.withInputAgent(botId, signal, async (agent, record) => ({
+      status: agent.status,
+      mode: record.inputMode ?? 'queue',
+      pending: [
+        ...agent.inbox.nextTurn.map((message) => ({ message, mode: 'queue' as const })),
+        ...agent.inbox.nextStep.map((message) => ({ message, mode: 'steer' as const })),
+      ]
+        .filter(({ message }) => message.source.kind === 'user')
+        .map(({ message, mode }) => ({
+          id: message.id,
+          text: message.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join(''),
+          mode,
+        })),
+    }))
+  }
+
+  /**
+   * Stop only current execution and preserve every unclaimed inbox message.
+   * @param botId - Target Bot.
+   * @param signal - Cancellation before the stop is accepted.
+   * @returns After execution settles and the retained inbox is durable.
+   */
+  @Remote('stop')
+  async stop(botId: string, signal: AbortSignal): Promise<void> {
+    await this.withInputAgent(botId, signal, async (agent) => {
+      if (this.stoppingTurns.has(botId))
+        throw new RemoteError('bot/busy', 'Bot is already stopping', { botId })
+      this.stoppingTurns.add(botId)
+      try {
+        agent.cancel({ kind: 'user' }, { keepInbox: true })
+        await agent.whenIdle()
+        await this.flushInput(agent)
+      } finally {
+        this.stoppingTurns.delete(botId)
+      }
+    })
+  }
+
+  /**
+   * Withdraw one still-pending identity without cancelling execution.
+   * @param botId - Target Bot.
+   * @param messageId - Exact identity returned on admission or by inputState.
+   * @param signal - Cancellation before removal.
+   * @returns False when the input has already been claimed or withdrawn.
+   */
+  @Remote('withdraw')
+  async withdraw(
+    botId: string,
+    messageId: string,
+    signal: AbortSignal,
+  ): Promise<{ readonly removed: boolean }> {
+    return this.withInputAgent(botId, signal, async (agent) => {
+      for (const [target, messages] of [
+        ['next-turn', agent.inbox.nextTurn],
+        ['next-step', agent.inbox.nextStep],
+      ] as const) {
+        const index = messages.findIndex(
+          (message) => message.id === messageId && message.source.kind === 'user',
+        )
+        if (index !== -1) {
+          agent.inbox.splice(target, index, 1, [])
+          await this.flushInput(agent)
+          return { removed: true }
+        }
+      }
+      return { removed: false }
+    })
+  }
+
+  private async withInputAgent<T>(
+    botId: string,
+    signal: AbortSignal,
+    operation: (agent: Agent, record: BotRecord) => Promise<T>,
+  ): Promise<T> {
+    const lease = this.acquireSessionAccess(SessionId(botId), 'write', signal)
+    try {
+      const record = this.readBot(botId)
+      const agent = await this.observeActivation(this.resolveAgent(record), signal)
+      signal.throwIfAborted()
+      if (this.stopping) this.rejectConfiguration(botId, 'unavailable')
+      return await operation(agent, record)
+    } finally {
+      await lease.release()
+    }
+  }
+
+  private async flushInput(agent: Agent): Promise<void> {
+    if (!(await this.owner.sessions.flush(agent.session)))
+      throw new Error('Bot Session has no durability listener')
+  }
+
+  /**
    * Admit one turn and stream assistant text; disconnecting stops observation only.
    * @param botId - Target Bot.
    * @param text - User prompt.
@@ -601,6 +747,7 @@ export class BotController extends TypertRemoteService {
       throw new RemoteError('bot/faulted', 'Bot configuration recovery is required', { botId })
     if (
       this.stopping ||
+      this.stoppingTurns.has(botId) ||
       this.busy.has(botId) ||
       this.prompts.has(botId) ||
       this.applying.has(botId)

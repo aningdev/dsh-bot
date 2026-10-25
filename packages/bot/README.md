@@ -12,7 +12,7 @@
 | `@dsh-bot/bot/typert`             | Host Loader | 官方生成器输出的严格描述与校验                    |
 | `@dsh-bot/bot/remote`             | 客户端组合  | 生成的 Remote 贡献及类型                          |
 
-Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfiguration`、`history` 和流式 `send`。参数、结果与取消语义使用标准 Gateway；共享框架包使用 peerDependencies，构建保留外部包引用。
+Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfiguration`、`history`、流式 `send`，以及输入控制 `submit`、`inputState`、`stop`、`withdraw`。参数、结果与取消语义使用标准 Gateway；共享框架包使用 peerDependencies，构建保留外部包引用。
 
 ## 配置保存
 
@@ -25,6 +25,7 @@ Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfi
 | `maxTokens`、`reasoningEffort` | 模型请求覆盖值；`null` 清除该项覆盖，采用 provider 默认行为                           |
 | `instructions`                 | 按原文注册的作用域指令，保留 `{{…}}` 字面量；不授予工具或权限                         |
 | `capabilities`                 | 已部署能力的唯一 id 列表，映射为该 Bot 的 preset 插件                                 |
+| `inputMode`                    | `queue` 在下一轮处理，`steer` 在下一步进入；缺省为 `queue`                            |
 
 插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。实际文件、进程、网络工具与权限组合由后续能力票提供。
 
@@ -49,6 +50,14 @@ Bot 记录使用上游 `storageDomain`，domain 为 `dsh_bot`，版本 1，表�
 每个 Bot 以 `dsh-bot:<botId>` 注册独立 preset，Session ID 稳定。发送时按持久存储状态选择 create/resume；控制器持有并释放所有创建的句柄。标准 Session Controller 通过 Host 委托调用同一个所有者，不能独立冷恢复 Bot 或覆盖其模型选择。
 
 传统 `bot.send` 同时接纳一个流式 turn，执行中或有待处理用户输入时返回 `bot/busy`；其观察期间的标准 prompt 也拒绝混入。标准 prompt 自身使用上游队列。模型错误以 `bot/turn-failed` 拒绝流；`done` 在空闲和持久化屏障完成后发送。断开观察不取消已接纳执行。`history` 是 user/assistant 文本投影，不包含注入的 runtime-context，也不代替完整会话事件接口。
+
+## 输入控制
+
+`submit(botId, text)` 按已提交的 `inputMode` 调用上游 `Agent.followup` 或 `Agent.steer`，持久化后返回输入身份与实际模式。正在执行时也可接纳输入，不建立第二份队列；断开调用方不会撤销已接纳的输入，结果不确定时客户端不能自动重发。传统流式 `send` 保留原来的单轮接纳规则，桌面执行中的后续输入走 `submit`。
+
+`inputState` 从上游 inbox 读取尚未认领的用户输入及执行状态，读取冷 Session 不唤醒执行。`withdraw(botId, messageId)` 只移除对应的待处理项，持久化后返回；已经认领或撤回时返回 `{ removed: false }`。`stop` 使用 `cancel(..., { keepInbox: true })`，等待执行结束和持久化后成功；停止中的新接纳被拒绝。已进入执行的输入不退回队列，尚未认领的输入保留到明确撤回或后续执行，包括 Runner 正常退出和重新启动。
+
+上游当前版本在 AgentLoop 释放时默认清空 inbox，因此保留输入还需要窄范围兼容补丁；复现与移除条件见 [补丁说明](../../patches/README.md)。Runner 的真实进程测试验证停止、独立撤回和重启保留；桌面打包 E2E 分别验证排队与下一步追加、执行中撤回及停止后重开。输入模式的界面配置入口随 Bot 配置任务交付。
 
 ## 构建与测试
 

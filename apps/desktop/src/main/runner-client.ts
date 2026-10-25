@@ -14,6 +14,8 @@ import { z } from 'zod'
 import type {
   ApprovalDecision,
   BotFrame,
+  BotInputState,
+  PendingInput,
   BotSummary,
   ChatMessage,
   ToolActivity,
@@ -30,6 +32,16 @@ import {
 import { ToolActivityProjection } from './tool-activity'
 
 const summarySchema = z.object({ botId: z.uuid(), name: z.string() })
+const pendingInputSchema = z.object({
+  id: z.uuid(),
+  text: z.string(),
+  mode: z.enum(['queue', 'steer']),
+})
+const inputStateSchema = z.object({
+  status: z.enum(['idle', 'running']),
+  mode: z.enum(['queue', 'steer']),
+  pending: z.array(pendingInputSchema),
+})
 const historySchema = z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string() }))
 const frameSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
@@ -173,6 +185,50 @@ export class RunnerClient {
       return historySchema.parse(result.value)
     } catch (error) {
       throw safeRemoteError(error)
+    }
+  }
+
+  async inputState(botId: string): Promise<BotInputState> {
+    return inputStateSchema.parse(
+      await this.inputCommand((ctx, signal) => ctx.remote.bot.inputState(botId, signal)),
+    )
+  }
+
+  async submit(botId: string, text: string): Promise<PendingInput> {
+    return pendingInputSchema.parse(
+      await this.inputCommand((ctx, signal) => ctx.remote.bot.submit(botId, text, signal), true),
+    )
+  }
+
+  async stop(botId: string): Promise<void> {
+    await this.inputCommand((ctx, signal) => ctx.remote.bot.stop(botId, signal))
+  }
+
+  async withdraw(botId: string, messageId: string): Promise<{ removed: boolean }> {
+    return z
+      .object({ removed: z.boolean() })
+      .parse(
+        await this.inputCommand((ctx, signal) => ctx.remote.bot.withdraw(botId, messageId, signal)),
+      )
+  }
+
+  private async inputCommand<T>(
+    operation: (
+      ctx: Context,
+      signal: AbortSignal,
+    ) => Promise<{ ok: true; value: T } | { ok: false; error: unknown }>,
+    sending = false,
+  ): Promise<T> {
+    try {
+      const session = await this.session()
+      const result = await operation(session.ctx, this.requestSignal(session))
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return result.value
+    } catch (error) {
+      throw safeRemoteError(error, sending)
     }
   }
 

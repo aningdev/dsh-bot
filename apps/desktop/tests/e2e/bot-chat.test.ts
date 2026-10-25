@@ -68,7 +68,7 @@ test('a packaged desktop lists Bots, streams a reply, and reopens the same conve
   }
 })
 
-test('a refused message remains editable after refreshing authoritative history', async () => {
+test('a desktop opened during execution queues input without resending it', async () => {
   const runner = await startTestRunner()
   try {
     const bot = await runner.client.remote.bot.create({ name: '忙碌的助手', cwd: runner.home })
@@ -85,18 +85,16 @@ test('a refused message remains editable after refreshing authoritative history'
         await page.getByRole('button', { name: '忙碌的助手', exact: true }).click()
         await page.getByRole('textbox', { name: '消息', exact: true }).fill('retry this draft')
         await page.getByRole('button', { name: '发送', exact: true }).click()
-        await expect(page.getByRole('alert')).toContainText('消息发送或回复接收失败')
-        await page.getByRole('button', { name: '重新加载记录', exact: true }).click()
-        await expect(page.getByRole('textbox', { name: '消息', exact: true })).toHaveValue(
+        await expect(page.getByRole('region', { name: '待处理消息', exact: true })).toContainText(
           'retry this draft',
         )
+        await expect(page.getByRole('textbox', { name: '消息', exact: true })).toHaveValue('')
         for await (const _frame of runner.client.remote.bot.send(control.value.botId, 'release')) {
-          /* Release the independently accepted turn before the explicit retry. */
+          /* Release the independently accepted turn; the queued message runs once. */
         }
         while (!(await iterator.next()).done) {
           /* Drain the held observation. */
         }
-        await page.getByRole('button', { name: '发送', exact: true }).click()
         await expect(page.getByText('echo: retry this draft', { exact: true })).toBeVisible()
         const history = await runner.client.remote.bot.history(bot.value.botId)
         expect(history).toEqual({
