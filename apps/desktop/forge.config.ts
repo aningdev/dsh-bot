@@ -1,3 +1,6 @@
+import { cp, rm } from 'node:fs/promises'
+import path from 'node:path'
+
 import { MakerDeb } from '@electron-forge/maker-deb'
 import { MakerRpm } from '@electron-forge/maker-rpm'
 import { MakerSquirrel } from '@electron-forge/maker-squirrel'
@@ -7,9 +10,13 @@ import { VitePlugin } from '@electron-forge/plugin-vite'
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { FuseV1Options, FuseVersion } from '@electron/fuses'
 
+import { prepareRunnerRuntime, runnerResource } from './scripts/prepare-runner-runtime'
 import { APP_CONFIG } from './src/shared/app-config'
 
 const config: ForgeConfig = {
+  hooks: {
+    prePackage: async (_config, platform, arch) => prepareRunnerRuntime(platform, arch),
+  },
   makers: [
     new MakerSquirrel({
       certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
@@ -20,7 +27,23 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   packagerConfig: {
+    name: APP_CONFIG.name,
     asar: true,
+    extraResource: [runnerResource],
+    afterCopyExtraResources: [
+      async ({ buildPath }) => {
+        // Packager's default cp rewrites relative links to the build cache.
+        // Restore the movable graph before the macOS signing step.
+        const destination = path.join(
+          buildPath,
+          APP_CONFIG.name + '.app',
+          'Contents/Resources/runner',
+        )
+        await rm(destination, { recursive: true, force: true })
+        await cp(runnerResource, destination, { recursive: true, verbatimSymlinks: true })
+        console.log('Runner resource copied with relocatable dependency links')
+      },
+    ],
     appBundleId: APP_CONFIG.appId,
     osxSign: process.env.APPLE_SIGN_IDENTITY
       ? { identity: process.env.APPLE_SIGN_IDENTITY }

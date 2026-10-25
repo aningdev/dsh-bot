@@ -38,16 +38,16 @@ bun run dev
 
 桌面默认显示 Bot 列表与对话工作台。选择 Bot 后读取其已有 Session 历史，发送时逐段显示回复；完成后读取权威历史。选中的 Bot ID 保存在现有布局 store，消息不写入本地 UI store。切回对话或重新打开应用会读取同一 Bot 的历史，不创建新 Session。
 
-当前需先独立启动 Runner。桌面默认连接 `app.getPath('userData')/runner`，开发时可为 Runner 与桌面指定同一个绝对 home：在仓库根目录先执行 `bun run --cwd apps/runner build`，再分别运行下面两个命令：
+打包的 macOS 应用可从「后台服务」安装并启动随包 Runner，无需外部 Node、Bun 或 pnpm。开发时也可独立启动 Runner；桌面默认连接 `app.getPath('userData')/runner`，可为两者指定同一个绝对 home：在仓库根目录先执行 `bun run --cwd apps/runner build`，再分别运行下面两个命令：
 
 ```sh
 bun run --cwd apps/runner start --home "$HOME/.dsh-bot/dev"
 DSH_BOT_RUNNER_HOME="$HOME/.dsh-bot/dev" bun run dev
 ```
 
-Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。对话中的工具活动显示调用名称、参数、结果与失败原因，随标准 Session 事件实时更新；重新打开应用后从同一 Session 恢复。需要授权时，对话显示工具名称和操作说明，可选择「允许一次」或「拒绝」；下一次调用仍会单独询问。执行中可继续发送，按 Bot 已保存的模式排队或追加到下一步；待处理消息显示模式并可单独撤回。「停止执行」保留未处理消息，重新打开桌面后仍可查看或撤回。侧栏「新建 Bot」选择模板并设置名称与工作目录；模板在创建时复制，后续变更不影响已有 Bot。「配置 Bot」显示工作目录、模型、基础与附加指令、能力、参数覆盖和输入模式。保存成功显示「配置已生效」，下一次执行使用新配置；执行中或有待处理消息时明确拒绝并显示剩余条数，保留草稿。版本冲突可重新加载配置。凭据设置和自带运行时由后续任务完成。
+Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。对话中的工具活动显示调用名称、参数、结果与失败原因，随标准 Session 事件实时更新；重新打开应用后从同一 Session 恢复。需要授权时，对话显示工具名称和操作说明，可选择「允许一次」或「拒绝」；下一次调用仍会单独询问。执行中可继续发送，按 Bot 已保存的模式排队或追加到下一步；待处理消息显示模式并可单独撤回。「停止执行」保留未处理消息，重新打开桌面后仍可查看或撤回。侧栏「新建 Bot」选择模板并设置名称与工作目录；模板在创建时复制，后续变更不影响已有 Bot。「配置 Bot」显示工作目录、模型、基础与附加指令、能力、参数覆盖和输入模式。保存成功显示「配置已生效」，下一次执行使用新配置；执行中或有待处理消息时明确拒绝并显示剩余条数，保留草稿。版本冲突可重新加载配置。凭据设置由后续任务完成；随包资源与待完成验收见[运行时说明](../../docs/PACKAGED_RUNTIME.md)。
 
-首页「后台服务」提供安装、启动、停止、查询、卸载和登录启动设置。安装只保存服务配置，启动后由用户级 launchd 维持后台，退出桌面不会停止它；主动停止后保持停止，直到再次启动或已启用的下次登录启动。卸载保留 Bot 和对话。管理实现已通过真实 launchd 开发进程验证，随包运行时和实际登录验收尚待完成；资源缺失时明确报错。开发时可用绝对 `DSH_BOT_RUNTIME_ROOT` 指定 `bin/node` 与 `apps/runner/lib/index.js` 所在根目录，正式资源位于 `process.resourcesPath/runner`。细节、证据和未完成验收见[用户级 Runner 服务](../../docs/RUNNER_SERVICE.md)。
+首页「后台服务」提供安装、启动、停止、查询、卸载和登录启动设置。安装只保存服务配置，启动后由用户级 launchd 维持后台，退出桌面不会停止它；主动停止后保持停止，直到再次启动或已启用的下次登录启动。卸载保留 Bot 和对话。管理实现已通过真实 launchd 开发进程和随包资源的桌面启停、重开验证；干净目标机、实际登录和升级验收尚待完成，资源缺失时明确报错。开发时可用绝对 `DSH_BOT_RUNTIME_ROOT` 指定 `bin/node` 与 `apps/runner/lib/index.js` 所在根目录，正式资源位于 `process.resourcesPath/runner`。细节、证据和未完成验收见[用户级 Runner 服务](../../docs/RUNNER_SERVICE.md)。
 
 Main 读取 home 下的私有连接资料，校验文件权限、实例身份与本机 loopback URL，交换标准认证 Cookie 后装配 Harness Connection/Gateway 和生成的 Bot Remote。认证信息留在 Main；renderer 只能通过已有受控 oRPC 调用列表、历史与发送，不能取得 origin、连接 URL 或 Cookie。正式退出应用会清理 Main 连接，不停止独立 Runner。
 
@@ -105,17 +105,17 @@ jsdom 用于验证 DOM 和组件逻辑，真实 Electron 的沙箱、IPC、窗�
 
 ## 开发与验证命令
 
-| 命令                    | 用途                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `bun run start`         | 启动开发环境                                                              |
-| `bun run check`         | 只读执行格式、lint 和类型检查                                             |
-| `bun run fix`           | 写回格式和 lint 修复                                                      |
-| `bun run test:unit`     | 执行单元测试；也可使用 `bun run test`                                     |
-| `bun run test:watch`    | 监听文件变化并运行单元测试                                                |
-| `bun run test:coverage` | 执行单元测试并生成覆盖率报告                                              |
-| `bun run test:e2e`      | 先重新打包，再对本次产物执行 Playwright 测试                              |
-| `bun run test:smoke`    | 启动当前成品可执行文件，验证 renderer 和 IPC 初始化，不使用 Node 调试参数 |
-| `bun run test:all`      | 依次执行检查、单元测试、E2E 和成品冒烟测试                                |
+| 命令                    | 用途                                                                    |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `bun run start`         | 启动开发环境                                                            |
+| `bun run check`         | 只读执行格式、lint 和类型检查                                           |
+| `bun run fix`           | 写回格式和 lint 修复                                                    |
+| `bun run test:unit`     | 执行单元测试；也可使用 `bun run test`                                   |
+| `bun run test:watch`    | 监听文件变化并运行单元测试                                              |
+| `bun run test:coverage` | 执行单元测试并生成覆盖率报告                                            |
+| `bun run test:e2e`      | 先重新打包，再对本次产物执行 Playwright 测试                            |
+| `bun run test:smoke`    | 启动当前成品验证 renderer/IPC，并迁移随包 Node/profile 后验证启动与退出 |
+| `bun run test:all`      | 依次执行检查、单元测试、E2E 和成品冒烟测试                              |
 
 `check` 已包含类型检查。`test:smoke` 不负责构建，单独运行时先打包：
 
@@ -128,7 +128,7 @@ E2E 通过 [`launchTestApp`](./tests/e2e/fixtures.ts) 启动应用，使用隔�
 
 工具活动 E2E 通过测试 profile 批准的真实工具注册，使用 IPC 门闩分别释放成功与抛错调用，验证等待、结果及重开恢复；审批 E2E 由同一工具调用真实审批服务，验证允许一次、下一次仍需授权、拒绝结果及执行结束。输入控制 E2E 分别验证排队与追加模式，覆盖执行中接纳、独立撤回、停止保留、重开恢复及释放工具后的实际执行顺序。该工具只随 `--test-fixtures` 构建，不进入生产 profile。
 
-[testing.yaml](../../.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行测试，并上传 Playwright 报告；[check.yaml](../../.github/workflows/check.yaml) 执行代码检查。工作流从根目录安装与运行，参考子模块不参与构建。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
+[testing.yaml](../../.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行单元测试；随包原生运行时的 E2E、成品冒烟和[发布工作流](../../.github/workflows/release.yaml) 当前仅面向 macOS，并上传 Playwright 报告。[check.yaml](../../.github/workflows/check.yaml) 执行代码检查。工作流从根目录安装与运行，参考子模块不参与构建。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
 
 ## 进程通信与安全
 

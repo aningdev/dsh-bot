@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { readPackagedApp } from './packaged-app'
+import { smokeRunner } from './smoke-runner'
 
 async function main() {
   const profile = await mkdtemp(path.join(tmpdir(), 'electron-smoke-'))
@@ -34,6 +35,7 @@ async function main() {
         else reject(new Error('Packaged application smoke test failed: ' + code))
       })
     })
+    await smokeRunner(path.resolve(path.dirname(app.executable), '../Resources/runner'))
   } finally {
     await rm(profile, { recursive: true, force: true, maxRetries: 5 })
   }

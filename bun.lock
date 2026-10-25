@@ -92,6 +92,7 @@
       "dependencies": {
         "@deepseek-ai/dsh": "0.2.1-rc.2",
         "@deepseek-ai/dsh-app-boot": "0.2.1-rc.2",
+        "@deepseek-ai/dsh-base": "0.2.1-rc.2",
         "@deepseek-ai/dsh-home-paths": "0.2.1-rc.2",
         "@dsh-bot/bot": "workspace:*",
         "@dsh-bot/harness-runtime": "workspace:*",

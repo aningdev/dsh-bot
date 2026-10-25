@@ -1,6 +1,6 @@
 # Runner
 
-Runner 是通过命名 `runner` profile 启动的独立 Node 后台。它加载固定版本的 Harness、runtime bundle 和 Bot 插件，提供认证的 Bot Remote、标准 Session API、文件引用与上传，不加载官方 `dsh-web-app` 或页面。桌面 Main 通过私有连接资料完成认证并转发 Bot 列表、历史与流式消息；launchd 注册、自带 Node 和安装升级尚未实现。
+Runner 是通过命名 `runner` profile 启动的独立 Node 后台。它加载固定版本的 Harness、runtime bundle 和 Bot 插件，提供认证的 Bot Remote、标准 Session API、文件引用与上传，不加载官方 `dsh-web-app` 或页面。桌面 Main 通过私有连接资料完成认证并转发 Bot 列表、历史与流式消息；[用户级 launchd 管理](../../docs/RUNNER_SERVICE.md)与[随包 Node 资源](../../docs/PACKAGED_RUNTIME.md)已实现，实际登录、升级和干净目标机验收尚未完成。
 
 ## 构建与启动
 

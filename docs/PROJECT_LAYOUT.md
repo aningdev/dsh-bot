@@ -6,7 +6,7 @@
 
 ## 当前工程与上游依赖
 
-桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 创建、配置、列表、流式对话、历史恢复、工具活动、单次审批、执行中排队或追加、停止与独立撤回。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。用户级 launchd 管理代码与桌面操作已实现，开发进程的异常拉起和主动停止已验证；随包运行时、实际登录启动与升级仍在后续阶段，见[服务验收](RUNNER_SERVICE.md)。Web、移动端与 Relay 不在当前 macOS 交付范围。
+桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 创建、配置、列表、流式对话、历史恢复、工具活动、单次审批、执行中排队或追加、停止与独立撤回。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。用户级 launchd 管理和随包 Node/生产依赖已实现；本机验证了开发进程的异常拉起与主动停止，以及随包资源启停、桌面关闭和重开时保持同一 PID。干净目标机、实际登录启动与升级仍待验收，见[服务验收](RUNNER_SERVICE.md)和[运行时说明](PACKAGED_RUNTIME.md)。Web、移动端与 Relay 不在当前 macOS 交付范围。
 
 产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../patches/README.md)。
 
@@ -53,7 +53,7 @@ flowchart LR
 
 macOS 用用户级 launchd LaunchAgent 管理 Runner，支持异常自动拉起与可选登录自启；主动停止后保持停止，直到再次启动或满足已启用的登录自启条件。桌面先连接已有 Runner，必要时请求启动；退出桌面不停止 Runner，客户端断线不终止已接纳执行。Bot 执行实例属于同一个 Runner，工具等能力仍可按 Harness 自身机制创建子进程。
 
-首版安装包携带可独立运行的后台及所需运行时，用户无需系统 Node、Bun、pnpm 或 dsh。Runner 运行时随桌面安装包一起更新：升级先有序停止 Runner，替换运行时后由 launchd 重新拉起，进行中的工作按恢复规则处理；不提供独立于桌面的后台升级路径。运行时的具体供给、用户级安装位置、签名和停止时序需要打包原型验证。Runner 自动重启遵守产品恢复规则，不自动重发输入或重复工具。
+首版安装包携带可独立运行的后台及所需运行时，用户无需系统 Node、Bun、pnpm 或 dsh。Runner 运行时随桌面安装包一起更新：升级先有序停止 Runner，替换运行时后由 launchd 重新拉起，进行中的工作按恢复规则处理；不提供独立于桌面的后台升级路径。运行时资源组装已实现，见[随包运行时](PACKAGED_RUNTIME.md)；用户级安装位置、签名和升级停止时序仍须成品验收。Runner 自动重启遵守产品恢复规则，不自动重发输入或重复工具。
 
 ## Bot 产品服务的职责
 

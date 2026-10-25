@@ -10,7 +10,13 @@ export async function launchTestApp({
   profile: existing,
   runnerHome,
   runtimeRoot,
-}: { profile?: string; runnerHome?: string; runtimeRoot?: string } = {}) {
+  withoutDevelopmentTools = false,
+}: {
+  profile?: string
+  runnerHome?: string
+  runtimeRoot?: string
+  withoutDevelopmentTools?: boolean
+} = {}) {
   const profile = existing ?? (await mkdtemp(path.join(tmpdir(), 'electron-e2e-')))
   let closed = false
   let removed = false
@@ -26,6 +32,7 @@ export async function launchTestApp({
       env: Object.fromEntries(
         Object.entries({
           ...process.env,
+          ...(withoutDevelopmentTools ? { PATH: '/usr/bin:/bin' } : {}),
           DSH_BOT_RUNNER_HOME: runnerHome,
           DSH_BOT_RUNTIME_ROOT: runtimeRoot,
         }).filter((entry): entry is [string, string] => entry[1] !== undefined),

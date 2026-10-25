@@ -22,16 +22,17 @@ launchd 行为依据本机 `man launchd.plist`、`launchctl help bootstrap`、`l
 
 Main 默认查找 `process.resourcesPath/runner/bin/node` 和 `process.resourcesPath/runner/apps/runner/lib/index.js`。开发诊断可用绝对 `DSH_BOT_RUNTIME_ROOT` 指向同样布局；该变量仅由 Main 环境读取，renderer 不提供路径或命令。缺少运行时会返回可操作错误，不将写入文件视为成功运行。
 
-**目前尚未组装随包运行时。** #12 负责实际资源、原生依赖和无系统 Node/Bun/pnpm 的成品验证；#13 负责升级、崩溃恢复和有序停止验收。此阶段的代码完成不代表首次交付完成。
+**已实现随包 Node 与生产依赖资源。** 构建和迁移检查见[随包运行时](PACKAGED_RUNTIME.md)。本机 arm64 的桌面验收使用资源内 Node，移除开发工具 PATH 后验证安装、启停、关闭桌面后 PID 保持及重开，再卸载清理。它不代替干净目标机、真实模型、实际登录和 #13 升级恢复验收，此阶段不代表首次交付完成。
 
 ## 本机证据
 
-以下为本机实际执行结果，不能替代安装包和登录会话验收：
+以下为本机实际执行结果，不能替代干净目标机和实际登录会话验收：
 
 - 确定性进程边界契约：未启用登录启动的安装保持停止；并发启动共用一个 job；主动停止后不再加载；登录副本可修复；关闭登录启动与卸载生效。它使用真实临时文件和受控 `launchctl` 边界，未模拟成真实系统验收。
 - 打包桌面 E2E：打开后台管理查询状态；缺少运行时时安装明确失败，仍显示尚未安装，启动按钮保持禁用；Escape 关闭弹窗。
 - 真实 launchd 开发进程验证：临时 home、独立随机测试 label、发布版依赖和标准 Runner profile；并发启动发布一个就绪 Runner，`SIGKILL` 后 launchd 拉起新 PID 和新连接实例，主动停止后保持卸载，再次启动发布新实例，最后卸载并清理测试配置。开启和关闭登录启动确实创建和删除当前用户的 LaunchAgents 文件；**未实际注销并重新登录**。
-- 最后一轮真实 launchd 日志：`/tmp/dsh-bot-ticket11-launchd-manual-final.log`。首次 PID 5289，异常恢复 PID 5467，再次启动 PID 5523；卸载后 installed、loginAtStartup、loaded 均为 false。
+- 随包资源桌面 E2E：隔离 home 和 label，移除开发工具 PATH，安装并启动成品资源内 Node，关闭桌面后同一 PID 继续存在，重开查看运行状态，再停止、卸载并清理。正式 profile 的独立迁移启动与退出由成品冒烟验证。
+- 开发进程异常恢复日志：`/tmp/dsh-bot-ticket11-launchd-manual-final.log`。首次 PID 5289，异常恢复 PID 5467，再次启动 PID 5523；卸载后 installed、loginAtStartup、loaded 均为 false。
 
 审查分别核对工程规范和 Issue #11。两个 reviewer 子代理均因 `spawn /opt/homebrew/Cellar/node/26.12.1/bin/node ENOENT` 未启动，没有独立审查结果；主代理完成两轴检查，并修正了 handler 持有跨调用状态和登录副本重试恢复问题。
 
