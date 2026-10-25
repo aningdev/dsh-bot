@@ -9,7 +9,8 @@ import { readPackagedApp } from '../../scripts/packaged-app'
 export async function launchTestApp({
   profile: existing,
   runnerHome,
-}: { profile?: string; runnerHome?: string } = {}) {
+  runtimeRoot,
+}: { profile?: string; runnerHome?: string; runtimeRoot?: string } = {}) {
   const profile = existing ?? (await mkdtemp(path.join(tmpdir(), 'electron-e2e-')))
   let closed = false
   let removed = false
@@ -23,9 +24,11 @@ export async function launchTestApp({
       chromiumSandbox: true,
       args: ['--user-data-dir=' + profile, readPackagedApp().main],
       env: Object.fromEntries(
-        Object.entries({ ...process.env, DSH_BOT_RUNNER_HOME: runnerHome }).filter(
-          (entry): entry is [string, string] => entry[1] !== undefined,
-        ),
+        Object.entries({
+          ...process.env,
+          DSH_BOT_RUNNER_HOME: runnerHome,
+          DSH_BOT_RUNTIME_ROOT: runtimeRoot,
+        }).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
     })
     // Playwright defaults to emulated light mode; these tests observe the native theme.

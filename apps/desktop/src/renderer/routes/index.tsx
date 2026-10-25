@@ -7,6 +7,7 @@ import { botListQueryOptions } from '@/renderer/actions/bot'
 import BotConversation from '@/renderer/components/bot-conversation'
 import LangToggle from '@/renderer/components/lang-toggle'
 import NavigationMenu from '@/renderer/components/navigation-menu'
+import RunnerServiceButton from '@/renderer/components/runner-service'
 import ToggleTheme from '@/renderer/components/toggle-theme'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 
@@ -24,6 +25,7 @@ function HomePage() {
         <header className="flex items-center justify-between gap-2">
           <h1 className="text-lg font-bold">{t('appName')}</h1>
           <div className="flex items-center gap-2">
+            <RunnerServiceButton />
             <LangToggle />
             <ToggleTheme />
           </div>
