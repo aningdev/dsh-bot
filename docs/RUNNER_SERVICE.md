@@ -32,6 +32,7 @@ Main 默认从 `process.resourcesPath/runner` 准备随包资源，再复制校�
 - 打包桌面 E2E：打开后台管理查询状态；缺少运行时时安装明确失败，仍显示尚未安装，启动按钮保持禁用；Escape 关闭弹窗。
 - 真实 launchd 开发进程验证：临时 home、独立随机测试 label、发布版依赖和标准 Runner profile；并发启动发布一个就绪 Runner，`SIGKILL` 后 launchd 拉起新 PID 和新连接实例，主动停止后保持卸载，再次启动发布新实例，最后卸载并清理测试配置。开启和关闭登录启动确实创建和删除当前用户的 LaunchAgents 文件；**未实际注销并重新登录**。
 - 随包资源桌面 E2E：隔离 home 和 label，移除开发工具 PATH，安装并启动成品资源内 Node，关闭桌面后同一 PID 继续存在，重开查看运行状态，再停止、卸载并清理。正式 profile 的独立迁移启动与退出由成品冒烟验证。
+- 登录开关的成品界面专项：停止状态开启后，真实 LaunchAgents 副本存在而 job 没有启动；重开桌面和升级后台后保持开启；停止后关闭，副本移除而 job 仍未加载。两项后台 E2E 通过，日志 `/tmp/dsh-bot-login-toggle-complete.log`。Checkbox 的状态等待 Main 写入完成，不使用点击即成功的断言；**该结果不包含实际注销与登录**。
 - 开发进程异常恢复日志：`/tmp/dsh-bot-ticket11-launchd-manual-final.log`。首次 PID 5289，异常恢复 PID 5467，再次启动 PID 5523；卸载后 installed、loginAtStartup、loaded 均为 false。
 
 审查分别核对工程规范和 Issue #11。两个 reviewer 子代理均因 `spawn /opt/homebrew/Cellar/node/26.12.1/bin/node ENOENT` 未启动，没有独立审查结果；主代理完成两轴检查，并修正了 handler 持有跨调用状态和登录副本重试恢复问题。
