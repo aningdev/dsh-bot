@@ -17,6 +17,7 @@ function HomePage() {
   const version = useQuery(appVersionQueryOptions())
   const bots = useQuery(botListQueryOptions())
   const runnerStopped = useRunnerStopped()
+  const pendingBotHint = runnerStopped ? runnerStoppedHint : '正在加载 Bot…'
   const selectedBotId = useWindowLayoutStore((state) => state.selectedBotId)
   const bot = bots.data?.find((item) => item.botId === selectedBotId)
   const { t } = useTranslation()
@@ -42,9 +43,7 @@ function HomePage() {
             role="status"
           >
             {bots.isPending
-              ? runnerStopped
-                ? runnerStoppedHint
-                : '正在加载 Bot…'
+              ? pendingBotHint
               : bots.isError
                 ? '无法加载 Bot，请在左侧重试连接。'
                 : bots.data.length === 0
