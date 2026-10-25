@@ -10,11 +10,13 @@ import LangToggle from '@/renderer/components/lang-toggle'
 import NavigationMenu from '@/renderer/components/navigation-menu'
 import RunnerServiceButton from '@/renderer/components/runner-service'
 import ToggleTheme from '@/renderer/components/toggle-theme'
+import { runnerStoppedHint, useRunnerStopped } from '@/renderer/hooks/use-runner-stopped'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 
 function HomePage() {
   const version = useQuery(appVersionQueryOptions())
   const bots = useQuery(botListQueryOptions())
+  const runnerStopped = useRunnerStopped()
   const selectedBotId = useWindowLayoutStore((state) => state.selectedBotId)
   const bot = bots.data?.find((item) => item.botId === selectedBotId)
   const { t } = useTranslation()
@@ -40,7 +42,9 @@ function HomePage() {
             role="status"
           >
             {bots.isPending
-              ? '正在加载 Bot…'
+              ? runnerStopped
+                ? runnerStoppedHint
+                : '正在加载 Bot…'
               : bots.isError
                 ? '无法加载 Bot，请在左侧重试连接。'
                 : bots.data.length === 0

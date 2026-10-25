@@ -175,6 +175,14 @@ test('shipped runtime starts automatically, backs up upgrades, and respects expl
     await expect(reopenedLoginStartup).not.toBeChecked()
     await expect.poll(async () => (await service.status()).loginAtStartup).toBe(false)
     expect((await service.status()).loaded).toBe(false)
+    // A stopped service must explain itself instead of leaving both Bot areas loading forever.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByText('后台已停止。打开后台服务后可继续使用。', { exact: true }),
+    ).toHaveCount(2)
+    await page.getByRole('button', { name: '后台服务', exact: true }).click()
+    dialog = page.getByRole('dialog', { name: '后台服务', exact: true })
     await dialog.getByRole('button', { name: '卸载服务', exact: true }).click()
     await expect(dialog.getByRole('status')).toHaveText('尚未安装')
   } finally {

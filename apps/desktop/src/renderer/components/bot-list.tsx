@@ -11,12 +11,14 @@ import { useEffect } from 'react'
 
 import { botListQueryOptions } from '@/renderer/actions/bot'
 import { CreateBotButton } from '@/renderer/components/bot-configuration'
+import { runnerStoppedHint, useRunnerStopped } from '@/renderer/hooks/use-runner-stopped'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 
 const statusLabels = { idle: '空闲', running: '运行中', unavailable: '暂不可用' }
 
 export default function BotList() {
   const bots = useQuery({ ...botListQueryOptions(), refetchInterval: 1000 })
+  const runnerStopped = useRunnerStopped()
   const selectedBotId = useWindowLayoutStore((state) => state.selectedBotId)
   const setSelectedBotId = useWindowLayoutStore((state) => state.setSelectedBotId)
   const navigate = useNavigate()
@@ -38,7 +40,7 @@ export default function BotList() {
         <SidebarGroupContent className="space-y-2 text-sm">
           {bots.isPending ? (
             <p role="status" className="text-muted-foreground px-2">
-              正在连接并加载 Bot…
+              {runnerStopped ? runnerStoppedHint : '正在连接并加载 Bot…'}
             </p>
           ) : bots.isError ? (
             <div className="space-y-2 px-2">
