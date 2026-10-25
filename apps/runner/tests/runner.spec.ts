@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -110,6 +110,65 @@ test('Remote streams a turn, stores JSONL, and resumes the same Bot after a proc
       { role: 'assistant', text: 'echo: again' },
     ],
   })
+})
+
+test('approved production capabilities assemble filesystem and shell tools without granting them to a blank Bot', async () => {
+  const directory = await home()
+  // Add a model adapter without replacing production capability or template configuration.
+  const patch = join(directory, 'model-only.yml')
+  await writeFile(
+    patch,
+    `- insert:\n    - id: test-model\n      name: ${JSON.stringify(fileURLToPath(new URL('../.test-output/model.js', import.meta.url)))}\n`,
+  )
+  const running = await start(directory, false, [patch])
+  const client = await connect(running.ready)
+  const options = await client.remote.bot.configurationOptions()
+  if (!options.ok) throw options.error
+  expect(options.value.capabilities).toEqual(expect.arrayContaining(['files', 'commands']))
+  expect(options.value.templates).toContainEqual(
+    expect.objectContaining({
+      id: 'workspace',
+      configuration: expect.objectContaining({ capabilities: ['files', 'commands'] }),
+    }),
+  )
+  const created = await client.remote.bot.create({ name: 'production tools', cwd: directory })
+  if (!created.ok) throw created.error
+  const record = created.value
+  const configuration = {
+    cwd: directory,
+    provider: 'fake',
+    model: 'fake-1',
+    instructions: '',
+    capabilities: ['files', 'commands'],
+    maxTokens: null,
+    reasoningEffort: null,
+  }
+  const saved = await client.remote.bot.saveConfiguration(record.botId, {
+    expectedRevision: record.revision,
+    configuration,
+  })
+  if (!saved.ok) throw saved.error
+  const inspect = async (): Promise<string[]> => {
+    let value = ''
+    for await (const frame of client.remote.bot.send(record.botId, 'inspect configuration'))
+      if (frame.type === 'text') value += frame.text
+    return JSON.parse(value).tools
+  }
+  expect(await inspect()).toEqual(expect.arrayContaining(['read', 'write', 'edit', 'bash']))
+  for (const prompt of ['workspace write', 'workspace command']) {
+    let reply = ''
+    for await (const frame of client.remote.bot.send(record.botId, prompt))
+      if (frame.type === 'text') reply += frame.text
+    expect(reply).toBe('tool completed')
+  }
+  expect(await readFile(join(directory, 'workspace-probe.txt'), 'utf8')).toBe('DSH_FILE_OK')
+  expect(await readFile(join(directory, 'command-probe.txt'), 'utf8')).toBe('DSH_COMMAND_OK')
+  const cleared = await client.remote.bot.saveConfiguration(record.botId, {
+    expectedRevision: saved.value.revision,
+    configuration: { ...configuration, capabilities: [] },
+  })
+  if (!cleared.ok) throw cleared.error
+  expect(await inspect()).toEqual([])
 })
 
 test('Remote configuration commits only after application and survives a process restart on the same Session', async () => {

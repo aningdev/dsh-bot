@@ -33,7 +33,7 @@ Remote namespace 为 `bot`，方法包括 `create`、`configurationOptions`、`g
 | `capabilities`                     | 已部署能力的唯一 id 列表，映射为该 Bot 的 preset 插件                                 |
 | `inputMode`                        | `queue` 在下一轮处理，`steer` 在下一步进入；缺省为 `queue`                            |
 
-插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。实际文件、进程、网络工具与权限组合由后续能力票提供。
+插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。产品 bundle 已批准 `files`（上游 read、read_image、write、edit）及 `commands`（上游 bash）能力，并提供复制这两项能力的「工作区助手」模板。省略模板仍创建无工具的空白 Bot。文件与进程操作沿用基础 profile 的 sandbox、read-before-write 和审批服务；命令能力关闭后台运行与超时转后台，不提供未配套的后台任务控制。sandbox 权限根仍遵循 Session 原始 header，修改工作目录不扩大权限。
 
 保存先占用该 Bot 的替换状态，并通过上游 `runMaintenance()` 原子占用真正空闲的阶段。校验目录、模型和候选 preset 后写入持久事务记录及候选配置；再次检查 inbox，再在维护回调内发起旧句柄释放，退出回调后等待释放完成。随后替换稳定 preset，在同一 Session 上恢复 Agent；尚无日志时创建该 Session。确认持久化后删除事务记录，返回成功。应用期间 `get`、`list` 保持返回旧的已提交配置，发送及历史读取被拒绝。
 

@@ -98,7 +98,15 @@ export class FakeModelAdapter extends LlmAdapter {
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    if (prompt === 'tool success' || prompt === 'tool failure' || prompt === 'tool approval') {
+    if (
+      [
+        'tool success',
+        'tool failure',
+        'tool approval',
+        'workspace write',
+        'workspace command',
+      ].includes(prompt ?? '')
+    ) {
       const mode =
         prompt === 'tool approval' ? 'approval' : prompt === 'tool success' ? 'success' : 'failure'
       // Providers may reuse a call id in a later Step or Turn.
@@ -116,19 +124,34 @@ export class FakeModelAdapter extends LlmAdapter {
           )
         )
           throw new Error('Activity tool call has no corresponding result')
-        const argumentsJson = JSON.stringify({ mode, value: 'alpha' })
+        const toolName =
+          prompt === 'workspace write'
+            ? 'write'
+            : prompt === 'workspace command'
+              ? 'bash'
+              : 'activity_probe'
+        const argumentsJson = JSON.stringify(
+          prompt === 'workspace write'
+            ? { file_path: 'workspace-probe.txt', content: 'DSH_FILE_OK' }
+            : prompt === 'workspace command'
+              ? {
+                  description: 'Write acceptance marker',
+                  command: 'printf DSH_COMMAND_OK > command-probe.txt',
+                }
+              : { mode, value: 'alpha' },
+        )
         yield { type: 'block-start', index: 0, blockType: 'tool-call' }
         yield {
           type: 'tool-call-delta',
           index: 0,
           id,
-          name: 'activity_probe',
+          name: toolName,
           argumentsDelta: argumentsJson,
         }
         yield {
           type: 'block-end',
           index: 0,
-          block: { type: 'tool-call', id, name: 'activity_probe', arguments: argumentsJson },
+          block: { type: 'tool-call', id, name: toolName, arguments: argumentsJson },
         }
         yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
         yield { type: 'finish', reason: { kind: 'tool-calls' } }

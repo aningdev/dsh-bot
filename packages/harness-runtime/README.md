@@ -14,7 +14,7 @@ bun run harness --help
 
 ## Bundle 与 Runner
 
-`cordis.patch.yml` 在 `dsh-base` 上补充独立 WebServer、Connection、Remote 事件贡献、AgentPresetRegistry、Workspace、Session Controller、Settings Controller、文件引用与上传，调整 Host 全局工具作用域。当前 standard preset 为空，各 Bot 使用自己的稳定 preset 和批准的能力 id；全局模型工具（包括 working-directory 工具）被禁用，working-directory 服务继续供配置应用使用。官方 `dsh-web-app` 和页面不进入 profile；桌面与后续 Web 页面由本项目提供。
+`cordis.patch.yml` 在 `dsh-base` 上补充独立 WebServer、Connection、Remote 事件贡献、AgentPresetRegistry、Workspace、Session Controller、Settings Controller、文件引用与上传，调整 Host 全局工具作用域。当前 standard preset 为空，各 Bot 使用自己的稳定 preset 和批准的能力 id；全局模型工具（包括 working-directory 工具）被禁用，working-directory 服务继续供配置应用使用。运行时显式固定 `dsh-tool-fs` 与 `dsh-tool-bash` 依赖，由 Bot bundle 按批准能力装入各 Bot 的 preset；空白 Bot 不继承工具。官方 `dsh-web-app` 和页面不进入 profile；桌面与后续 Web 页面由本项目提供。
 
 Runner 拥有应用入口、profile 选择、就绪/故障通知和进程级清理。Bot bundle 的 Host 适配器为标准 Session 服务提供统一所有者；安装须应用根 Bun 锁文件中的兼容补丁，见 [共存验证](../../docs/SESSION_CONTROLLER_COMPATIBILITY.md)。此包只提供固定依赖和装配资源，不另建 `startHost()` 或根 Context。默认模型保持官方 provider；确定性模型只在 Runner 的测试 overlay 中注册。
 
