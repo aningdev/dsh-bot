@@ -4,6 +4,18 @@ import { z } from 'zod'
 
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
 
+export const saveCredentialInputSchema = z.strictObject({
+  value: z
+    .string()
+    .trim()
+    .min(1, '请输入 API Key。')
+    .max(4096)
+    .refine(
+      (value) => !value.includes('\r') && !value.includes('\n') && !value.includes('\0'),
+      'API Key 不能包含换行或空字符。',
+    ),
+})
+
 export const historyInputSchema = z.strictObject({
   botId: z.uuid({ error: 'Bot 标识无效，请刷新列表。' }),
 })

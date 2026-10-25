@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import { appVersionQueryOptions } from '@/renderer/actions/app'
 import { botListQueryOptions } from '@/renderer/actions/bot'
+import ApiSettingsButton from '@/renderer/components/api-settings'
 import BotConversation from '@/renderer/components/bot-conversation'
 import LangToggle from '@/renderer/components/lang-toggle'
 import NavigationMenu from '@/renderer/components/navigation-menu'
@@ -25,6 +26,7 @@ function HomePage() {
         <header className="flex items-center justify-between gap-2">
           <h1 className="text-lg font-bold">{t('appName')}</h1>
           <div className="flex items-center gap-2">
+            <ApiSettingsButton />
             <RunnerServiceButton />
             <LangToggle />
             <ToggleTheme />

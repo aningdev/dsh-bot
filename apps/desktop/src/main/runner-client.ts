@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import SessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
+import SettingsRemote from '@deepseek-ai/dsh-api-settings-controller/remote'
 import { installConnection } from '@deepseek-ai/dsh-client-connection/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
@@ -150,7 +151,7 @@ function safeRemoteError(error: unknown, sending = false): RunnerError {
       return new RunnerError(message, 'BAD_REQUEST')
     }
     case 'bot/turn-failed':
-      return new RunnerError('本次执行失败，请检查后台配置并查看历史。')
+      return new RunnerError('本次执行失败。请检查「API 设置」中的密钥和 Bot 配置，并查看历史。')
     case 'bot/faulted':
       return new RunnerError('该 Bot 暂时无法执行，请检查 Runner 状态。')
     default:
@@ -295,6 +296,50 @@ export class RunnerClient {
       return detailsSchema.parse(result.value)
     } catch (error) {
       throw safeRemoteError(error)
+    }
+  }
+
+  /** Only status crosses back to the renderer; the reference is product-owned. */
+  async credentialStatus(): Promise<{ configured: boolean; writable: boolean }> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.credentials.describe(['DEEPSEEK_API_KEY'])
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return z
+        .object({ configured: z.boolean(), writable: z.boolean() })
+        .parse(result.value.DEEPSEEK_API_KEY)
+    } catch {
+      throw new RunnerError('无法读取 API 密钥状态，请检查后台连接后重试。')
+    }
+  }
+
+  async saveCredential(value: string): Promise<void> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.credentials.set('DEEPSEEK_API_KEY', value)
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+    } catch {
+      // Neither remote diagnostics nor the submitted value enter renderer errors.
+      throw new RunnerError('密钥未能保存，请检查后台连接及凭据文件权限后重试。')
+    }
+  }
+
+  async removeCredential(): Promise<void> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.credentials.unset('DEEPSEEK_API_KEY')
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+    } catch {
+      throw new RunnerError('密钥未能删除，请检查后台连接及凭据文件权限后重试。')
     }
   }
 
@@ -685,6 +730,7 @@ export class RunnerClient {
         await ctx.plugin(Gateway)
         await ctx.remote.$mount(BotRemote)
         await ctx.remote.$mount(SessionRemote)
+        await ctx.remote.$mount(SettingsRemote)
         // Published Controller client JS is a browser plugin, so Main registers
         // a minimal public Typert Context adapter instead of loading its UI.
         const sessionScopes = new WeakMap<Context, ReturnType<typeof SessionId>>()

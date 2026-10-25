@@ -6,6 +6,7 @@ import type { RunnerClient } from '../../runner-client'
 import { RunnerError } from '../../runner-connection'
 import {
   createBotInputSchema,
+  saveCredentialInputSchema,
   saveBotConfigurationInputSchema,
   acknowledgeToolsInputSchema,
   decideApprovalInputSchema,
@@ -22,6 +23,27 @@ function ipcError(error: unknown): ORPCError<string, unknown> {
 
 export function createBotHandlers(client: RunnerClient) {
   return {
+    credentialStatus: os.handler(async () => {
+      try {
+        return await client.credentialStatus()
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    saveCredential: os.input(saveCredentialInputSchema).handler(async ({ input }) => {
+      try {
+        await client.saveCredential(input.value)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    removeCredential: os.handler(async () => {
+      try {
+        await client.removeCredential()
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
     configurationOptions: os.handler(async () => {
       try {
         return await client.configurationOptions()
