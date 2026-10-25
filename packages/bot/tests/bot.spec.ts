@@ -72,6 +72,64 @@ afterEach(async () => {
 })
 
 describe('Bot Controller public contract', () => {
+  test('concurrent initialization retries keep the same durable Session after the first activation fails', async () => {
+    const directory = await home()
+    const ctx = await host(directory)
+    const bot = await ctx.botController.createBot({ name: 'retry', cwd: directory }, signal)
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let failFirst = true
+    ctx.on(
+      'agent/created',
+      async () => {
+        if (!failFirst) return
+        failFirst = false
+        entered.resolve()
+        await release.promise
+        throw new Error('First activation failed')
+      },
+      { global: true },
+    )
+    const firstAttempts = Promise.allSettled([
+      ctx.botController.inputState(bot.botId, signal),
+      ctx.botController.inputState(bot.botId, signal),
+    ])
+    try {
+      await Promise.race([
+        entered.promise,
+        firstAttempts.then(() => {
+          throw new Error('Expected initialization to reach the failure barrier')
+        }),
+      ])
+    } finally {
+      release.resolve()
+    }
+    expect((await firstAttempts).map((result) => result.status)).toEqual(['rejected', 'rejected'])
+    expect(await ctx.botController.getBot(bot.botId, signal)).toEqual(bot)
+    expect(await ctx.botController.history(bot.botId, signal)).toEqual([])
+    const retried = await Promise.all([
+      ctx.botController.inputState(bot.botId, signal),
+      ctx.botController.inputState(bot.botId, signal),
+    ])
+    expect(retried).toEqual([
+      expect.objectContaining({ status: 'idle', pending: [] }),
+      expect.objectContaining({ status: 'idle', pending: [] }),
+    ])
+    expect((await ctx.sessionPersistence.list()).map((entry) => entry.header.id)).toEqual([
+      bot.sessionId,
+    ])
+    expect(await answer(ctx, bot.botId, 'after retry')).toBe('echo: after retry')
+    await closeHost(ctx)
+    const reopened = await host(directory)
+    expect(await reopened.botController.getBot(bot.botId, signal)).toEqual(bot)
+    expect(await reopened.botController.history(bot.botId, signal)).toEqual([
+      { role: 'user', text: 'after retry' },
+      { role: 'assistant', text: 'echo: after retry' },
+    ])
+    expect((await reopened.sessionPersistence.list()).map((entry) => entry.header.id)).toEqual([
+      bot.sessionId,
+    ])
+  })
   test('a durable unfinished turn restores as interrupted without waking retained input', async () => {
     const directory = await home()
     const first = await host(directory)
