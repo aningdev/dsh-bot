@@ -12,3 +12,20 @@ export interface ChatMessage {
 }
 
 export type BotFrame = { readonly type: 'text'; readonly text: string } | { readonly type: 'done' }
+
+export interface ToolActivityFrame {
+  readonly observationId: string
+  readonly revision: number
+  readonly activities: readonly ToolActivity[]
+}
+
+/** Safe display projection of canonical tool requests and results. */
+export interface ToolActivity {
+  readonly id: string
+  readonly callId: string
+  readonly name: string
+  readonly arguments: string
+  readonly status: 'waiting' | 'succeeded' | 'failed'
+  readonly result: string
+  readonly reason: string
+}

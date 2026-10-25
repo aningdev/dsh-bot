@@ -38,7 +38,7 @@ export async function startTestRunner(existingHome?: string) {
   })
   const client = new Context()
   let disposed = false
-  const dispose = async () => {
+  const dispose = async (options: { keepHome?: boolean } = {}) => {
     if (disposed) return
     disposed = true
     const failures: unknown[] = []
@@ -74,7 +74,7 @@ export async function startTestRunner(existingHome?: string) {
     } else if (child.exitCode !== 0)
       failures.push(new Error('Runner exited unexpectedly: ' + stderr))
     try {
-      await rm(home, { recursive: true, force: true })
+      if (!options.keepHome) await rm(home, { recursive: true, force: true })
     } catch (error) {
       failures.push(error)
     }
@@ -136,7 +136,19 @@ export async function startTestRunner(existingHome?: string) {
     await client.plugin(TypertRegistry)
     await client.plugin(Gateway)
     await client.remote.$mount(BotRemote)
-    return { home, client, child, dispose }
+    /** Release all tool calls currently waiting in this test Runner. */
+    const releaseTool = (): Promise<void> =>
+      new Promise((resolve, reject) => {
+        if (!child.connected) {
+          reject(new Error('Runner IPC is disconnected'))
+          return
+        }
+        child.send({ type: 'tool-activity:release' }, (error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    return { home, client, child, dispose, releaseTool }
   } catch (error) {
     try {
       await dispose()

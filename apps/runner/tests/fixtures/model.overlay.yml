@@ -2,6 +2,10 @@
   config:
     provider: fake
     model: fake-1
+    capabilities:
+      activity:
+        - name: !!js process.getBuiltinModule('node:url').pathToFileURL(process.cwd() + '/.test-output/tool-activity.js').href
+          config: {}
 - id: session-persistence-jsonl
   config:
     root: !!js dshHomePath('sessions')

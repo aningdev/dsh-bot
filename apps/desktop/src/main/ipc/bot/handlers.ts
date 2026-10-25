@@ -1,10 +1,10 @@
 import { ORPCError, os } from '@orpc/server'
 
-import type { BotFrame } from '@/shared/bot'
+import type { BotFrame, ToolActivityFrame } from '@/shared/bot'
 
 import type { RunnerClient } from '../../runner-client'
 import { RunnerError } from '../../runner-connection'
-import { historyInputSchema, sendInputSchema } from './schemas'
+import { acknowledgeToolsInputSchema, historyInputSchema, sendInputSchema } from './schemas'
 
 function ipcError(error: unknown): ORPCError<string, unknown> {
   return error instanceof RunnerError
@@ -27,6 +27,18 @@ export function createBotHandlers(client: RunnerClient) {
       } catch (error) {
         throw ipcError(error)
       }
+    }),
+    tools: os.input(historyInputSchema).handler(({ input, signal }) => {
+      return (async function* (): AsyncGenerator<ToolActivityFrame> {
+        try {
+          yield* client.tools(input.botId, signal)
+        } catch (error) {
+          throw ipcError(error)
+        }
+      })()
+    }),
+    acknowledgeTools: os.input(acknowledgeToolsInputSchema).handler(({ input }) => {
+      client.acknowledgeTools(input.observationId, input.revision)
     }),
     send: os.input(sendInputSchema).handler(({ input, signal }) => {
       const stream = client.send(input.botId, input.text, signal)

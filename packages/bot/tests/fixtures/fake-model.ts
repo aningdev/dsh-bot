@@ -2,6 +2,7 @@
 import {
   LlmAdapter,
   ReasoningEffortId,
+  ToolCallId,
   type GenerateOptions,
   type LlmModelInfo,
   type LlmResolvedModelInfo,
@@ -89,7 +90,50 @@ export class FakeModelAdapter extends LlmAdapter {
    * @returns the scripted chunk stream.
    */
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    const text = replyFor(options)
+    let text = replyFor(options)
+    const userIndex = options.messages.findLastIndex(
+      (message) => message.role === 'user' && message.source?.kind === 'user',
+    )
+    const prompt = options.messages[userIndex]?.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('')
+    if (prompt === 'tool success' || prompt === 'tool failure') {
+      const mode = prompt === 'tool success' ? 'success' : 'failure'
+      // Providers may reuse a call id in a later Step or Turn.
+      const id = ToolCallId('activity-probe')
+      const currentTurn = options.messages.slice(userIndex + 1)
+      const result = currentTurn.find(
+        (message) => message.role === 'tool' && message.toolCallId === id,
+      )
+      if (result?.role === 'tool') {
+        text = result.isError ? 'tool failed' : 'tool completed'
+      } else {
+        if (
+          currentTurn.some((message) =>
+            message.content.some((block) => block.type === 'tool-call' && block.id === id),
+          )
+        )
+          throw new Error('Activity tool call has no corresponding result')
+        const argumentsJson = JSON.stringify({ mode, value: 'alpha' })
+        yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+        yield {
+          type: 'tool-call-delta',
+          index: 0,
+          id,
+          name: 'activity_probe',
+          argumentsDelta: argumentsJson,
+        }
+        yield {
+          type: 'block-end',
+          index: 0,
+          block: { type: 'tool-call', id, name: 'activity_probe', arguments: argumentsJson },
+        }
+        yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return
+      }
+    }
     if (text === 'echo: fail') throw new Error('Deterministic model failure')
     if (text === 'echo: release') for (const release of [...this.held]) release()
     yield { type: 'block-start', index: 0, blockType: 'text' }

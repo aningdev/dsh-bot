@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { once } from 'node:events'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -181,6 +182,65 @@ test('packaged Electron IPC returns only Bot DTOs for successful list, history a
     expect(received.messages.send.length).toBeGreaterThan(1)
     expect(JSON.stringify(received.messages.send)).toContain('done')
     expect(JSON.stringify(received.messages.after)).toContain(text)
+  })
+})
+
+test('a slow IPC tool observer receives one frame until acknowledgement and then the latest state', async () => {
+  await withBotIPC(async ({ page, runner, botId }) => {
+    const before = await runner.client.remote.bot.get(botId)
+    if (!before.ok) throw before.error
+    const configured = await runner.client.remote.bot.saveConfiguration(botId, {
+      expectedRevision: before.value.revision,
+      configuration: {
+        cwd: before.value.cwd,
+        provider: before.value.provider,
+        model: before.value.model,
+        instructions: before.value.instructions,
+        maxTokens: before.value.maxTokens,
+        reasoningEffort: before.value.reasoningEffort,
+        capabilities: ['activity'],
+      },
+    })
+    if (!configured.ok) throw configured.error
+    const secrets = await readCredentials(runner.home)
+    await page.evaluate((id) => window.testToolObservation.start(id), botId)
+    try {
+      await expect.poll(() => page.evaluate(() => window.testToolFrames.length)).toBe(1)
+      for (const text of ['tool success', 'tool failure']) {
+        const started = once(runner.child, 'message', { signal: AbortSignal.timeout(10_000) })
+        const sent = (async () => {
+          for await (const _frame of runner.client.remote.bot.send(botId, text)) {
+            // Complete execution independently while the IPC observer has no credit.
+          }
+        })()
+        // Keep a failed transport observed until cleanup has released the gate.
+        void sent.catch(() => {})
+        try {
+          expect((await started)[0]).toEqual({ type: 'tool-activity:started' })
+          await runner.releaseTool()
+          await sent
+        } finally {
+          await runner.releaseTool()
+          await sent
+        }
+      }
+      expect(await page.evaluate(() => window.testToolFrames.length)).toBe(1)
+      await page.evaluate(() => window.testToolObservation.acknowledge())
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.testToolFrames.at(-1)?.activities.map((item) => item.status)),
+        )
+        .toEqual(['succeeded', 'failed'])
+      const received = await page.evaluate(() => ({
+        frames: window.testToolFrames,
+        messages: window.testBotIPCMessages,
+      }))
+      expect(received.frames).toHaveLength(2)
+      expect(received.frames[0]?.activities).toEqual([])
+      expectCredentialFree(received, secrets)
+    } finally {
+      await page.evaluate(() => window.testToolObservation.stop())
+    }
   })
 })
 

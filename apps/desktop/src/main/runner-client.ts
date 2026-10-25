@@ -1,12 +1,22 @@
+import { randomUUID } from 'node:crypto'
+
 import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
+import SessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
 import { installConnection } from '@deepseek-ai/dsh-client-connection/client'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import BotRemote from '@dsh-bot/bot/remote'
 import WebSocket from 'ws'
 import { z } from 'zod'
 
-import type { BotFrame, BotSummary, ChatMessage } from '@/shared/bot'
+import type {
+  BotFrame,
+  BotSummary,
+  ChatMessage,
+  ToolActivity,
+  ToolActivityFrame,
+} from '@/shared/bot'
 
 import {
   readRunnerDescriptor,
@@ -14,6 +24,7 @@ import {
   runnerUnavailable,
   type RunnerDescriptor,
 } from './runner-connection'
+import { ToolActivityProjection } from './tool-activity'
 
 const summarySchema = z.object({ botId: z.uuid(), name: z.string() })
 const historySchema = z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string() }))
@@ -120,6 +131,7 @@ export class RunnerClient {
   private readonly lifetime = new AbortController()
   private readonly sessions = new Set<Session>()
   private readonly jobs = new Set<Promise<void>>()
+  private readonly toolAcknowledgements = new Map<string, (revision: number) => void>()
   private current: Session | undefined
   private connecting: Promise<Session> | undefined
   private shutdown: Promise<void> | undefined
@@ -157,6 +169,103 @@ export class RunnerClient {
       return historySchema.parse(result.value)
     } catch (error) {
       throw safeRemoteError(error)
+    }
+  }
+
+  acknowledgeTools(observationId: string, revision: number): void {
+    this.toolAcknowledgements.get(observationId)?.(revision)
+  }
+
+  /** One IPC frame in flight; canonical events drain into a bounded latest snapshot. */
+  async *tools(botId: string, signal?: AbortSignal): AsyncGenerator<ToolActivityFrame> {
+    const session = await this.session()
+    const observation = new AbortController()
+    const active = AbortSignal.any([
+      session.lifetime.signal,
+      observation.signal,
+      ...(signal ? [signal] : []),
+    ])
+    try {
+      active.throwIfAborted()
+      const bot = await session.ctx.remote.bot.get(
+        botId,
+        AbortSignal.any([active, AbortSignal.timeout(10_000)]),
+      )
+      if (!bot.ok) throw bot.error
+      const { sessionId } = z.object({ sessionId: z.uuid() }).parse(bot.value)
+      const stream = session.ctx.remote.session.follow(
+        { address: { kind: 'session', sessionId: SessionId(sessionId) }, maxMessages: 500 },
+        active,
+      )
+      const projection = new ToolActivityProjection()
+      const observationId = randomUUID()
+      let latest: readonly ToolActivity[] = []
+      let revision = 0
+      let delivered = 0
+      let acknowledged = 0
+      let ended = false
+      let failure: { error: unknown } | undefined
+      let wake: (() => void) | undefined
+      const notify = () => wake?.()
+      active.addEventListener('abort', notify, { once: true })
+      this.toolAcknowledgements.set(observationId, (value) => {
+        if (value !== delivered) return
+        acknowledged = value
+        notify()
+      })
+      // This pump never waits for renderer consumption. Only its latest bounded
+      // projection is retained while an IPC frame awaits acknowledgement.
+      const pump = (async () => {
+        try {
+          for await (const frame of stream) {
+            active.throwIfAborted()
+            const activities = projection.accept(frame)
+            if (activities) {
+              latest = activities
+              revision++
+              notify()
+            }
+          }
+          if (!active.aborted) throw new Error('Tool observation ended unexpectedly')
+        } catch (error) {
+          failure = { error }
+        } finally {
+          ended = true
+          notify()
+        }
+      })()
+      this.jobs.add(pump)
+      try {
+        while (!active.aborted) {
+          if (ended) {
+            if (failure) throw failure.error
+            break
+          }
+          if (revision > delivered && acknowledged === delivered) {
+            delivered = revision
+            yield { observationId, revision, activities: latest }
+          } else {
+            await new Promise<void>((resolve) => {
+              wake = resolve
+            })
+            wake = undefined
+          }
+        }
+      } finally {
+        observation.abort()
+        active.removeEventListener('abort', notify)
+        this.toolAcknowledgements.delete(observationId)
+        stream.dispose()
+        await pump
+        this.jobs.delete(pump)
+      }
+    } catch (error) {
+      if (!signal?.aborted && !this.lifetime.signal.aborted) {
+        this.invalidateTransportFailure(session, error)
+        throw safeRemoteError(error)
+      }
+    } finally {
+      observation.abort()
     }
   }
 
@@ -361,6 +470,7 @@ export class RunnerClient {
         await ctx.plugin(TypertRegistry)
         await ctx.plugin(Gateway)
         await ctx.remote.$mount(BotRemote)
+        await ctx.remote.$mount(SessionRemote)
         await opened.promise
         lifetime.signal.throwIfAborted()
         if (!session.usable) throw runnerUnavailable()

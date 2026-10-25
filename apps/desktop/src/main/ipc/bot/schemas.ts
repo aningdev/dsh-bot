@@ -6,6 +6,11 @@ export const historyInputSchema = z.strictObject({
   botId: z.uuid({ error: 'Bot 标识无效，请刷新列表。' }),
 })
 
+export const acknowledgeToolsInputSchema = z.strictObject({
+  observationId: z.uuid(),
+  revision: z.number().int().positive(),
+})
+
 export const sendInputSchema = historyInputSchema.extend({
   text: z
     .string({ error: '请输入消息内容。' })

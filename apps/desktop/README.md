@@ -45,11 +45,15 @@ bun run --cwd apps/runner start --home "$HOME/.dsh-bot/dev"
 DSH_BOT_RUNNER_HOME="$HOME/.dsh-bot/dev" bun run dev
 ```
 
-Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。Bot 创建与配置界面、凭据设置、工具与审批界面、后台安装和自带运行时由后续任务完成；当前列表显示已有的 Bot。
+Runner 不可用时，工作台提供重试连接；启动后台后可直接重试，无需重开窗口。对话中的工具活动显示调用名称、参数、结果与失败原因，随标准 Session 事件实时更新；重新打开应用后从同一 Session 恢复。Bot 创建与配置界面、凭据设置、审批界面、后台安装和自带运行时由后续任务完成；当前列表显示已有的 Bot。
 
 Main 读取 home 下的私有连接资料，校验文件权限、实例身份与本机 loopback URL，交换标准认证 Cookie 后装配 Harness Connection/Gateway 和生成的 Bot Remote。认证信息留在 Main；renderer 只能通过已有受控 oRPC 调用列表、历史与发送，不能取得 origin、连接 URL 或 Cookie。正式退出应用会清理 Main 连接，不停止独立 Runner。
 
 离开页面或断开窗口只停止回复观察，已经接纳的执行仍在 Runner 中进行。收到错误或提前断流时不会自动重发，界面保留未确认内容并允许重新加载历史；历史未收录的失败消息会恢复到输入框，供用户编辑或手动重试。超过 32768 个字符的草稿在页面提示，完整原文保留在输入框。没有本地发送任务时定期刷新历史，以显示后台随后完成的回复。单次读取取消不会关闭共享连接或中断其他回复观察。
+
+工具活动复用 Session Controller 的 `follow` 开场快照与持久工具事件，调用与结果按轮次、步骤和 `callId` 配对，以调用事件序号区分活动；模型跨轮复用 ID 不会覆盖历史。助手消息中的工具请求也用于恢复调用身份，覆盖执行前崩溃产生 `TOOL_NOT_STARTED` 结果的情况；窗口中缺少请求时保留结果并明确提示缺失的名称和参数。Main 校验事件顺序与所需字段后投影为受控 IPC 数据，不在客户端执行工具或另存日志。当前显示最近 500 条消息窗口内最近 100 次调用，参数和结果分别限制为 4096 和 8192 个字符，超长内容明确标记截断；非文本结果显示占位。这里不订阅临时模型参数片段，完整调用参数在 Harness 提交助手消息后显示。
+
+Main 持续消费标准事件并合并最新活动快照；renderer 确认接收后才发送下一帧，慢观察端最多保留一个在途 IPC 快照和一个 Main 最新快照，不积压每次更新。观察失败保留已显示内容并提供重新加载；历史读取确认连接恢复后自动重新订阅。取消观察不取消执行。
 
 ## 项目结构
 
@@ -117,6 +121,8 @@ bun run test:smoke
 ```
 
 E2E 通过 [`launchTestApp`](./tests/e2e/fixtures.ts) 启动应用，使用隔离的临时 profile，启用沙箱，并关闭 Playwright 的主题模拟。重启持久化场景复用 profile，关闭使用它的实例后再删除目录，避免 Windows 文件锁导致清理失败。Bot 对话 E2E 额外启动带确定性模型的真实 Runner；根 `bun run test:e2e` 会先构建 Runner 与测试 fixture；在桌面目录单独运行时，先从根执行 `bun run --cwd apps/runner build:test`。流式验证在首字符处暂停模型，再从另一个 Bot 显式释放；使用真实 Cookie 认证与打包应用，未调用真实 DeepSeek API。
+
+工具活动 E2E 通过测试 profile 批准的真实工具注册，使用 IPC 门闩分别释放成功与抛错调用，验证等待、结果及重开恢复；该工具只随 `--test-fixtures` 构建，不进入生产 profile。
 
 [testing.yaml](../../.github/workflows/testing.yaml) 在 Linux、macOS、Windows 上执行测试，并上传 Playwright 报告；[check.yaml](../../.github/workflows/check.yaml) 执行代码检查。工作流从根目录安装与运行，参考子模块不参与构建。本地结果只代表当前操作系统，其他平台由 CI 矩阵验证。签名、公证及原生窗口交互需要在目标平台另外确认。
 

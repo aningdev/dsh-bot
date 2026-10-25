@@ -1,9 +1,10 @@
 import { Button } from '@dsh-bot/ui/components/ui/button'
 import { Textarea } from '@dsh-bot/ui/components/ui/textarea'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { botHistoryQueryOptions, sendBotMessage } from '@/renderer/actions/bot'
+import BotToolActivities from '@/renderer/components/bot-tool-activities'
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
 import type { BotFrame, BotSummary } from '@/shared/bot'
 
@@ -37,6 +38,10 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
   const observation = useRef<Observation | null>(null)
   const transcript = useRef<HTMLDivElement>(null)
   const followsTail = useRef(true)
+  const followTools = useCallback(() => {
+    const element = transcript.current
+    if (element && followsTail.current) element.scrollTop = element.scrollHeight
+  }, [])
 
   useEffect(() => {
     const current: Observation = { controller: new AbortController(), busy: false }
@@ -217,6 +222,12 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
             </ol>
           </>
         )}
+        <BotToolActivities
+          key={bot.botId}
+          botId={bot.botId}
+          onUpdate={followTools}
+          historyUpdatedAt={history.dataUpdatedAt}
+        />
       </div>
       {(history.isError || pending?.phase === 'error') && (
         <div className="space-y-2 text-sm">

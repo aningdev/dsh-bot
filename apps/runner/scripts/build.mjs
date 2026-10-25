@@ -8,6 +8,7 @@ await build({
   entryPoints: fixture
     ? [
         root + 'tests/fixtures/model.ts',
+        root + 'tests/fixtures/tool-activity.ts',
         root + 'tests/fixtures/session-controller-probe.ts',
         root + 'tests/fixtures/shutdown-failure.ts',
       ]
