@@ -72,6 +72,49 @@ afterEach(async () => {
 })
 
 describe('Bot Controller public contract', () => {
+  test('template creation copies configuration and survives template changes after restart', async () => {
+    const directory = await home()
+    const first = await createBotHost(directory, new FakeModelAdapter(), [
+      {
+        id: 'writer',
+        name: '写作助手',
+        configuration: {
+          provider: 'fake',
+          model: 'fake-2',
+          baseInstructions: 'Base {{literal}}',
+          instructions: 'Original template',
+          capabilities: [],
+          maxTokens: 39,
+          reasoningEffort: null,
+          inputMode: 'steer',
+        },
+      },
+    ])
+    hosts.push(first)
+    const bot = await first.botController.createBot(
+      { name: 'Copied', cwd: directory, templateId: 'writer' },
+      signal,
+    )
+    expect(bot).toMatchObject({
+      model: 'fake-2',
+      baseInstructions: 'Base {{literal}}',
+      instructions: 'Original template',
+      maxTokens: 39,
+      inputMode: 'steer',
+    })
+    await closeHost(first)
+    const second = await host(directory)
+    expect(await second.botController.getBot(bot.botId, signal)).toEqual(bot)
+    const inspection = await answer(second, bot.botId, 'inspect configuration')
+    expect(inspection).toContain('Base {{literal}}')
+    expect(inspection).toContain('Original template')
+    await expect(
+      second.botController.createBot(
+        { name: 'Unavailable', cwd: directory, templateId: 'writer' },
+        signal,
+      ),
+    ).rejects.toMatchObject({ code: 'bot/invalid-input' })
+  })
   test('a standard prompt admission prevents streamed send from overtaking asynchronous preparation', async () => {
     const directory = await home()
     const ctx = await host(directory)
@@ -136,6 +179,7 @@ describe('Bot Controller public contract', () => {
     expect(loaded).toEqual({
       ...original,
       revision: 0,
+      baseInstructions: '',
       instructions: '',
       capabilities: [],
       maxTokens: null,

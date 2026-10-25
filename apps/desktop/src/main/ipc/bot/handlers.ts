@@ -5,6 +5,8 @@ import type { BotFrame, ToolActivityFrame } from '@/shared/bot'
 import type { RunnerClient } from '../../runner-client'
 import { RunnerError } from '../../runner-connection'
 import {
+  createBotInputSchema,
+  saveBotConfigurationInputSchema,
   acknowledgeToolsInputSchema,
   decideApprovalInputSchema,
   historyInputSchema,
@@ -20,6 +22,34 @@ function ipcError(error: unknown): ORPCError<string, unknown> {
 
 export function createBotHandlers(client: RunnerClient) {
   return {
+    configurationOptions: os.handler(async () => {
+      try {
+        return await client.configurationOptions()
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    configuration: os.input(historyInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.configuration(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    create: os.input(createBotInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.create(input)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    saveConfiguration: os.input(saveBotConfigurationInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.saveConfiguration(input.botId, input)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
     list: os.handler(async () => {
       try {
         return await client.list()

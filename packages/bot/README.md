@@ -12,20 +12,26 @@
 | `@dsh-bot/bot/typert`             | Host Loader | 官方生成器输出的严格描述与校验                    |
 | `@dsh-bot/bot/remote`             | 客户端组合  | 生成的 Remote 贡献及类型                          |
 
-Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfiguration`、`history`、流式 `send`，以及输入控制 `submit`、`inputState`、`stop`、`withdraw`。参数、结果与取消语义使用标准 Gateway；共享框架包使用 peerDependencies，构建保留外部包引用。
+Remote namespace 为 `bot`，方法包括 `create`、`configurationOptions`、`get`、`list`、`saveConfiguration`、`history`、流式 `send`，以及输入控制 `submit`、`inputState`、`stop`、`withdraw`。参数、结果与取消语义使用标准 Gateway；共享框架包使用 peerDependencies，构建保留外部包引用。
+
+## 模板与创建
+
+`configurationOptions` 返回可复制的模板和已部署能力 id，不包含插件模块、插件配置或凭据。默认提供「空白助手」，采用 profile 的 provider/model，不授予能力。部署可配置 `templates: [{ id, name, configuration }]`，configuration 包含执行配置但不含工作目录；id 必须唯一，`blank` 保留给内置模板。
+
+`create({ name, cwd, templateId? })` 将所选模板具体化为独立 Bot 配置，校验目录、模型及能力后持久化；省略模板使用空白助手。创建不发起模型请求，基础与附加指令分别以不插值的上游 system-prompt section 应用，指令不会授予工具权限。修改模板不改变已有 Bot，重启读取已有配置也不重新展开模板。
 
 ## 配置保存
 
 `saveConfiguration(botId, { expectedRevision, configuration })` 接受调用方读取的版本及完整执行配置。成功返回的新版本表示配置已持久化、新 Agent 已就绪、Session 已完成持久化屏障。它不会为了应用配置发起模型请求。
 
-| 配置字段                       | 含义                                                                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------- |
-| `cwd`                          | 执行侧已存在的绝对目录；通过上游 working-directory 服务生效，保留 Session 原始 header |
-| `provider`、`model`            | Bot 的模型路由，使用上游精确元数据校验                                                |
-| `maxTokens`、`reasoningEffort` | 模型请求覆盖值；`null` 清除该项覆盖，采用 provider 默认行为                           |
-| `instructions`                 | 按原文注册的作用域指令，保留 `{{…}}` 字面量；不授予工具或权限                         |
-| `capabilities`                 | 已部署能力的唯一 id 列表，映射为该 Bot 的 preset 插件                                 |
-| `inputMode`                    | `queue` 在下一轮处理，`steer` 在下一步进入；缺省为 `queue`                            |
+| 配置字段                           | 含义                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `cwd`                              | 执行侧已存在的绝对目录；通过上游 working-directory 服务生效，保留 Session 原始 header |
+| `provider`、`model`                | Bot 的模型路由，使用上游精确元数据校验                                                |
+| `maxTokens`、`reasoningEffort`     | 模型请求覆盖值；`null` 清除该项覆盖，采用 provider 默认行为                           |
+| `baseInstructions`、`instructions` | 分别为基础与附加指令，按原文注册，保留 `{{…}}` 字面量；不授予工具或权限               |
+| `capabilities`                     | 已部署能力的唯一 id 列表，映射为该 Bot 的 preset 插件                                 |
+| `inputMode`                        | `queue` 在下一轮处理，`steer` 在下一步进入；缺省为 `queue`                            |
 
 插件 Config 的 `capabilities` 是执行侧批准的能力表，默认空表；每项包含 `{ name, config }` 插件条目，config 只接受无损 JSON。客户端保存能力 id，不能提交插件模块或执行侧配置。实际文件、进程、网络工具与权限组合由后续能力票提供。
 
@@ -38,6 +44,8 @@ Remote namespace 为 `bot`，方法包括 `create`、`get`、`list`、`saveConfi
 | `maintenance`                   | 其他维护、冷初始化或已接纳的标准 API 操作占用窗口，即使公开状态显示 idle |
 | `replacing`                     | 已有一次配置应用正在进行                                                 |
 | `unavailable`                   | 已停止接纳、处于故障，或活跃 Agent 不属于此控制器                        |
+
+保存拒绝在可取得 inbox 状态时附带 `pendingCount`，暖 Agent 和冷持久化输入均受保护。桌面保留未保存草稿并显示剩余条数；旧版本客户端忽略该可选字段不影响拒绝语义。
 
 版本过期返回 `bot/config-conflict`，校验失败返回 `bot/config-invalid`。装配或提交失败后恢复旧配置与旧配置下的 Agent，返回 `bot/config-failed`；清理或恢复失败则返回 `bot/faulted` 并停止接纳。待处理输入不会为了保存而被清空。
 
@@ -57,7 +65,7 @@ Bot 记录使用上游 `storageDomain`，domain 为 `dsh_bot`，版本 1，表�
 
 `inputState` 从上游 inbox 读取尚未认领的用户输入及执行状态，读取冷 Session 不唤醒执行。`withdraw(botId, messageId)` 只移除对应的待处理项，持久化后返回；已经认领或撤回时返回 `{ removed: false }`。`stop` 使用 `cancel(..., { keepInbox: true })`，等待执行结束和持久化后成功；停止中的新接纳被拒绝。已进入执行的输入不退回队列，尚未认领的输入保留到明确撤回或后续执行，包括 Runner 正常退出和重新启动。
 
-上游当前版本在 AgentLoop 释放时默认清空 inbox，因此保留输入还需要窄范围兼容补丁；复现与移除条件见 [补丁说明](../../patches/README.md)。Runner 的真实进程测试验证停止、独立撤回和重启保留；桌面打包 E2E 分别验证排队与下一步追加、执行中撤回及停止后重开。输入模式的界面配置入口随 Bot 配置任务交付。
+上游当前版本在 AgentLoop 释放时默认清空 inbox，因此保留输入还需要窄范围兼容补丁；复现与移除条件见 [补丁说明](../../patches/README.md)。Runner 的真实进程测试验证停止、独立撤回和重启保留；桌面打包 E2E 分别验证排队与下一步追加、执行中撤回及停止后重开。输入模式可在桌面「配置 Bot」中修改，与其他执行配置遵守同一保存事务。
 
 ## 构建与测试
 

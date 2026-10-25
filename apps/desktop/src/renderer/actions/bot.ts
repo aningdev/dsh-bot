@@ -1,5 +1,21 @@
 import { ipc } from '@/renderer/lib/ipc-client'
 
+export function botConfigurationOptionsQueryOptions() {
+  return ipc.utils.bot.configurationOptions.queryOptions()
+}
+
+export function botConfigurationQueryOptions(botId: string) {
+  return ipc.utils.bot.configuration.queryOptions({ input: { botId } })
+}
+
+export function createBotMutationOptions() {
+  return ipc.utils.bot.create.mutationOptions()
+}
+
+export function saveBotConfigurationMutationOptions() {
+  return ipc.utils.bot.saveConfiguration.mutationOptions()
+}
+
 export function botListQueryOptions() {
   return ipc.utils.bot.list.queryOptions()
 }

@@ -12,6 +12,9 @@ import WebSocket from 'ws'
 import { z } from 'zod'
 
 import type {
+  BotConfiguration,
+  BotDetails,
+  BotConfigurationOptions,
   ApprovalDecision,
   BotFrame,
   BotInputState,
@@ -22,6 +25,7 @@ import type {
   ToolActivityFrame,
 } from '@/shared/bot'
 
+import { botConfigurationSchema } from './ipc/bot/schemas'
 import { PendingApprovals } from './pending-approvals'
 import {
   readRunnerDescriptor,
@@ -32,6 +36,22 @@ import {
 import { ToolActivityProjection } from './tool-activity'
 
 const summarySchema = z.object({ botId: z.uuid(), name: z.string() })
+const detailsSchema = botConfigurationSchema.extend({
+  botId: z.uuid(),
+  name: z.string(),
+  sessionId: z.uuid(),
+  revision: z.number().int().nonnegative(),
+})
+const choicesSchema = z.object({
+  templates: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      configuration: botConfigurationSchema.omit({ cwd: true }),
+    }),
+  ),
+  capabilities: z.array(z.string()),
+})
 const pendingInputSchema = z.object({
   id: z.uuid(),
   text: z.string(),
@@ -71,8 +91,63 @@ function safeRemoteError(error: unknown, sending = false): RunnerError {
       return new RunnerError('该 Bot 已不存在，请刷新列表。', 'BAD_REQUEST')
     case 'bot/busy':
       return new RunnerError('该 Bot 正在执行，请等待完成后再发送。', 'CONFLICT')
-    case 'bot/invalid-input':
-      return new RunnerError('消息内容无效，请修改后重试。', 'BAD_REQUEST')
+    case 'bot/config-rejected': {
+      const details =
+        typeof error === 'object' && error !== null && 'details' in error
+          ? error.details
+          : undefined
+      const reason =
+        typeof details === 'object' && details !== null && 'reason' in details
+          ? details.reason
+          : undefined
+      const count =
+        typeof details === 'object' &&
+        details !== null &&
+        'pendingCount' in details &&
+        typeof details.pendingCount === 'number' &&
+        Number.isSafeInteger(details.pendingCount) &&
+        details.pendingCount >= 0
+          ? details.pendingCount
+          : undefined
+      const remaining = count === undefined ? '' : `，还有 ${count} 条待处理消息`
+      const message =
+        reason === 'running'
+          ? `Bot 正在执行${remaining}，请停止或等待完成后保存。`
+          : reason === 'pending-input'
+            ? `尚有待处理输入${remaining}，请处理或撤回后保存。`
+            : reason === 'replacing'
+              ? '配置正在应用，请等待完成后重试。'
+              : reason === 'maintenance'
+                ? 'Bot 正在维护，请稍后重试。'
+                : 'Bot 暂时不可用，请检查 Runner 状态。'
+      return new RunnerError(message, 'CONFLICT')
+    }
+    case 'bot/config-conflict':
+      return new RunnerError('配置已被其他操作更新。请重新加载后再编辑。', 'CONFLICT')
+    case 'bot/config-invalid':
+      return new RunnerError('配置无效，请检查工作目录、模型和能力选择。', 'BAD_REQUEST')
+    case 'bot/config-failed':
+      return new RunnerError('新配置未能生效，已恢复原配置。请修改后重试。')
+    case 'bot/invalid-input': {
+      const field =
+        typeof error === 'object' &&
+        error !== null &&
+        'details' in error &&
+        typeof error.details === 'object' &&
+        error.details !== null &&
+        'field' in error.details
+          ? error.details.field
+          : undefined
+      const message =
+        field === 'cwd'
+          ? '工作目录不存在或不可访问，请检查后重试。'
+          : field === 'templateId'
+            ? '模板已不可用，请重新加载后选择。'
+            : field === 'name'
+              ? 'Bot 名称无效，请修改后重试。'
+              : '输入内容无效，请修改后重试。'
+      return new RunnerError(message, 'BAD_REQUEST')
+    }
     case 'bot/turn-failed':
       return new RunnerError('本次执行失败，请检查后台配置并查看历史。')
     case 'bot/faulted':
@@ -157,6 +232,69 @@ export class RunnerClient {
   constructor(options: RunnerClientOptions) {
     this.options = options
     this.doFetch = options.fetch ?? globalThis.fetch
+  }
+
+  async configurationOptions(): Promise<BotConfigurationOptions> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.bot.configurationOptions(this.requestSignal(session))
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return choicesSchema.parse(result.value)
+    } catch (error) {
+      throw safeRemoteError(error)
+    }
+  }
+
+  async configuration(botId: string): Promise<BotDetails> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.bot.get(botId, this.requestSignal(session))
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return detailsSchema.parse(result.value)
+    } catch (error) {
+      throw safeRemoteError(error)
+    }
+  }
+
+  async create(input: { name: string; cwd: string; templateId: string }): Promise<BotDetails> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.bot.create(input, this.requestSignal(session))
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return detailsSchema.parse(result.value)
+    } catch (error) {
+      throw safeRemoteError(error)
+    }
+  }
+
+  async saveConfiguration(
+    botId: string,
+    request: { expectedRevision: number; configuration: BotConfiguration },
+  ): Promise<BotDetails> {
+    try {
+      const session = await this.session()
+      const result = await session.ctx.remote.bot.saveConfiguration(
+        botId,
+        request,
+        this.requestSignal(session),
+      )
+      if (!result.ok) {
+        this.invalidateTransportFailure(session, result.error)
+        throw result.error
+      }
+      return detailsSchema.parse(result.value)
+    } catch (error) {
+      throw safeRemoteError(error)
+    }
   }
 
   async list(): Promise<BotSummary[]> {

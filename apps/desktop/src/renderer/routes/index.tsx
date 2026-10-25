@@ -40,7 +40,7 @@ function HomePage() {
               : bots.isError
                 ? '无法加载 Bot，请在左侧重试连接。'
                 : bots.data.length === 0
-                  ? '暂无 Bot。配置 Bot 后，刷新左侧列表即可开始对话。'
+                  ? '暂无 Bot。请在左侧新建 Bot。'
                   : '请在左侧选择 Bot。'}
           </div>
         )}

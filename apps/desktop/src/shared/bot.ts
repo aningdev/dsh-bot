@@ -6,6 +6,34 @@ export interface BotSummary {
   readonly name: string
 }
 
+export interface BotConfiguration {
+  readonly cwd: string
+  readonly provider: string
+  readonly model: string
+  readonly baseInstructions: string
+  readonly instructions: string
+  readonly capabilities: readonly string[]
+  readonly maxTokens: number | null
+  readonly reasoningEffort: string | null
+  readonly inputMode: InputMode
+}
+
+export interface BotDetails extends BotSummary, BotConfiguration {
+  readonly sessionId: string
+  readonly revision: number
+}
+
+export interface BotTemplate {
+  readonly id: string
+  readonly name: string
+  readonly configuration: Omit<BotConfiguration, 'cwd'>
+}
+
+export interface BotConfigurationOptions {
+  readonly templates: readonly BotTemplate[]
+  readonly capabilities: readonly string[]
+}
+
 export interface ChatMessage {
   readonly role: 'user' | 'assistant'
   readonly text: string

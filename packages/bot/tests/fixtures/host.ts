@@ -16,7 +16,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
 import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
 import { apply, inject, type Config } from '@dsh-bot/bot'
-import type { BotRecord } from '@dsh-bot/bot/types'
+import type { BotRecord, BotTemplate } from '@dsh-bot/bot/types'
 import { z } from 'zod'
 
 import { FakeModelAdapter } from './fake-model.ts'
@@ -59,6 +59,7 @@ export async function storeLegacyBot(
 export async function createBotHost(
   home: string,
   adapter: LlmAdapter = new FakeModelAdapter(),
+  templates: readonly BotTemplate[] = [],
 ): Promise<Context> {
   const ctx = new Context()
   ctx.baseUrl = new URL('./', import.meta.url).href
@@ -83,6 +84,7 @@ export async function createBotHost(
     const config: Config = {
       provider: 'fake',
       model: 'fake-1',
+      templates: [...templates],
       capabilities: {
         probe: [{ name: new URL('./capability.mjs', import.meta.url).href, config: {} }],
       },

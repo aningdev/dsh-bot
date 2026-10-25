@@ -10,6 +10,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
 import { botListQueryOptions } from '@/renderer/actions/bot'
+import { CreateBotButton } from '@/renderer/components/bot-configuration'
 import { useWindowLayoutStore } from '@/renderer/stores/window-layout-store'
 
 export default function BotList() {
@@ -29,6 +30,9 @@ export default function BotList() {
     <SidebarContent>
       <SidebarGroup>
         <SidebarGroupLabel>Bot 列表</SidebarGroupLabel>
+        <div className="px-2 pb-2">
+          <CreateBotButton />
+        </div>
         <SidebarGroupContent className="space-y-2 text-sm">
           {bots.isPending ? (
             <p role="status" className="text-muted-foreground px-2">
@@ -48,7 +52,7 @@ export default function BotList() {
             </div>
           ) : bots.data.length === 0 ? (
             <div className="space-y-2 px-2">
-              <p className="text-muted-foreground">暂无 Bot。配置 Bot 后，刷新列表即可开始对话。</p>
+              <p className="text-muted-foreground">暂无 Bot。新建 Bot 后即可开始对话。</p>
               <Button
                 variant="outline"
                 size="sm"

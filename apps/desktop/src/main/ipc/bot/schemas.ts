@@ -1,9 +1,34 @@
+import path from 'node:path'
+
 import { z } from 'zod'
 
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
 
 export const historyInputSchema = z.strictObject({
   botId: z.uuid({ error: 'Bot 标识无效，请刷新列表。' }),
+})
+
+export const botConfigurationSchema = z.object({
+  cwd: z.string().max(4096).refine(path.isAbsolute, '请选择绝对路径。'),
+  provider: z.string().trim().min(1).max(200),
+  model: z.string().trim().min(1).max(200),
+  baseInstructions: z.string().max(131072).default(''),
+  instructions: z.string().max(131072),
+  capabilities: z.array(z.string().min(1).max(200)).max(128),
+  maxTokens: z.number().int().positive().nullable(),
+  reasoningEffort: z.string().min(1).max(100).nullable(),
+  inputMode: z.enum(['queue', 'steer']).default('queue'),
+})
+
+export const createBotInputSchema = z.strictObject({
+  name: z.string().trim().min(1).max(100),
+  cwd: botConfigurationSchema.shape.cwd,
+  templateId: z.string().min(1).max(200),
+})
+
+export const saveBotConfigurationInputSchema = historyInputSchema.extend({
+  expectedRevision: z.number().int().nonnegative(),
+  configuration: botConfigurationSchema.strict(),
 })
 
 export const decideApprovalInputSchema = historyInputSchema.extend({

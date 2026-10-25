@@ -12,6 +12,7 @@ import {
   withdrawBotInputMutationOptions,
 } from '@/renderer/actions/bot'
 import BotApprovals from '@/renderer/components/bot-approvals'
+import { ConfigureBotButton } from '@/renderer/components/bot-configuration'
 import BotToolActivities from '@/renderer/components/bot-tool-activities'
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
 import type { BotFrame, BotSummary } from '@/shared/bot'
@@ -215,6 +216,7 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{bot.name}</h2>
         <div className="flex gap-2">
+          <ConfigureBotButton botId={bot.botId} />
           {inputState.data?.status === 'running' && (
             <Button
               variant="outline"

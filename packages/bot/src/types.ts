@@ -5,6 +5,7 @@ export interface BotConfiguration {
   readonly cwd: string
   readonly provider: string
   readonly model: string
+  readonly baseInstructions?: string
   readonly instructions: string
   readonly capabilities: readonly string[]
   readonly maxTokens: number | null
@@ -25,6 +26,20 @@ export interface BotRecord extends BotConfiguration {
 export interface CreateBotRequest {
   readonly name: string
   readonly cwd: string
+  readonly templateId?: string
+}
+
+/** A deployment template is copied at creation; it is never a live parent. */
+export interface BotTemplate {
+  readonly id: string
+  readonly name: string
+  readonly configuration: Omit<BotConfiguration, 'cwd'>
+}
+
+/** Safe configuration choices; approved plugin implementations remain execution-side. */
+export interface BotConfigurationOptions {
+  readonly templates: readonly BotTemplate[]
+  readonly capabilities: readonly string[]
 }
 
 /** A complete replacement based on the configuration version the caller read. */
@@ -77,7 +92,11 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     /** Input cannot identify or create a Bot. */
     'bot/invalid-input': { readonly field: string }
     /** No configuration was applied because the Bot cannot grant an idle window. */
-    'bot/config-rejected': { readonly botId: string; readonly reason: ConfigurationRejectionReason }
+    'bot/config-rejected': {
+      readonly botId: string
+      readonly reason: ConfigurationRejectionReason
+      readonly pendingCount?: number
+    }
     /** The caller edited an obsolete configuration revision. */
     'bot/config-conflict': {
       readonly botId: string

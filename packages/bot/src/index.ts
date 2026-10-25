@@ -34,6 +34,8 @@ import type {
   BotInputState,
   PendingInput,
   BotConfiguration,
+  BotConfigurationOptions,
+  BotTemplate,
   BotFrame,
   BotRecord,
   ChatMessage,
@@ -62,6 +64,7 @@ export interface Config {
   readonly provider: string
   readonly model: string
   readonly capabilities: Record<string, CapabilityPlugin[]>
+  readonly templates?: BotTemplate[]
 }
 
 const capabilityConfiguration = schema.transform(
@@ -81,6 +84,7 @@ const capabilityConfiguration = schema.transform(
 export const Config: schema<Config> = schema.object({
   provider: schema.string().default('deepseek-official'),
   model: schema.string().default('deepseek-flash'),
+  templates: schema.array(schema.any<BotTemplate>()).default([]),
   capabilities: schema
     .dict(
       schema.array(
@@ -98,6 +102,7 @@ const storedBot = z.object({
   model: z.string().min(1),
   sessionId: z.uuid(),
   revision: z.number().int().nonnegative().default(0),
+  baseInstructions: z.string().default(''),
   instructions: z.string().default(''),
   capabilities: z.array(z.string().min(1)).default([]),
   maxTokens: z.number().int().positive().nullable().default(null),
@@ -111,13 +116,17 @@ const configurationInput = storedBot
     provider: true,
     model: true,
     instructions: true,
+    baseInstructions: true,
     capabilities: true,
     maxTokens: true,
     reasoningEffort: true,
     inputMode: true,
   })
   .required()
-  .extend({ inputMode: storedBot.shape.inputMode })
+  .extend({
+    inputMode: storedBot.shape.inputMode,
+    baseInstructions: storedBot.shape.baseInstructions,
+  })
 const saveConfigurationInput = z.object({
   expectedRevision: z.number().int().nonnegative(),
   configuration: configurationInput,
@@ -128,7 +137,14 @@ interface ConfigurationTransaction {
   readonly candidate: BotRecord
 }
 
-const createBotInput = storedBot.pick({ name: true, cwd: true })
+const templateInput = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1),
+  configuration: configurationInput.omit({ cwd: true }),
+})
+const createBotInput = storedBot
+  .pick({ name: true, cwd: true })
+  .extend({ templateId: z.string().min(1).optional() })
 const botDomain = defineDomain({
   name: 'dsh_bot',
   version: 1,
@@ -285,22 +301,62 @@ export class BotController extends TypertRemoteService {
       })
     }
     signal.throwIfAborted()
+    const { name, cwd, templateId } = parsed.data
+    const template = this.templateChoices().find((item) => item.id === (templateId ?? 'blank'))
+    if (template === undefined)
+      throw new RemoteError('bot/invalid-input', 'Choose an available template', {
+        field: 'templateId',
+      })
     const botId = randomUUID()
     const record: BotRecord = {
-      ...parsed.data,
+      ...template.configuration,
+      name,
+      cwd,
       botId,
       sessionId: botId,
-      provider: this.config.provider,
-      model: this.config.model,
       revision: 0,
-      instructions: '',
-      capabilities: [],
-      maxTokens: null,
-      reasoningEffort: null,
-      inputMode: 'queue',
     }
+    await this.validateConfiguration(record, signal)
     await this.records.put(botId, record)
     return record
+  }
+
+  private templateChoices(): BotTemplate[] {
+    const defaults: BotTemplate = {
+      id: 'blank',
+      name: '空白助手',
+      configuration: {
+        provider: this.config.provider,
+        model: this.config.model,
+        baseInstructions: '',
+        instructions: '',
+        capabilities: [],
+        maxTokens: null,
+        reasoningEffort: null,
+        inputMode: 'queue',
+      },
+    }
+    const templates = [
+      defaults,
+      ...(this.config.templates ?? []).map((item) => templateInput.parse(item)),
+    ]
+    if (new Set(templates.map((item) => item.id)).size !== templates.length)
+      throw new Error('Bot template identities must be unique')
+    return templates
+  }
+
+  /**
+   * List safe creation templates and approved capability identities.
+   * @param signal - Caller cancellation.
+   * @returns Detached choices without plugin configuration or credentials.
+   */
+  @Remote('configurationOptions')
+  async configurationOptions(signal: AbortSignal): Promise<BotConfigurationOptions> {
+    signal.throwIfAborted()
+    return structuredClone({
+      templates: this.templateChoices(),
+      capabilities: Object.keys(this.config.capabilities).sort(),
+    })
   }
 
   /**
@@ -507,15 +563,21 @@ export class BotController extends TypertRemoteService {
     reason: ConfigurationRejectionReason,
     cause?: unknown,
   ): never {
+    const handle = this.handles.get(botId)
     throw new RemoteError(
       'bot/config-rejected',
       'Bot cannot apply configuration now',
       {
         botId,
         reason,
+        ...(handle === undefined ? {} : { pendingCount: this.pendingCount(handle.agent) }),
       },
       { cause },
     )
+  }
+
+  private pendingCount(agent: Agent): number {
+    return agent.inbox.nextTurn.length + agent.inbox.nextStep.length
   }
 
   private hasPending(agent: Agent): boolean {
@@ -537,8 +599,13 @@ export class BotController extends TypertRemoteService {
     const inbox = snapshot.values.inbox
     if (inbox === undefined)
       throw new Error('Bot configuration requires the standard inbox projection')
-    if (inbox['next-turn'].length > 0 || inbox['next-step'].length > 0)
-      this.rejectConfiguration(record.botId, 'pending-input')
+    const pendingCount = inbox['next-turn'].length + inbox['next-step'].length
+    if (pendingCount > 0)
+      throw new RemoteError('bot/config-rejected', 'Bot still owns pending input', {
+        botId: record.botId,
+        reason: 'pending-input',
+        pendingCount,
+      })
   }
 
   private modelOptions(configuration: BotConfiguration): LlmCallConfig {
@@ -1030,6 +1097,16 @@ export class BotController extends TypertRemoteService {
     const setup = async (agentCtx: Context, agent: Agent): Promise<void> => {
       installModelSelection(agentCtx, selection)
       await this.ctx.agentPresets.mount(agentCtx, presetId)
+      const baseInstructions = record.baseInstructions ?? ''
+      if (baseInstructions)
+        agentCtx.effect(() =>
+          agentCtx.systemPrompt.section({
+            name: 'dsh-bot:base-instructions',
+            order: 10200,
+            text: baseInstructions,
+            interpolate: false,
+          }),
+        )
       if (record.instructions.length > 0)
         agentCtx.effect(() =>
           agentCtx.systemPrompt.section({

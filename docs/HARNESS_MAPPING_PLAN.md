@@ -1,6 +1,6 @@
 # Harness 到 dsh-bot 的映射方案
 
-本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调。桌面 Main 已消费认证 Remote，提供 Bot 列表、流式对话、工具活动和单次审批；创建和配置界面、输入队列控制、launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
+本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调。桌面 Main 已消费认证 Remote，提供 Bot 创建、配置、列表、流式对话、工具活动、单次审批与输入队列控制；launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
 
 ## 推荐选择
 
