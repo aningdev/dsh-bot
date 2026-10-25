@@ -64,6 +64,7 @@ function ServiceControls() {
         </p>
       )}
       {control.isError && <p role="alert">{control.error.message}</p>}
+      {control.isSuccess && control.variables.action === 'upgrade' && <p>后台运行时已更新。</p>}
       <label className="flex items-center gap-2" htmlFor={id}>
         <Checkbox
           id={id}
@@ -99,6 +100,13 @@ function ServiceControls() {
         </Button>
         <Button
           variant="outline"
+          disabled={!state?.installed || control.isPending}
+          onClick={() => control.mutate({ action: 'upgrade' })}
+        >
+          {control.isPending && control.variables?.action === 'upgrade' ? '正在更新…' : '更新后台'}
+        </Button>
+        <Button
+          variant="outline"
           disabled={control.isPending || status.isFetching}
           onClick={() => void status.refetch()}
         >
@@ -112,7 +120,10 @@ function ServiceControls() {
           卸载服务
         </Button>
       </div>
-      <p className="text-muted-foreground">卸载服务会保留 Bot 配置和对话记录。</p>
+      <p className="text-muted-foreground">
+        更新后台会中断正在执行的任务，应用随此版本携带的运行时，再恢复原运行状态；不会自动重发消息或重跑工具。卸载服务会保留
+        Bot 配置和对话记录。
+      </p>
     </div>
   )
 }

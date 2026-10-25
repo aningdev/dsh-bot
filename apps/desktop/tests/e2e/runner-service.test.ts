@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -37,12 +37,15 @@ test('background controls show service state without starting or enabling login 
 })
 
 test('shipped runtime installs and starts without developer tools and survives desktop reopening', async () => {
+  test.setTimeout(120_000)
   test.skip(process.platform !== 'darwin', 'LaunchAgent management is macOS only')
   const home = await mkdtemp(path.join(tmpdir(), 'runner-delivery-'))
-  const runtimeRoot = path.resolve(
+  const packagedRoot = path.resolve(
     path.dirname(readPackagedApp().executable),
     '../Resources/runner',
   )
+  const runtimeRoot = path.join(home, 'application-runtime')
+  await cp(packagedRoot, runtimeRoot, { recursive: true, verbatimSymlinks: true })
   const uid = process.getuid?.()
   if (!uid) throw new Error('Run this acceptance test as a logged-in desktop user')
   const service = new RunnerService({
@@ -62,7 +65,7 @@ test('shipped runtime installs and starts without developer tools and survives d
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
     let dialog = page.getByRole('dialog', { name: '后台服务', exact: true })
     await dialog.getByRole('button', { name: '安装后台', exact: true }).click()
-    await expect(dialog.getByRole('status')).toHaveText('后台已停止')
+    await expect(dialog.getByRole('status')).toHaveText('后台已停止', { timeout: 30_000 })
     await dialog.getByRole('button', { name: '启动后台', exact: true }).click()
     await expect(dialog.getByRole('status')).toHaveText('后台正在运行')
     await expect.poll(async () => (await service.status()).pid).not.toBeNull()
@@ -79,6 +82,9 @@ test('shipped runtime installs and starts without developer tools and survives d
     const pid = (await service.status()).pid
     await opened.dispose()
     expect((await service.status()).pid).toBe(pid)
+    const previousPlist = await readFile(path.join(home, 'service/runner.plist'), 'utf8')
+    // Replacing application resources cannot change the running version's dependencies.
+    await writeFile(path.join(runtimeRoot, 'upgrade-probe.txt'), 'replacement bundle')
     opened = await launchTestApp({ runnerHome: home, runtimeRoot, withoutDevelopmentTools: true })
     page = await opened.app.firstWindow()
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
@@ -112,7 +118,18 @@ test('shipped runtime installs and starts without developer tools and survives d
     await expect(create.getByLabel('模板', { exact: true })).toContainText('空白助手')
     await page.keyboard.press('Escape')
     await expect(create).toHaveCount(0)
+    const beforeUpgrade = await readRunnerDescriptor(home)
     await page.getByRole('button', { name: '后台服务', exact: true }).click()
+    await dialog.getByRole('button', { name: '更新后台', exact: true }).click()
+    await expect(dialog.getByText('后台运行时已更新。', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    })
+    expect((await readRunnerDescriptor(home)).instanceId).not.toBe(beforeUpgrade.instanceId)
+    await expect(dialog.getByRole('status')).toHaveText('后台正在运行')
+    const plist = await readFile(path.join(home, 'service/runner.plist'), 'utf8')
+    expect(plist).toContain(path.join(home, 'service/runtimes'))
+    expect(plist).not.toContain(runtimeRoot)
+    expect(plist).not.toBe(previousPlist)
     await dialog.getByRole('button', { name: '停止后台', exact: true }).click()
     await expect(dialog.getByRole('status')).toHaveText('后台已停止')
     await dialog.getByRole('button', { name: '卸载服务', exact: true }).click()

@@ -26,7 +26,7 @@ Contents/Resources/runner/
 - `runtime.json` 记录根 `bun.lock` SHA-256、已声明补丁与实际复制包的名称和版本；它用于构建追踪，不替代代码签名或完整性证明。
 - 只接受在目标 macOS 架构本机构建，拒绝跨架构原生依赖与非 macOS 打包。CI 保留三平台单元测试；成品 E2E、冒烟和发布只针对 macOS。Windows/Linux 成品尚未提供。
 
-后台运行仍为独立 Node，不使用 Electron RunAsNode，也不放开 Electron 的 Node 选项或调试 fuse。Main 默认使用资源内绝对 Node 和入口；launchd PATH 只含资源 `bin` 与系统基础目录。应用须放在稳定安装位置后注册服务；应用路径变化的安装更新仍须按 #13 先停止再替换。
+后台运行仍为独立 Node，不使用 Electron RunAsNode，也不放开 Electron 的 Node 选项或调试 fuse。Main 校验并复制资源到用户 home 内独立的版本目录，launchd 使用该目录内的绝对 Node 和入口，PATH 只含该版本的 `bin` 与系统基础目录。更换应用不会改写运行中的依赖；重新打开新桌面后通过「更新后台」先停止并等待旧进程，再切换运行时。时序、失败行为及验证边界见[恢复与更新](RUNNER_RECOVERY.md)。
 
 ## 验证入口和现有证据
 

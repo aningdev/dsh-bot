@@ -28,6 +28,9 @@ export const runnerHandlers = {
         case 'stop':
           await runner.stop()
           break
+        case 'upgrade':
+          await runner.upgrade()
+          break
         case 'uninstall':
           await runner.uninstall()
           break
@@ -42,9 +45,11 @@ export const runnerHandlers = {
     } catch (error) {
       if (error instanceof RunnerError) throw new ORPCError(error.code, { message: error.message })
       const message =
-        input.action === 'stop' || input.action === 'uninstall'
-          ? '无法确认后台已停止，请刷新状态后重试。运行时尚未替换。'
-          : '后台服务操作失败，请确认随包运行时已安装，且已登录 macOS 桌面后重试。'
+        input.action === 'upgrade'
+          ? '后台更新未完成，请刷新状态后重试。不会自动重发消息或重跑工具。'
+          : input.action === 'stop' || input.action === 'uninstall'
+            ? '无法确认后台已停止，请刷新状态后重试。运行时尚未替换。'
+            : '后台服务操作失败，请确认随包运行时已安装，且已登录 macOS 桌面后重试。'
       throw new ORPCError('SERVICE_UNAVAILABLE', { message })
     }
   }),

@@ -16,6 +16,9 @@ interface RunnerServiceOptions {
   readonly label: string
   readonly uid: number
   readonly runtime: { readonly node: string; readonly entry: string }
+  readonly prepareRuntime?: () => Promise<RunnerServiceOptions['runtime']>
+  readonly waitReady?: () => Promise<void>
+  readonly isAlive?: (pid: number) => boolean
   /** Process boundary only; deterministic tests do not claim real launchd coverage. */
   readonly launchctl?: (args: readonly string[]) => Promise<LaunchctlResult>
 }
@@ -142,15 +145,11 @@ export class RunnerService {
   }
 
   private async installFiles(): Promise<void> {
-    await access(this.options.runtime.node, constants.X_OK)
-    await access(this.options.runtime.entry, constants.R_OK)
+    const runtime = (await this.options.prepareRuntime?.()) ?? this.options.runtime
+    await access(runtime.node, constants.X_OK)
+    await access(runtime.entry, constants.R_OK)
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
-    const args = [
-      this.options.runtime.node,
-      this.options.runtime.entry,
-      '--home',
-      this.options.home,
-    ]
+    const args = [runtime.node, runtime.entry, '--home', this.options.home]
     const content = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -162,7 +161,7 @@ export class RunnerService {
 <key>ThrottleInterval</key><integer>10</integer>
 <key>ExitTimeOut</key><integer>30</integer>
 <key>ProcessType</key><string>Background</string>
-<key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(path.dirname(this.options.runtime.node) + ':/usr/bin:/bin:/usr/sbin:/sbin')}</string></dict>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(path.dirname(runtime.node) + ':/usr/bin:/bin:/usr/sbin:/sbin')}</string></dict>
 <key>StandardOutPath</key><string>${xml(path.join(this.directory, 'stdout.log'))}</string>
 <key>StandardErrorPath</key><string>${xml(path.join(this.directory, 'stderr.log'))}</string>
 </dict></plist>
@@ -182,25 +181,55 @@ export class RunnerService {
     return this.serialize(() => this.installFiles())
   }
 
+  private async bootstrap(): Promise<void> {
+    if ((await this.inspect()).loaded) return
+    const result = await this.run(['bootstrap', this.domain, this.plist])
+    // A second desktop may have won bootstrap; the shared launchd label is authoritative.
+    if (result.code !== 0 && !(await this.inspect()).loaded)
+      throw new Error('后台服务启动失败，请检查运行时安装后重试。')
+  }
+
   start(): Promise<void> {
     return this.serialize(async () => {
       await this.installFiles()
-      if ((await this.inspect()).loaded) return
-      const result = await this.run(['bootstrap', this.domain, this.plist])
-      // A second desktop may have won bootstrap; the shared launchd label is authoritative.
-      if (result.code !== 0 && !(await this.inspect()).loaded)
-        throw new Error('后台服务启动失败，请检查运行时安装后重试。')
+      await this.bootstrap()
     })
   }
 
+  private alive(pid: number): boolean {
+    if (this.options.isAlive) return this.options.isAlive(pid)
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false
+      throw error
+    }
+  }
+
   private async stopJob(): Promise<void> {
-    if (!(await this.inspect()).loaded) return
+    const state = await this.inspect()
+    if (!state.loaded) return
     await this.execute(['bootout', this.target])
     const deadline = Date.now() + 35_000
-    while ((await this.inspect()).loaded) {
+    while ((await this.inspect()).loaded || (state.pid !== null && this.alive(state.pid))) {
       if (Date.now() >= deadline) throw new Error('后台尚未退出，不能继续替换或卸载运行时。')
       await delay(100)
     }
+  }
+
+  /** Stop before publishing a replacement; an explicitly stopped service stays stopped. */
+  upgrade(): Promise<void> {
+    return this.serialize(async () => {
+      const previous = await this.inspect()
+      if (!previous.installed) throw new Error('请先安装后台。')
+      await this.stopJob()
+      await this.installFiles()
+      if (previous.loaded) {
+        await this.bootstrap()
+        await this.options.waitReady?.()
+      }
+    })
   }
 
   /** Removing the job suppresses KeepAlive until an explicit start or enabled next login. */
