@@ -1,9 +1,10 @@
 /** Scoped tool capability; built and approved only by the test profile. */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-user-approval'
 
 export const name = 'test-tool-activity'
-export const inject = ['tools']
+export const inject = ['tools', 'approval']
 
 /** @param ctx - The selected Bot preset's plugin context. */
 export function apply(ctx: Context): void {
@@ -56,7 +57,7 @@ export function apply(ctx: Context): void {
         name: 'activity_probe',
         description: 'Deterministic gated tool activity for tests.',
         parameters: {
-          mode: { type: 'string', enum: ['success', 'failure'], required: true },
+          mode: { type: 'string', enum: ['success', 'failure', 'approval'], required: true },
           value: { type: 'string', required: true },
         },
         output: {
@@ -64,6 +65,18 @@ export function apply(ctx: Context): void {
           render: (_args, value) => [{ type: 'text', text: value }],
         },
         async execute(args, exec) {
+          if (args.mode === 'approval') {
+            if (!exec.agent) throw new Error('Approval requires an Agent')
+            const outcome = await ctx.approval.request({
+              agent: exec.agent,
+              toolName: 'activity_probe',
+              callId: exec.callId,
+              reason: '将执行测试操作并返回 alpha；本次决定仅适用于这次调用。',
+              signal: exec.signal,
+            })
+            if (outcome !== 'allowed-once') return `operation not executed: ${outcome}`
+            return `approved operation executed: ${args.value}`
+          }
           await waitForRelease(exec.signal)
           exec.signal.throwIfAborted()
           if (args.mode === 'failure') throw new Error(`probe failure: ${args.value}`)

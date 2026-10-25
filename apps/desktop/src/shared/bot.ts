@@ -13,6 +13,16 @@ export interface ChatMessage {
 
 export type BotFrame = { readonly type: 'text'; readonly text: string } | { readonly type: 'done' }
 
+export type ApprovalDecision = 'allowed-once' | 'rejected'
+
+export interface PendingApproval {
+  readonly id: string
+  readonly botId: string
+  readonly toolName: string
+  readonly callId?: string
+  readonly reason: string
+}
+
 export interface ToolActivityFrame {
   readonly observationId: string
   readonly revision: number

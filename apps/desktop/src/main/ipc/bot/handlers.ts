@@ -4,7 +4,12 @@ import type { BotFrame, ToolActivityFrame } from '@/shared/bot'
 
 import type { RunnerClient } from '../../runner-client'
 import { RunnerError } from '../../runner-connection'
-import { acknowledgeToolsInputSchema, historyInputSchema, sendInputSchema } from './schemas'
+import {
+  acknowledgeToolsInputSchema,
+  decideApprovalInputSchema,
+  historyInputSchema,
+  sendInputSchema,
+} from './schemas'
 
 function ipcError(error: unknown): ORPCError<string, unknown> {
   return error instanceof RunnerError
@@ -24,6 +29,20 @@ export function createBotHandlers(client: RunnerClient) {
     history: os.input(historyInputSchema).handler(async ({ input }) => {
       try {
         return await client.history(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    pendingApprovals: os.input(historyInputSchema).handler(async ({ input }) => {
+      try {
+        return await client.pendingApprovals(input.botId)
+      } catch (error) {
+        throw ipcError(error)
+      }
+    }),
+    decideApproval: os.input(decideApprovalInputSchema).handler(({ input }) => {
+      try {
+        client.decideApproval(input.botId, input.id, input.decision)
       } catch (error) {
         throw ipcError(error)
       }

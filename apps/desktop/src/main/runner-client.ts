@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { Context } from '@deepseek-ai/cordis'
 import * as Gateway from '@deepseek-ai/dsh-api-gateway/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import SessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
 import { installConnection } from '@deepseek-ai/dsh-client-connection/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -11,6 +12,7 @@ import WebSocket from 'ws'
 import { z } from 'zod'
 
 import type {
+  ApprovalDecision,
   BotFrame,
   BotSummary,
   ChatMessage,
@@ -18,6 +20,7 @@ import type {
   ToolActivityFrame,
 } from '@/shared/bot'
 
+import { PendingApprovals } from './pending-approvals'
 import {
   readRunnerDescriptor,
   RunnerError,
@@ -131,6 +134,7 @@ export class RunnerClient {
   private readonly lifetime = new AbortController()
   private readonly sessions = new Set<Session>()
   private readonly jobs = new Set<Promise<void>>()
+  private readonly approvals = new PendingApprovals()
   private readonly toolAcknowledgements = new Map<string, (revision: number) => void>()
   private current: Session | undefined
   private connecting: Promise<Session> | undefined
@@ -169,6 +173,18 @@ export class RunnerClient {
       return historySchema.parse(result.value)
     } catch (error) {
       throw safeRemoteError(error)
+    }
+  }
+
+  async pendingApprovals(botId: string) {
+    // Reconnection withdraws old requests before any new snapshot is returned.
+    await this.session()
+    return this.approvals.list(botId)
+  }
+
+  decideApproval(botId: string, id: string, decision: ApprovalDecision): void {
+    if (!this.approvals.decide(botId, id, decision)) {
+      throw new RunnerError('该审批已结束，请查看最新状态。', 'CONFLICT')
     }
   }
 
@@ -382,7 +398,9 @@ export class RunnerClient {
     }
     this.sessions.add(session)
     try {
-      const response = await this.doFetch(descriptor.connectUrl, {
+      const connectUrl = new URL(descriptor.connectUrl)
+      connectUrl.searchParams.set('interactions', 'answer')
+      const response = await this.doFetch(connectUrl, {
         redirect: 'manual',
         signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(5000)]),
       })
@@ -409,7 +427,7 @@ export class RunnerClient {
         // A plugin may fail before we await readiness; contain early rejection too.
         void opened.promise.catch(() => undefined)
         installConnection(ctx, {
-          interactions: 'none',
+          interactions: 'answer',
           transport: {
             streamBaseUrl: descriptor.origin + '/',
             fetch: (input, init) => {
@@ -460,6 +478,7 @@ export class RunnerClient {
                 opened.reject(runnerUnavailable())
               })
               socket.once('close', () => {
+                lifetime.abort()
                 session.usable = false
                 opened.reject(runnerUnavailable())
               })
@@ -471,6 +490,43 @@ export class RunnerClient {
         await ctx.plugin(Gateway)
         await ctx.remote.$mount(BotRemote)
         await ctx.remote.$mount(SessionRemote)
+        // Published Controller client JS is a browser plugin, so Main registers
+        // a minimal public Typert Context adapter instead of loading its UI.
+        const sessionScopes = new WeakMap<Context, ReturnType<typeof SessionId>>()
+        ctx.typert.contexts.registerClient('agent', {
+          identity: (candidate) => sessionScopes.get(candidate),
+          resolve: (id) => {
+            const parsed = z.uuid().safeParse(id)
+            if (!parsed.success) return undefined
+            const scope = ctx.extend()
+            sessionScopes.set(scope, SessionId(parsed.data))
+            return scope
+          },
+        })
+        const approvals = this.approvals
+        ctx.remote.$on('approval/request', async function (request, next) {
+          const sessionId = sessionScopes.get(this)
+          if (!sessionId || lifetime.signal.aborted) return next()
+          const signal = AbortSignal.any([
+            lifetime.signal,
+            ...(request.signal ? [request.signal] : []),
+          ])
+          const bots = await ctx.remote.bot.list(
+            AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+          )
+          if (!bots.ok || signal.aborted) return next()
+          const bot = bots.value.find((candidate) => candidate.sessionId === sessionId)
+          if (!bot) return next()
+          return approvals.request(
+            {
+              botId: bot.botId,
+              toolName: request.toolName.slice(0, 256),
+              ...(request.callId ? { callId: request.callId } : {}),
+              reason: (request.reason ?? request.displayReason?.en ?? '').slice(0, 16_384),
+            },
+            signal,
+          )
+        })
         await opened.promise
         lifetime.signal.throwIfAborted()
         if (!session.usable) throw runnerUnavailable()

@@ -6,6 +6,11 @@ export const historyInputSchema = z.strictObject({
   botId: z.uuid({ error: 'Bot 标识无效，请刷新列表。' }),
 })
 
+export const decideApprovalInputSchema = historyInputSchema.extend({
+  id: z.uuid(),
+  decision: z.enum(['allowed-once', 'rejected']),
+})
+
 export const acknowledgeToolsInputSchema = z.strictObject({
   observationId: z.uuid(),
   revision: z.number().int().positive(),

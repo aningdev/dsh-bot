@@ -6,7 +6,7 @@
 
 ## 当前工程与上游依赖
 
-桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 列表、流式对话及历史恢复。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。Bot 创建与配置界面、工具与审批交互、launchd 和随包运行时仍在后续阶段；Web、移动端与 Relay 不在当前 macOS 交付范围。
+桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 列表、流式对话、历史恢复、工具活动及单次审批。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。Bot 创建与配置界面、输入队列控制、launchd 和随包运行时仍在后续阶段；Web、移动端与 Relay 不在当前 macOS 交付范围。
 
 产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../patches/README.md)。
 

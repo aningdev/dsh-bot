@@ -98,8 +98,9 @@ export class FakeModelAdapter extends LlmAdapter {
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    if (prompt === 'tool success' || prompt === 'tool failure') {
-      const mode = prompt === 'tool success' ? 'success' : 'failure'
+    if (prompt === 'tool success' || prompt === 'tool failure' || prompt === 'tool approval') {
+      const mode =
+        prompt === 'tool approval' ? 'approval' : prompt === 'tool success' ? 'success' : 'failure'
       // Providers may reuse a call id in a later Step or Turn.
       const id = ToolCallId('activity-probe')
       const currentTurn = options.messages.slice(userIndex + 1)

@@ -8,6 +8,14 @@ export function botHistoryQueryOptions(botId: string) {
   return ipc.utils.bot.history.queryOptions({ input: { botId } })
 }
 
+export function botApprovalsQueryOptions(botId: string) {
+  return ipc.utils.bot.pendingApprovals.queryOptions({ input: { botId } })
+}
+
+export function decideBotApprovalMutationOptions() {
+  return ipc.utils.bot.decideApproval.mutationOptions()
+}
+
 export async function* observeBotTools(botId: string, signal: AbortSignal) {
   const stream = await ipc.client.bot.tools({ botId }, { signal })
   for await (const frame of stream) {

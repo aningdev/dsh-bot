@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { botHistoryQueryOptions, sendBotMessage } from '@/renderer/actions/bot'
+import BotApprovals from '@/renderer/components/bot-approvals'
 import BotToolActivities from '@/renderer/components/bot-tool-activities'
 import { MAX_MESSAGE_LENGTH } from '@/shared/bot'
 import type { BotFrame, BotSummary } from '@/shared/bot'
@@ -229,6 +230,7 @@ export default function BotConversation({ bot }: { bot: BotSummary }) {
           historyUpdatedAt={history.dataUpdatedAt}
         />
       </div>
+      <BotApprovals key={bot.botId} botId={bot.botId} />
       {(history.isError || pending?.phase === 'error') && (
         <div className="space-y-2 text-sm">
           <p role="alert">

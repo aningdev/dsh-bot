@@ -148,7 +148,7 @@ export async function startTestRunner(existingHome?: string) {
           else resolve()
         })
       })
-    return { home, client, child, dispose, releaseTool }
+    return { home, client, child, dispose, releaseTool, diagnostics: () => stderr }
   } catch (error) {
     try {
       await dispose()
