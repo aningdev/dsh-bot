@@ -4,20 +4,23 @@
 
 ## 产品与多端
 
-**Bot（助手档案）**：具有稳定身份、名称和默认执行配置的助手档案，可拥有多个彼此独立的会话。
+**Bot（助手档案）**：具有稳定身份、名称、工作区与默认执行配置的助手档案，持有该 Bot 唯一的持续对话。
 _Avoid_：Agent、Bot template、独立进程
 
 **Bot template（Bot 模板）**：创建 Bot 时用于具体化初始配置的内置模板；创建后的 Bot 独立拥有这些配置，不随模板更新而改变。
 _Avoid_：共享可变配置、Harness Agent preset
 
-**Bot configuration（Bot 默认配置）**：由 Bot 持有、用于创建新会话的模型选择、指令、能力与默认工作目录。
+**Bot configuration（Bot 默认配置）**：由 Bot 持有、用于初始化该 Bot 对话的模型选择、指令、能力与默认工作目录。
 _Avoid_：模板引用、插件代码快照
 
-**Chat（对话视图）**：展示所选 Bot 的当前会话及其用户文本与 Agent 回复的交互区域。
-_Avoid_：持续聊天入口、Harness Session、单次模型请求
+**Conversation（对话框）**：每个 Bot 唯一的持续聊天窗口，在同一消息流中容纳多段执行历史；它不决定后台的执行结构。
+_Avoid_：会话列表、新建会话、Harness Session、单次模型请求
 
-**Session configuration（会话配置）**：创建会话时由 Bot 默认配置与用户选择具体化、创建后保持固定的执行配置。
-_Avoid_：可变默认配置、凭据副本、插件代码快照
+**Bot memory（Bot 记忆）**：由用户维护、按 Bot 共享的长期事实，在模型请求中注入且不由系统自动读写。
+_Avoid_：对话历史、自动摘要、检索索引
+
+**Conversation configuration（对话配置）**：Bot 首次打开时由 Bot 默认配置与用户选择具体化、之后保持固定并只能在空闲时显式应用的执行配置。
+_Avoid_：可变默认配置、凭据副本、插件代码快照、每会话配置
 
 **Runner（后台执行宿主）**：独立于交互客户端存活、承载 Harness 并管理 Bot 与执行连接的后台运行单元。
 _Avoid_：Bot、客户端设备、自建 Agent 执行引擎

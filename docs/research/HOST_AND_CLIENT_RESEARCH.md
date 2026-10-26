@@ -36,7 +36,7 @@ WSS 保护客户端到 Relay 的连接，客户端与 Runner 之间的端到端�
 
 官方 HTTP 载体使用签名 Cookie、同源 Host/Origin 校验和进程 token 交换；它不是将地址替换成 Relay 后就能透明使用的端到端加密通道。浏览器 WebSocket 构造参数只有地址和子协议，不能照搬 Electron main 注入任意认证请求头的做法。Relay 接入需要浏览器兼容的认证握手，并将已认证身份在 Runner 中映射到受控 Peer。来源：[Connection 认证说明](../../references/deepseek-harness/packages/client/connection/README.md)、[官方桌面 WebSocket 请求头注入](../../references/deepseek-harness/apps/desktop/src/main.ts)、[WebSocket 构造参数](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket)。
 
-PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终止后台工作；Service Worker 也不提供永久驻留保证。再次打开时应恢复连接并从 Runner 补齐状态，后台通知需要另行评估 Push 等机制。Relay 首次交付仅支持双方在线，不暂存离线业务请求；Runner 已接纳的执行不随客户端断连停止。来源：[PWA 离线与后台操作](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)、[产品蓝图](../PRODUCT_BLUEPRINT.md)。
+PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终止后台工作；Service Worker 也不提供永久驻留保证。再次打开时应恢复连接并从 Runner 补齐状态，后台通知需要另行评估 Push 等机制。Relay 首次交付仅支持双方在线，不暂存离线业务请求；Runner 已接纳的执行不随客户端断连停止。来源：[PWA 离线与后台操作](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)、[产品蓝图](../BLUEPRINT.md)。
 
 端到端加密依赖可信的客户端代码。若 Relay 运营方同时控制 PWA 页面发布，它可能通过修改页面脚本获取终端明文；传输加密本身不防御这种代码替换。客户端发布来源与 Relay 运营方之间的信任关系仍需在威胁模型中明确。此项是基于浏览器执行模型的设计限制，不代表当前已选择部署方式。
 
@@ -44,7 +44,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 两者都运行 React DOM，因此聊天、Bot 配置、工具结果、审批和响应式布局可以共享页面源码。共享的是页面实现，桌面与 PWA 仍可拥有独立构建入口、导航外壳和发布产物。这是工程可行性判断，尚未完成迁移。
 
-当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源：[当前 IPC 客户端](../../apps/desktop/src/renderer/lib/ipc-client.ts)、[当前 app actions](../../apps/desktop/src/renderer/actions/app.ts)、[桌面开发约束](../../apps/desktop/AGENTS.md)。
+当前应用的 ipc-client 通过 MessagePort 连接 Electron main，app actions 也直接依赖该客户端；这套入口在普通 PWA 中没有对应 main。因此现有页面不能未经适配直接发布为 PWA。共享页面需要显式获得业务数据访问和平台能力，桌面保留现有受控 oRPC 路径，PWA 使用浏览器连接。来源（旧 Electron 实现，已随重建删除，路径见 git 历史）：`apps/desktop/src/renderer/lib/ipc-client.ts`、`apps/desktop/src/renderer/actions/app.ts`、`apps/desktop/AGENTS.md`。
 
 | 可共享页面与逻辑            | 需要平台适配的能力           |
 | --------------------------- | ---------------------------- |
@@ -59,7 +59,7 @@ PWA 进入后台或关闭后不能承诺保持实时连接。浏览器可能终�
 
 Expo 官方支持同一项目交付 Web、iOS 和 Android。跨端 UI 复用通常基于 React Native 的 View、Text 等组件，React Native Web 将这些组件用于浏览器。Expo Web 的 PWA 还需要配置 manifest、Service Worker 与缓存策略。来源：[Expo Web](https://docs.expo.dev/workflow/web/)、[Expo PWA](https://docs.expo.dev/guides/progressive-web-apps/)。
 
-当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源：[当前桌面依赖](../../apps/desktop/package.json)、[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
+当前桌面依赖 shadcn、Base UI、Tailwind 和 React DOM。这些界面不能直接作为原生 React Native 视图使用；Expo 的 DOM components 可以通过 WebView 承载 Web 内容，但数据桥接、状态与性能具有额外约束。若让全部界面使用 Expo，需要迁移现有界面或评估 WebView 组合。来源（旧 Electron 实现，已随重建删除）：`apps/desktop/package.json`；[Expo DOM components](https://docs.expo.dev/guides/dom-components/)。
 
 | 候选                        | 界面归属                                             | 主要取舍                                                   |
 | --------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- |
@@ -67,7 +67,7 @@ Expo 官方支持同一项目交付 Web、iOS 和 Android。跨端 UI 复用通�
 | 保留桌面，Expo 覆盖移动交互 | Electron/React DOM 桌面，Expo 覆盖 PWA、iOS、Android | 延续现有桌面；移动家族共享组件，跨家族共享适用的客户端逻辑 |
 | Expo 统一客户端界面         | Expo 覆盖 Web、iOS、Android，Electron 装载 Web 产物  | 通用组件复用范围更大，现有桌面界面需要迁移与原生能力适配   |
 
-已确认桌面目标工作区为 apps/desktop，独立 apps/web 负责 React Web/PWA；相同的聊天、输入、审批、工具结果和附件业务组件放入 packages/web-ui，各应用拥有路由、导航与平台功能。apps/mobile 使用一个 Expo 项目交付 iOS/Android。移动交付范围见 [产品蓝图](../PRODUCT_BLUEPRINT.md#多端演进)，完整职责与依赖方向见 [架构与工作区方案](../PROJECT_LAYOUT.md#目标工作区)。
+已确认桌面目标工作区为 apps/desktop，独立 apps/web 负责 React Web/PWA；相同的聊天、输入、审批、工具结果和附件业务组件放入 packages/web-ui，各应用拥有路由、导航与平台功能。apps/mobile 使用一个 Expo 项目交付 iOS/Android。移动交付范围见 [产品蓝图](../BLUEPRINT.md#多端目标)，当前工作区职责与依赖方向见[架构文档](../ARCHITECTURE.md)（注意：上述 `apps/desktop`/`apps/web`/`apps/mobile` 划分已被 NSH 重建方案取代）。
 
 共享客户端代码需要验证浏览器、Node 和 React Native/Hermes 的实际依赖与模块产物兼容性。加密、密钥存储、文件选择和通知由各平台提供适配。选用 Expo 后，应按所选 SDK 的要求声明 React/React Native 依赖，并验证 Bun hoisted 工作区中的模块解析和原生模块唯一性。来源：[Expo monorepos](https://docs.expo.dev/guides/monorepos/)。
 
@@ -103,4 +103,4 @@ expo-notifications 不支持 Web 通知；PWA 的通知需要单独接入浏览�
 | 通用工具插件 package | 标准 Harness 插件，按独立分发与依赖需要拆分         |
 | 连接 package         | 有实际消费者时集中维护本机连接与未来加密 Relay 适配 |
 
-自研工具遵循 Harness 插件机制，当前没有增加自定义工具 UI 扩展体系的需求。工作区职责、客户端技术、本人设备配对范围与后续验证顺序统一记录在 [架构与工作区方案](../PROJECT_LAYOUT.md)。自定义 Remote 的发布版装配、生命周期协调与跨端兼容仍需要原型验证。
+自研工具遵循 Harness 插件机制，当前没有增加自定义工具 UI 扩展体系的需求。工作区职责、客户端技术与后续验证顺序统一记录在[架构文档](../ARCHITECTURE.md)。自定义 Remote 的发布版装配、生命周期协调与跨端兼容仍需要原型验证。

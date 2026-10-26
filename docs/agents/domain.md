@@ -17,16 +17,15 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 /
 ├── GLOSSARY.md
 ├── docs/
-│   ├── adr/
-│   │   ├── 0001-independent-npm-consumption.md
-│   │   └── 0002-launchd-owned-runner.md
-│   ├── PRODUCT_BLUEPRINT.md
-│   ├── PROJECT_LAYOUT.md
+│   ├── adr/                       # 当前为空，决策记录按需创建
+│   ├── BLUEPRINT.md
+│   ├── ARCHITECTURE.md
+│   ├── research/
 │   └── agents/
 └── apps/
 ```
 
-Product intent, architecture, and integration evidence live in `docs/` beside the ADRs. `docs/PRODUCT_BLUEPRINT.md` owns confirmed product behavior, `docs/PROJECT_LAYOUT.md` owns workspace and process structure, and `docs/HARNESS_INTEGRATION.md` and `docs/HOST_AND_CLIENT_RESEARCH.md` hold upstream evidence with their verification status.
+Product intent, architecture, and integration evidence live in `docs/` beside the ADRs. `docs/BLUEPRINT.md` owns confirmed product behavior, `docs/ARCHITECTURE.md` owns workspace, process and runtime structure, and `docs/research/` holds upstream evidence with its verification status (harness integration, host and client reuse, NSH communication, lifecycle prototype).
 
 ## Use the glossary's vocabulary
 

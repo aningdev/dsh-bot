@@ -16,7 +16,7 @@ NSH 可以作为新的原生客户端，Runner 继续用 Node 运行 Harness。U
 
 现有 Electron Main 的本机发现、认证、客户端装配与审批逻辑可作为行为依据，不能把整个文件搬进 NSH VM。当前源码使用 Node 文件系统、`ws` 和 Electron 所属应用边界。
 
-依据：[当前认证客户端](../../apps/desktop/src/main/runner-client.ts)、[连接描述文件校验](../../apps/desktop/src/main/runner-connection.ts)、[Harness Connection](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway](../../references/deepseek-harness/packages/api/gateway/README.md)。
+依据：旧 Electron 认证客户端 `apps/desktop/src/main/runner-client.ts` 与描述文件校验 `runner-connection.ts`（已随重建删除，路径见 git 历史）、[Harness Connection](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway](../../references/deepseek-harness/packages/api/gateway/README.md)。
 
 ## NSH 如何访问后端
 
@@ -43,7 +43,7 @@ NSH TSX 在 QuickJS 中执行，Node 形状的标准模块只支持它声明的 
 
 这是产品现有的非页面认证链。Harness 的普通浏览器页面另有浏览器 Cookie 交换，不能假定 NSH 原生 VM 有浏览器 Cookie jar。
 
-依据：[RunnerClient.authenticate](../../apps/desktop/src/main/runner-client.ts)、[RunnerDescriptor](../../apps/desktop/src/main/runner-connection.ts)、[Connection 认证与 Peer 所有权](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway 调用、流与事件](../../references/deepseek-harness/packages/api/gateway/README.md)。
+依据：旧实现 `RunnerClient.authenticate` 与 `RunnerDescriptor`（已随重建删除）、[Connection 认证与 Peer 所有权](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway 调用、流与事件](../../references/deepseek-harness/packages/api/gateway/README.md)。
 
 ## 建议的衔接方式
 
