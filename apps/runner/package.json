@@ -1,52 +1,32 @@
 {
   "name": "@dsh-bot/runner",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
-  "description": "Named-profile Harness Host managed independently of the desktop",
   "type": "module",
   "scripts": {
-    "build": "vp run build-artifacts",
-    "build:test": "vp run build-fixtures",
-    "start": "node --expose-internals lib/index.js",
-    "check": "vp run check-types",
-    "test:unit": "vp run unit"
+    "dev": "node src/index.ts",
+    "start": "node dist/index.js",
+    "check": "tsc --noEmit",
+    "build": "tsc",
+    "test": "bun run build && node --test tests/*.test.ts"
   },
+  "exports": {
+    "./plugin": "./dist/plugin.js",
+    "./conversation": "./dist/conversation.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "dependencies": {
-    "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/cordis-plugin-loader": "catalog:",
-    "@deepseek-ai/dsh": "catalog:",
-    "@deepseek-ai/dsh-app-boot": "catalog:",
-    "@deepseek-ai/dsh-base": "catalog:",
-    "@deepseek-ai/dsh-cmdline": "catalog:",
-    "@deepseek-ai/dsh-home-paths": "catalog:",
-    "@deepseek-ai/dsh-http-proxy": "catalog:",
-    "@deepseek-ai/dsh-launch-environment": "catalog:",
-    "@dsh-bot/bot": "workspace:*",
-    "@dsh-bot/harness-runtime": "workspace:*"
-  },
-  "devDependencies": {
-    "@deepseek-ai/dsh-agent": "catalog:",
-    "@deepseek-ai/dsh-agent-preset-registry": "catalog:",
-    "@deepseek-ai/dsh-api-gateway": "catalog:",
-    "@deepseek-ai/dsh-api-session-controller": "catalog:",
-    "@deepseek-ai/dsh-client-connection": "catalog:",
-    "@deepseek-ai/dsh-client-file-upload": "catalog:",
-    "@deepseek-ai/dsh-file-reference": "catalog:",
-    "@deepseek-ai/dsh-file-reference-local": "catalog:",
-    "@deepseek-ai/dsh-host-webserver": "catalog:",
-    "@deepseek-ai/dsh-session": "catalog:",
-    "@deepseek-ai/dsh-typert-protocol": "catalog:",
-    "@deepseek-ai/dsh-typert-registry": "catalog:",
-    "@deepseek-ai/dsh-user-approval": "catalog:",
-    "@deepseek-ai/dsh-workspace": "catalog:",
-    "@deepseek-ai/schemastery": "catalog:",
-    "@types/node": "catalog:",
-    "@types/ws": "catalog:",
-    "typescript": "catalog:",
-    "vite-plus": "catalog:",
-    "ws": "catalog:"
-  },
-  "engines": {
-    "node": "^24.15.0 || >=26.0.0"
+    "@dsh-bot/harness-runtime": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-gateway": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.3"
   }
 }

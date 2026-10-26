@@ -1,142 +1,19 @@
-# dsh-bot 架构与工作区方案
+# dsh-bot 工程与工作区
 
-本文件汇总已确认的架构决定，给出依赖方向、进程关系和分阶段实施草案。产品行为以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 为准，术语见 [GLOSSARY.md](../GLOSSARY.md)，上游依据见 [Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。整体依赖图和实施顺序待最终确认，本文不表示对应实现已经完成。
+当前重建使用 Bun 多工作区：两个应用和一个运行时包，只维护根 bun.lock。NSH 运行客户端，Node 运行后台；Bun 负责安装与脚本调度。旧 Electron 工程已退出，完整设计见 [重建方案](NSH_REBUILD_PLAN.md)。
 
-上游目录、名称、profile 和插件的逐项复用方案见 [Harness 映射方案](./HARNESS_MAPPING_PLAN.md)。后台保持 `apps/runner`，不加载官方 `dsh-web-app`；由自有 profile/bundle 装配标准执行和通信插件，后续 Web/PWA 由 `apps/web` 自建。`packages/harness-runtime` 管理固定依赖与基础服务 bundle，Runner 是加载这些资源并由 launchd 管理的应用进程。
+| 位置 | 责任 |
+| --- | --- |
+| apps/client | NSH TSX 三栏界面、连接、展示状态及平台适配 |
+| apps/runner | Node 入口、命名 profile、Bot 产品插件与后台生命周期 |
+| packages/harness-runtime | 同发行版精确依赖和基础服务 bundle |
+| scripts | 实际需要的开发、构建、交付和验收脚本 |
+| references | 固定上游参考，只读研究，不参与安装和构建 |
 
-## 当前工程与上游依赖
+产品模块先在 apps/runner 内组织，不创建独立 bot、ui、shared、SDK、web、mobile 或 relay 包。出现实际复用或独立装配需求后再提取。客户端不导入后台实现；当前以官方 Cookie 认证加 HTTP/NDJSON 接入 Node 适配层，不单独提取契约包。
 
-桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 创建、配置、列表、流式对话、历史恢复、工具活动、单次审批、执行中排队或追加、停止与独立撤回。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。用户级 launchd 管理和随包 Node/生产依赖已实现；本机验证了开发进程的异常拉起与主动停止，以及随包资源启停、桌面关闭和重开时保持同一 PID。随包运行时独立版本安装和先停止再更新已实现；干净目标机、实际登录启动与人工升级仍待验收，见[服务验收](RUNNER_SERVICE.md)和[运行时说明](PACKAGED_RUNTIME.md)。Web、移动端与 Relay 不在当前 macOS 交付范围。
+上游 Harness 用 pnpm 管理大量可发布包，本产品消费 npm 公开产物，保留独立 Bun 工程即可。Harness 已有认证、Remote、流式、Session、历史和队列；本产品补充 Bot 身份、多会话归属与固定配置。NSH QuickJS 无法直接满足官方 WebSocket 的认证头接入，本项目在 Node 侧提供必要的 HTTP/NDJSON 适配并调用官方 Session Controller，客户端显式管理官方 Cookie；不复制模型循环、队列或日志。
 
-产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责依赖安装，根脚本统一通过 `vp run` 调度工作区任务。根 `vite.config.ts` 集中管理 lint、格式化、暂存检查、全仓验证入口与缓存策略；工作区通过 `run.tasks` 声明构建、类型检查和测试的前置依赖，同一任务图中的共享构建只执行一次。`bun run check` 先完成 Bot 产物、Bot/Runner 类型检查和 Harness CLI 检查，再执行 `vp check`；`bun run test:unit` 在一个任务图中选择 Bot、Runner 和桌面测试，保留各自的测试环境配置。所有任务显式关闭缓存，保证检查、进程测试与打包实际执行。`vp test` 运行单元测试，`vp build` 构建 Bot 与 Runner，`vpx` 在 Node 上执行维护与冒烟脚本，无需直接依赖 tsx。Node/Electron 承担实际运行。Electron Forge 保留桌面开发与打包，Playwright 保留成品 E2E，Bot 在构建后用 TypeScript CLI 生成原有路径的声明，再调用公开 Typert 生成器。上游使用 pnpm、tsx、tsdown 和专用构建编排；本项目使用 npm 产物，沿用声明先于 Typert 的顺序，由 Vite Plus 统一已有工具入口，不引入上游整套编排。hoisted 安装适配 Electron Forge。当前不再维护本地第三方兼容补丁。
+依赖与脚本以各 package.json 为准。Harness 直接依赖精确锁定到同一版本；内部依赖使用 workspace:*，各工作区声明自身真实依赖。根目录统一协调检查、构建与测试，不沿用旧任务图或旧 E2E。
 
-引擎从 npm 公开入口消费，版本统一由[根清单](../package.json)的 Bun `catalog` 管理，各工作区的普通依赖和开发依赖使用 `catalog:` 引用，catalog 使用允许升级的 caret 范围（当前 DSH 为 `^0.2.1-rc.3`），根锁文件记录实际安装版本。Bot 的 `peerDependencies` 是 Harness 启动时直接读取的相容契约，保留明确版本范围，因为上游校验器不解析 catalog 协议；升级 catalog 时须同步这些契约。标准服务装配以[运行时清单](../packages/harness-runtime/package.json)为准。升级时统一适配直接使用的 DSH 包，并核验 Cordis/Loader 的相容性及绑定具体版本的兼容补丁；各包 latest 标签不能作为相容依据。需要共享 Host 实例的服务在插件中使用 peerDependencies，并保留构建外部引用。
-
-跨工作区共用的 React、类型定义、Zod、WebSocket、UI 依赖与构建工具，以及需要协同升级的 Electron Forge、oRPC、Vite Plus 和 Tailwind 包组，统一通过根 catalog 管理，使用允许升级的版本范围。仅单个工作区使用且无需协同升级的依赖留在所属清单。各工作区直接使用的 TypeScript 统一为 `^7.0.2`，Bot 构建通过 CLI 检查并生成声明；上游 Typert 生成器内部仍使用其自身依赖的 TypeScript 6 API。Zod 统一为 `^4.6.7`，并通过根 override 同步上游传递依赖，避免不同 minor 版本的 schema 类型不相容；升级后须验证上游存储和生成器行为。工作区内部依赖继续使用 `workspace:*`，Bot 的 Harness peer 契约仍保留显式相容范围。
-
-上游固定在 references/deepseek-harness Git submodule，仅供阅读、调试与兼容性研究，产品构建不从其 src 或 lib 导入。参考指针更新与 npm 引擎升级分别管理。独立工程将上游跟进集中在依赖升级和兼容验证，产品拥有自己的 UI、Bot 规则与交付流程。
-
-## 目标工作区
-
-| 位置                     | 职责                                                                            | 交付时机             |
-| ------------------------ | ------------------------------------------------------------------------------- | -------------------- |
-| apps/desktop             | Electron Main、preload、桌面入口、原生能力、Runner 本机管理与打包               | 首版 macOS           |
-| apps/runner              | 命名 dsh profile、Host 装配、后台生命周期与运行时发布                           | 首版 macOS           |
-| apps/web                 | 独立 React Web/PWA 入口、导航、浏览器连接、安装配置与发布                       | 后续 Web/PWA         |
-| apps/mobile              | 一个 Expo 项目交付 iOS、Android，提供原生移动交互                               | 后续原生移动端       |
-| apps/relay               | 设备连接路由、在线状态与密文转发                                                | 远程交付             |
-| packages/bot             | Bot 产品服务、配置与 Session 关联、Agent 生命周期、必要的 Remote 声明和生成贡献 | 首版                 |
-| packages/client          | 跨端可用的调用、状态与连接逻辑，提供平台适配入口                                | 按实际消费者提取     |
-| packages/ui              | shadcn 基础组件、通用展示组件、设计 Token 与共享样式；desktop 已消费            | 已有                 |
-| packages/web-ui          | 桌面与 Web 实际相同的聊天、输入、审批、工具结果、附件等业务组件                 | Web 提取阶段         |
-| packages/harness-runtime | 固定版本 Harness 依赖和运行时资源定义                                           | 已有，随 Runner 完善 |
-| packages/plugin-*        | 按独立加载、依赖隔离或分发需要组织的标准 Harness 能力插件                       | 按具体能力新增       |
-
-apps 放可独立构建或交付的应用，packages 放实际共享的代码或需要独立装配的插件。移动端与 Relay 的目标位置不要求现在创建空工作区。设备配对与 Relay 接入先在 Runner 内部独立组织，出现独立装配、分发或实际复用需求后再拆包。
-
-## 运行进程关系
-
-```mermaid
-flowchart LR
-    D["桌面 Renderer"] -->|"actions / oRPC"| M["Electron Main"]
-    W["Web / PWA"] -->|"端到端密文"| R["Relay"]
-    N["Expo iOS / Android"] -->|"端到端密文"| R
-    L["用户级 launchd"] -->|"启动与异常拉起"| H
-    M -->|"认证的本机连接"| G
-    R <-->|"双向密文转发"| A
-    subgraph H["Runner：独立后台进程"]
-        A["设备认证与 Relay 适配"] -->|"已认证 Peer"| G["Harness Connection / Gateway"]
-        G --> B["Bot 产品服务"]
-        G --> S["按需复用的上游服务"]
-        B --> E["Harness Agent / Session / 工具与权限"]
-        S --> E
-    end
-```
-
-macOS 用用户级 launchd LaunchAgent 管理 Runner，支持异常自动拉起与可选登录自启；主动停止后保持停止，直到再次启动或满足已启用的登录自启条件。桌面先连接已有 Runner，必要时请求启动；退出桌面不停止 Runner，客户端断线不终止已接纳执行。Bot 执行实例属于同一个 Runner，工具等能力仍可按 Harness 自身机制创建子进程。
-
-首版安装包携带可独立运行的后台及所需运行时，用户无需系统 Node、Bun、pnpm 或 dsh。Runner 运行时随桌面安装包一起更新：升级先有序停止 Runner，替换运行时后由 launchd 重新拉起，进行中的工作按恢复规则处理；不提供独立于桌面的后台升级路径。运行时资源组装已实现，见[随包运行时](PACKAGED_RUNTIME.md)；运行时安装在用户 home 内独立版本目录，更新停止时序已通过本机成品验证；签名、干净目标机及人工安装升级仍须验收。Runner 自动重启遵守产品恢复规则，不自动重发输入或重复工具。
-
-## Bot 产品服务的职责
-
-packages/bot 通过 Harness/Cordis 标准插件机制加载，提供 Bot 档案与配置持久化、模板具体化、Bot 与 Session 的关联、AgentHandle 生命周期，以及配置变更与新输入接纳的协调。模型循环、队列、会话日志、权限与工具执行继续使用 Harness。
-
-该包拥有产品服务实现及其必要的 Remote 声明、错误类型和生成贡献。后台实现入口与客户端安全的类型和 Remote 贡献入口分别导出；前端只消费对应的客户端入口。Bot 配置使用 storageDomain，Session 日志使用上游 JSONL，事务和同一 Session 替换已实现；标准 Controller 通过受版本锁定的 Host 扩展交由相同所有者协调。
-
-首次发送前由 Bot 服务建立唯一 Session 关联。配置更新时，服务协调真正空闲的检查、旧 Agent 释放、预设更新、同一 Session 的恢复、持久化与失败恢复；完整要求与实验依据见 [Harness 配置接入探索](./HARNESS_INTEGRATION.md)。所有可能触发 Agent 激活的入口都必须经过同一生命周期所有者协调。
-
-apps/runner 负责选择 profile、组合进程服务与插件、配置数据目录并发布后台应用。产品规则集中在 Bot 服务中，执行侧状态由 Runner 持有，窗口和页面只通过服务接口读取与操作。
-
-## 代码依赖与客户端复用
-
-| 消费方           | 依赖内容                                                                  |
-| ---------------- | ------------------------------------------------------------------------- |
-| desktop Renderer | ui、后续 web-ui、桌面 actions 与平台适配；原生和后台操作继续经过受控 oRPC |
-| desktop Main     | client 的 Node 适配、本机 Runner 管理、窗口与系统能力                     |
-| web              | web-ui、client 的浏览器适配、Web 路由与 PWA 配置                          |
-| mobile           | client 的 React Native 适配、Expo 页面与平台能力                          |
-| web-ui           | React DOM 业务组件、显式传入的业务数据与操作入口                          |
-| client           | 所属服务的客户端安全声明与生成贡献、适用的状态和传输逻辑                  |
-| runner           | bot、Harness runtime、选定工具插件、设备和连接模块                        |
-| relay            | 路由与密文传输所需模块                                                    |
-
-ui 通过 `@dsh-bot/ui` 子路径导出 TS/TSX 与 CSS，由应用构建；React/React DOM 是 peer 依赖。其 shadcn 配置与更新脚本统一放在包内，主题选择与持久化由应用负责。上游 ui-primitives 已提供无 Cordis 的 React 基础层、ui-theme 单独管理主题；本项目沿用基础层与应用能力分离的方向，保留现有 shadcn/Base UI 及 Token，不引入上游 UI 和主题插件。
-
-web-ui 优先共享消息、输入、审批、标准工具结果与附件组件；desktop 和 web 分别拥有路由、导航、布局与平台功能。适合共同维护的完整页面在出现时再提取。共享包通过明确的业务数据和操作入口使用客户端能力，不导入应用目录；客户端状态只反映 Runner 的执行事实。
-
-apps/mobile 使用 Expo 与 React Native 实现 iOS/Android。Web/PWA 保持独立 React Web 应用。各平台共享适用的协议、客户端逻辑和非平台业务代码，界面与系统能力按环境适配。SDK 版本、依赖解析和浏览器/Node/Hermes 下的模块兼容性以原型验证后锁定，依据见 [Expo 调研](./HOST_AND_CLIENT_RESEARCH.md#expo-web-与-pwa-的具体支持)。
-
-## 服务协议与 Relay 传输
-
-产品服务沿用 Harness Host、Gateway 和标准 Remote 机制，声明与生成贡献由所属服务维护。Bot 身份、配置和关联属于产品服务，执行事件与历史语义按需复用上游。各客户端可以提供不同功能集合，操作的参数、结果和错误语义保持一致。
-
-Relay 传输层处理连接、路由和端到端密文，Runner 验证设备身份并映射到受控 Peer，再执行业务授权与调用。配对确认、身份、会话加密与重放保护采用经过审查的现有协议或库，具体选择尚待验证。Relay 的路由元数据与业务密文分别定义，业务状态由 Runner 选择并按订阅发送。
-
-| 内容                                     | 传输方式与所有权                                       |
-| ---------------------------------------- | ------------------------------------------------------ |
-| 发消息、停止执行、撤回输入、审批及结果   | 加密请求与响应，由 Runner 接纳与裁决                   |
-| Bot 状态、实时回复、工具活动、待处理事项 | 按实际订阅转发，客户端重连后恢复                       |
-| 历史                                     | 按需分页并根据上游游标补齐                             |
-| 图片、文件、会话附件与工具产物           | 通过认证的加密资源通道按需传输，独立处理大小和流量限制 |
-| 本机窗口、布局、Runner 安装与启动        | 所属客户端与本机系统处理                               |
-| 已存模型密钥                             | 保留在执行侧，不作为客户端同步内容                     |
-
-Relay 首次交付仅支持客户端与 Runner 同时在线，不承担离线请求存储与稍后投递。接纳确认、持久历史与执行完成分别表达；断线且未取得确认时保留结果未知状态。优先核对上游 requestId、inbox 和历史记录可提供的去重与恢复能力，再补足必要协调，不承诺未经验证的持久幂等保证。
-
-历史事件、当前状态和临时回复片段分别处理，重连从 Runner 取得相应基线和增量。普通调用与大内容资源读取分别组织；客户端不会因为订阅状态而自动同步整个工作目录。大文件断点续传、整目录同步与离线请求暂存均在首次远程交付之外。
-
-## 设备配对与授权
-
-首批远程连接限本人设备。桌面展示一次性二维码或配对码，新设备连接后由桌面确认；每个设备获得独立身份，桌面可以查看和撤销。配对设备获得该 Runner 下全部 Bot 的已确认协作能力，管理操作保留本机桌面。具体协作范围见 [产品蓝图](./PRODUCT_BLUEPRINT.md#多端演进)。
-
-授权由 Runner 实施，界面的功能可见性反映授权结果。设备撤销需终止该身份后续访问和已建立连接，正在执行的工具与已接纳请求按已有产品语义处理。远程设备不会统一映射为 owner 来绕过上游授权；审批、资源读取和事件跟随的实际接入能力需逐项验证。
-
-设备记录、配对和撤销策略由 Runner 的设备模块持有，Bot 配置由 bot 包持有；两个模块通过明确的身份与授权接口协作。Relay 运营或路由身份不替代 Runner 的设备信任。
-
-## 插件与能力装配
-
-普通插件提供服务、工具、提示词或事件；bundle 通过 dsh.bundle 提供配置层，profile 通过 dsh.profile 组合 bundle。Harness 后台通过命名 dsh profile 启动，插件发行提供 ESM 和类型。共享框架服务使用相容 peer 依赖，纯工具库使用普通 dependencies。
-
-通用能力插件能在其他 Harness profile 中使用；产品插件负责 dsh-bot 自己的规则。首版随应用装配，使用标准工具结果呈现。无需为每项能力建立一个包：按独立加载、依赖隔离、分发或实际复用需要拆分。
-
-## 分阶段实施草案
-
-| 阶段              | 工作                                                                                            | 完成条件                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 1. 工程归位       | 已完成：桌面迁至 apps/desktop，根脚本、CI、IDE 与文档引用同步                                   | 安装、检查、现有单元、打包 E2E 与成品冒烟通过                             |
-| 2. 接入原型       | 发布版依赖下装配 Runner profile、Bot 服务与生成 Remote；验证客户端最小组合及 Agent 生命周期协调 | 同一 Bot 唯一 Session，空闲配置即时生效、失败恢复，调用和跟随在替换后可用 |
-| 3. 本机产品闭环   | Bot 管理、真实模型与工具、审批、队列操作、后台进程管理和安装资源                                | 桌面退出后执行继续，异常拉起与主动停止符合语义，无外部运行时可用          |
-| 4. Web/PWA 与远程 | 建立独立 web，按实际需要提取 client/web-ui；实现设备配对、Relay 和端到端资源传输                | 本人设备可完成协作与附件任务，撤销生效，断连与重连状态准确                |
-| 5. 原生移动端     | Expo iOS/Android 接入同一业务能力，适配文件、密钥、加密和通知                                   | 两个原生平台完成同一批移动任务及失败路径验证                              |
-
-各阶段只建立实际需要的模块，后续应用可用原型提前验证兼容风险。通知的首批交付范围、Relay 部署与运营方式、加密协议、具体存储和更新机制在进入对应阶段时细化；这些未定项不改变当前工作区职责。
-
-## 实施前需要验证的接入点
-
-1. 已验证：正式 profile 经运行时兼容补丁接入标准 Session Controller，冷恢复、历史开场、异步 lookup/方法使用、上传与退出均由 Bot 协调。基线缺口、扩展、正向契约及未验证范围见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)；上游正式提供等价接口后仍须升级并移除补丁验收。
-2. 官方客户端的浏览器工厂、Node ESM 与 Expo/Hermes 能否在所需最小组合中使用；跨端模块产物和生成工具需要实测。
-3. 非 owner Peer 的授权、审批回答和文件路由能否覆盖配对设备能力。现有 owner 限制不能通过换传输地址解决，优先复用上游服务并按标准插件接口补充必要适配。
-4. 消息接纳去重、配置持久化与运行时应用的崩溃恢复，需要区分现成保证和应用必须补足的协调。
-5. 独立后台的随包运行时、用户级安装、签名、更新与启动停止，需要在真实 macOS 成品中验证。
-
-现有独立 npm profile 启动及 Agent 替换已验证；#5 已在基线缺口复现后完成受补丁约束的 Controller 共存验证；跨端、设备授权、真实模型和系统交付仍需验证。证据见 [Session Controller 共存验证](./SESSION_CONTROLLER_COMPATIBILITY.md)、[Host 与客户端调研](./HOST_AND_CLIENT_RESEARCH.md) 和 [Harness 配置接入探索](./HARNESS_INTEGRATION.md)。
+macOS 产物由 `scripts/package-macos.ts` 组装官方 NSH 应用、内置 Runner.app、官方独立 Node 和已安装的生产依赖闭包；不重新解析依赖版本，不携带开发机的 Homebrew Node。`scripts/smoke-package.ts` 在迁移目录和受限 PATH 下验证成品后台及 LaunchServices 助手启动。当前仅本机 Apple Silicon macOS 验证，正式签名、公证、新机器安装、真实模型和移动端仍待完成。

@@ -1,3 +1,9 @@
+# The base supplies execution, persistence and credential ownership. No model-facing tools.
+- id: approval
+  config:
+    policy: never
+- id: permission
+  disabled: true
 - id: hmr
   disabled: true
 - id: plugin-manager
@@ -6,8 +12,6 @@
   disabled: true
 - id: session-telemetry-otel
   disabled: true
-
-# Bot presets own model-facing contributions; Host registries remain shared.
 - id: tool-plugin-manager
   disabled: true
 - id: tool-working-directory
@@ -58,31 +62,26 @@
   disabled: true
 
 - insert:
-    - id: webserver
-      name: '@deepseek-ai/dsh-host-webserver'
-      config:
-        host: 127.0.0.1
-        port: 0
     - id: connection
       name: '@deepseek-ai/dsh-client-connection'
-    - id: runner-remotes
+    - id: remotes
       name: '@deepseek-ai/dsh-api-remotes'
-    - id: runner-workspace
+    - id: workspace
       name: '@deepseek-ai/dsh-workspace'
-    - id: runner-file-references
+    - id: file-reference-local
       name: '@deepseek-ai/dsh-file-reference-local'
-    - id: runner-file-uploads
-      name: '@dsh-bot/bot/file-uploads'
-    - id: runner-settings-controller
+    - id: file-uploads
+      name: '@deepseek-ai/dsh-client-file-upload'
+    - id: session-controller
+      name: '@deepseek-ai/dsh-api-session-controller'
+    - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
-    - id: runner-session-controller
-      name: '@dsh-bot/bot/session-controller'
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:
-        default: standard
-    - id: preset-standard
+        default: text
+    - id: preset-text
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: standard
+        id: text
         plugins: []

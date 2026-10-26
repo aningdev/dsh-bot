@@ -1,45 +1,16 @@
 # dsh-bot 开发约束
 
-本仓库是 Bun 管理的独立产品工作区。产品目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)，术语见 [术语表](GLOSSARY.md)；修改工作区划分、profile、客户端连接或打包前阅读 [架构与工作区方案](docs/PROJECT_LAYOUT.md)，修改桌面应用前阅读 [应用约束](apps/desktop/AGENTS.md)。
+修改产品行为前阅读 [产品蓝图](docs/PRODUCT_BLUEPRINT.md) 与 [术语表](GLOSSARY.md)；修改工作区、profile、通信或打包前阅读 [工程方案](docs/PROJECT_LAYOUT.md)；修改界面前阅读 [界面规范](docs/UI_GUIDELINES.md)。
 
-修改界面文案、页面布局、视觉样式或共享 UI 组件前，阅读并遵循 [界面设计与文案规范](docs/UI_GUIDELINES.md)。
+- 在根目录使用 Bun 管理工作区和唯一的 bun.lock；客户端运行于 NSH，后台运行于 Node。
+- apps/client 拥有 NSH 页面、连接和平台适配；apps/runner 拥有后台与产品插件；packages/harness-runtime 管理固定版本 Harness npm 依赖。模块先在实际消费者内部组织。
+- references 是固定提交的参考子模块，供阅读、调试和兼容性研究。产品安装、源码导入、类型配置和打包均从 npm 公开产物消费，不能依赖参考源码。
+- 编码前阅读 Harness 对应实现与 README，说明复用点和偏离原因。使用命名 dsh profile；模型循环、队列、日志和工具执行归上游。
+- Harness 直接依赖精确锁定到同一发行版；共享 Host 服务使用兼容 peer 契约，避免打包第二套框架。
+- 跨进程输入由接收端校验。异步任务明确等待、取消和清理归属；断线未确认的请求不可自动重发。
+- 会话配置创建后固定；修改 Bot 默认配置只影响新会话。客户端状态不能替代后台事实。
+- 首版只展示用户消息与 Agent 文本，不提供审批交互；需要审批的操作必须拒绝。
+- 保留用户未提交内容与参考子模块，不改写 Git 历史。旧实现已获授权删除，旧分支供回顾，不移植旧测试。
+- 检查入口以根及工作区 package.json 为准。依赖、通信或打包修改须验证实际进程或成品；分别报告本机、真实模型、移动端和签名交付的验证范围。
 
-## 目录归属
-
-- `apps/`：可独立构建或交付的客户端、后台与 Relay 应用；当前桌面源码位于 `apps/desktop/`，其余目标工作区见架构方案。
-- `packages/`：有实际消费者的共享包与后台运行时；当前 `packages/harness-runtime/` 管理固定版本的 Harness npm 依赖。
-- `references/`：固定提交的上游 Git submodule，只供阅读、调试和兼容性研究，不参与产品安装、构建和发布。
-- `.github/workflows/`：整个产品仓库的检查、测试和发布入口。
-- `patches/`：由 Bun 生成并在根清单声明的第三方兼容补丁，说明保留原因和移除条件。
-- `GLOSSARY.md` 与 `docs/`：领域术语、产品意图、架构决定与接入证据；ADR 放入 `docs/adr/`。
-
-## 依赖与上游
-
-- 在根目录用 Bun 安装和执行工作区脚本，只维护根 `bun.lock`；运行时保持 Node/Electron，不因使用 Bun 管理依赖而更换执行环境。
-- DSH 包通过 npm 公开入口消费，直接依赖精确锁定到同一发行版，Cordis/Loader 使用该发行版要求的版本；需要共享 Host 实例的服务包作为插件 peer 依赖，不打包第二套框架。
-- `references/deepseek-harness/` 的文件与工作区规则属于上游。产品源码、tsconfig 和打包配置不得从该目录导入；更新参考版本只更新 submodule 指针并说明原因。
-- Harness 应用继续通过命名 dsh profile 启动；应用插件负责 Bot 配置与生命周期，模型循环、输入队列、会话日志和工具执行归上游所有。
-- 每次架构设计或编码前，先在 `references/deepseek-harness/` 阅读对应实现（相关 apps、packages 及其 README），再决定复用还是偏离。说明上游现有的机制，以及本项目为何不照用；确无对应机制时明确写出，不假定它不存在。
-- 新建共享包、抽象或移动端框架须有当前使用场景；未来规划不要求创建空的实现层。
-
-## 修改与验证
-
-- 保留用户已有改动，不重写 Git 历史；工作区迁移前建立可恢复的本地备份。
-- 跨进程输入在接收端校验，异步任务明确等待与清理归属；失败须报告实际状态，不把保存文件等同于运行配置已生效。
-- 桌面源码、IPC、安全、打包与测试约束以应用 AGENTS.md 为准。文档描述当前实现，尚未实现的产品要求明确标记。
-- 验证命令以根和所属工作区 package.json 为准；至少执行受影响工作区检查和行为验证。依赖树、工作区或打包变化需要验证成品启动及现有 E2E。
-- 只报告实际执行的检查及其结果；区分本机、其他平台与真实模型尚未验证的部分。
-
-## Agent skills
-
-### Issue tracker
-
-Issues and specs live as GitHub issues in `zhuxining/dsh-bot`, driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Five canonical roles map to the same label strings: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one root `GLOSSARY.md` and one `docs/adr/` cover every app and package. See `docs/agents/domain.md`.
+Issue 工作流见 [issue-tracker](docs/agents/issue-tracker.md)，标签见 [triage-labels](docs/agents/triage-labels.md)，领域文档规则见 [domain](docs/agents/domain.md)。

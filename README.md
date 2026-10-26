@@ -1,75 +1,66 @@
 # dsh-bot
 
-由 Bun 管理的独立多工作区项目，开发基于 DeepSeek Harness 的 Bot 工作台。当前包含可连接独立 Runner 的 Electron 桌面应用、固定版本的 Harness npm 运行时，以及 Bot 创建、配置、流式对话、历史恢复、工具活动、单次审批与输入控制；launchd 与安装运行时仍在后续任务中，目标见 [产品蓝图](docs/PRODUCT_BLUEPRINT.md)。
+基于 NSH 与 DeepSeek Harness 的 Bot 工作台。客户端使用 TSX 和 NSH 官方预编译原生运行时，后台使用 Node，通过命名 `dsh-bot` profile 启动 Harness；Bun 负责依赖和工程脚本。
+
+当前实现 macOS 三栏界面、Bot 默认配置、多独立会话、会话配置固定、文本流、历史恢复、取消执行、凭据设置及独立后台。首阶段仅启用文本，不加载工具。真实模型、移动端和正式签名发布尚未验收，完整决定见 [重建方案](docs/NSH_REBUILD_PLAN.md)。
 
 ## 工作区
 
-| 路径                                                           | 职责                                           |
-| -------------------------------------------------------------- | ---------------------------------------------- |
-| [apps/desktop](apps/desktop/README.md)                         | Electron 桌面界面、原生能力与现有 IPC          |
-| [apps/runner](apps/runner/README.md)                           | 命名 profile、认证 Remote 与独立 Node 后台骨架 |
-| [packages/bot](packages/bot/README.md)                         | Bot 产品插件、记录及 Session 关联              |
-| [packages/harness-runtime](packages/harness-runtime/README.md) | 固定版本的 Harness npm 依赖与服务 bundle       |
-| [references/deepseek-harness](references/README.md)            | 官方源码 Git submodule，仅作参考               |
+| 路径 | 职责 |
+| --- | --- |
+| `apps/client` | NSH 页面、连接、文本投影与平台适配 |
+| `apps/runner` | Node 启动、后台监督、Bot 产品插件及持久配置 |
+| `packages/harness-runtime` | 精确锁定的 Harness npm 依赖与 profile bundle |
+| `scripts` | 开发配置生成、macOS 组装与成品后台验收 |
+| `references` | 固定的 Harness 与 NSH 参考子模块，不参与构建 |
 
-目标工作区、进程关系与实施顺序见 [架构与工作区方案](docs/PROJECT_LAYOUT.md)。共享包放在 `packages/`，有实际消费者或独立装配需求时提取；参考子模块不属于 Bun workspaces，也不是应用构建输入。
+模型循环、队列、Session 与执行历史继续由 Harness 管理。NSH 原生 fetch 通过官方认证入口获取 Cookie；Node 侧提供必要的 HTTP/NDJSON 适配，调用官方 Session Controller。连接模块目前只允许本机回环地址，尚不支持远程配对和移动端访问。
 
-## 开发
+## 开发与验证
 
-使用 [`.node-version`](.node-version) 指定的 Node.js 与当前稳定版 Bun，在仓库根目录执行：
+使用 [`.node-version`](.node-version) 指定的 Node、Bun，以及 NSH CLI。本次本机验证使用 `nsh 0.2.0 (68531fb)`；参考子模块固定在另一提交，不能将其行为视为已在该 CLI 上验证。
+
+在根目录执行：
 
 ```sh
 bun install --frozen-lockfile
 bun run dev
 ```
 
-依赖只在根目录统一安装并由根 `bun.lock` 锁定。Bun 用于依赖和脚本管理，桌面运行时仍为 Electron；`bunfig.toml` 使用 hoisted 安装。Forge 8 的 Bun 锁文件识别兼容补丁由 Bun 自动应用，原因与移除条件见 [patches/README.md](patches/README.md)。
-
 ```sh
 bun run check
-bun run test:unit
-bun run package
-bun run test:e2e
-bun run test:smoke
+bun run test
+bun run build
+bun run package:macos
+bun run test:package
 ```
 
-通用 lint、格式化和工作区边界规则统一维护在根 [`vite.config.ts`](vite.config.ts)，排除 `references/` 与构建产物；子包配置只保留运行和测试设置。`bun run check` 检查整个产品工作区，`bun run fix` 写回修复。
+`check` 检查 Runner、Harness CLI 与 NSH 页面。`test` 运行确定性模型接口下的真实 Harness 会话测试、后台监督测试与 NSH 页面/文本投影测试。测试覆盖认证、会话隔离、默认配置更新不影响已有会话、流式文本、取消、重启读取历史而不重放输入，以及并发启动、故障恢复和主动停止。
 
-安装依赖时，`prepare` 通过 Vite Plus 配置 Git hooks；提交前运行 `vp staged`，对暂存文件执行 `vp check --fix` 并检查空白错误。修复会自动更新暂存内容，部分暂存文件的其他改动由 staged 工具暂存并恢复。使用 `bun run hooks:status` 查看状态、`bun run hooks:enable` 启用；生成的 `.vite-hooks/_/` 不纳入版本控制。若已有其他 `core.hooksPath`，安装会保留它，需要先整合旧 hooks 再启用。
+数据默认位于 `~/.dsh-bot-nsh`，与原有应用及默认 dsh 数据分离。开发时可通过 `DSH_BOT_HOME` 指定隔离目录；生成的客户端启动配置不纳入 Git。关闭客户端保留后台，主动停止后台通过认证接口完成。
 
-上游使用 Lefthook 管理其检查脚本，本项目采用已有 Vite Plus 的 hooks 与 staged 能力。
+## macOS 成品
 
-`test:e2e` 会先构建桌面产物，`test:smoke` 检查当前产物；完整验证用 `bun run test:all`。桌面详情、签名与发布说明见 [应用 README](apps/desktop/README.md)。
+`package:macos` 输出 `dist/macos/DSH Bot.app`，同时携带官方 Node 24.15.0、Runner 与当前锁定依赖，无需用户另装 Node、Bun 或 dsh。首次构建下载 Node 归档并校验官方 SHA-256；后台助手内置在应用中，通过 macOS LaunchServices 启动。构建使用本地临时签名，尚未完成 Developer ID 签名与公证。
 
-使用 VS Code 时以仓库根目录打开项目。[工作区设置](.vscode/settings.json) 将 Vitest 扩展指向桌面应用的 `vite.config.ts`，并排除 `references/` 中的上游配置和测试脚本，避免加载未安装开发依赖的参考子模块。桌面 E2E 使用 Playwright，仍通过 `bun run test:e2e` 运行。
+`test:package` 将产物移至临时目录，以全新数据目录及仅含系统命令的 PATH 验证内置 Node、认证、工作进程崩溃恢复、主动停止与旧安装路径更新，并验证 macOS 实际启动内置后台助手。该测试会暂时移动构建产物，不应与其他打包命令并行执行。
 
-## Harness 运行时
+已在本机 Apple Silicon macOS 验证成品后台与原生窗口打开。受限 PATH 的验证不能替代全新机器安装；Intel macOS、真实模型、移动设备、正式签名分发及完整成品界面端到端流程仍待验证。目前运行依赖较大，未进行裁剪。
+
+## 参考与设计
+
+参考源码按需初始化：
 
 ```sh
-bun run harness --version
-bun run harness --help
+git submodule update --init references/deepseek-harness references/nsh
 ```
 
-`packages/harness-runtime/package.json` 是引擎版本的权威来源。引擎与插件通过 npm 公开入口消费，应用自定义能力通过插件、bundle 和命名 profile 组合；仓库中的参考源码不替代安装依赖。Runner 的独立启动、测试和当前交付范围见 [Runner README](apps/runner/README.md)。
-
-## 参考源码
-
-克隆产品本身无需下载参考子模块；需要阅读上游源码时执行：
-
-```sh
-git submodule update --init references/deepseek-harness
-```
-
-子模块固定到提交，更新方式与职责见 [references/README.md](references/README.md)。产品的 Git 历史保留迁移前的记录，当前工作树只维护应用、运行时工作区与参考指针。
-
-## 产品与接入设计
-
-- [领域术语](GLOSSARY.md)
 - [产品蓝图](docs/PRODUCT_BLUEPRINT.md)
-- [架构与工作区方案](docs/PROJECT_LAYOUT.md)
-- [Harness 配置接入探索](docs/HARNESS_INTEGRATION.md)
-- [Host 与客户端调研](docs/HOST_AND_CLIENT_RESEARCH.md)
-- [Desktop Host 启动链与 Runner 复用调研](docs/DESKTOP_HOST_RESEARCH.md)
-- [Harness 到本项目的映射方案](docs/HARNESS_MAPPING_PLAN.md)
-- 架构决定：[ADR](docs/adr/)
-- 工程约定：[Agent skills 配置](docs/agents/)
+- [工程与工作区](docs/PROJECT_LAYOUT.md)
+- [界面规范](docs/UI_GUIDELINES.md)
+- [NSH 重建方案与验收范围](docs/NSH_REBUILD_PLAN.md)
+- [NSH 与 Harness 通信调研](docs/NSH_HARNESS_RESEARCH.md)
+- [参考项目说明](references/README.md)
+- [领域术语](GLOSSARY.md)
+
+旧 Electron 实现与测试已按重建决定移除，历史仍保留在 Git 中；其他研究文档中的旧实现结论不代表当前产品状态。

@@ -1,0 +1,11 @@
+{
+  "name": "DSH Bot",
+  "id": "dev.dshbot.client",
+  "version": "0.1.0",
+  "build": 1,
+  "capabilities": {
+    "network": { "hosts": ["127.0.0.1"] },
+    "fs": { "read": ["${homeDir}/.dsh-bot-nsh", "${pluginDir}"], "write": ["${dataDir}"] },
+    "process": { "execute": ["/usr/bin/open", "/usr/local/bin/node", "/opt/homebrew/bin/node", "node"], "env": [] }
+  }
+}
