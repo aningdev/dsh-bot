@@ -13,8 +13,8 @@
     "make": "electron-forge make",
     "test": "vp test run",
     "test:all": "vp run --workspace-root test:all",
-    "test:e2e": "vp run package && vp exec playwright test",
-    "test:unit": "vp test run",
+    "test:e2e": "vp run e2e",
+    "test:unit": "vp run unit",
     "test:watch": "vp test --watch",
     "test:coverage": "vp test run --coverage",
     "test:smoke": "vpx scripts/smoke-package.ts"

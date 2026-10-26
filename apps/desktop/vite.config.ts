@@ -4,6 +4,16 @@ import { defineConfig } from 'vite-plus'
 import { sourceAlias } from './scripts/vite-shared'
 
 export default defineConfig({
+  run: {
+    tasks: {
+      unit: { command: 'vp test run', dependsOn: ['@dsh-bot/bot#build-artifacts'] },
+      'package-e2e': {
+        command: 'vp run package',
+        dependsOn: ['@dsh-bot/runner#build-fixtures'],
+      },
+      e2e: { command: 'vp exec playwright test', dependsOn: ['package-e2e'] },
+    },
+  },
   plugins: [react({ compiler: true })],
   resolve: { alias: sourceAlias },
   test: {

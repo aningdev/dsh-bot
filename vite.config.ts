@@ -26,6 +26,29 @@ const ignorePatterns = [
   '**/test-results/**',
 ]
 export default defineConfig({
+  run: {
+    // Checks, process tests and packaging must execute rather than replay a cached result.
+    cache: false,
+    tasks: {
+      verify: {
+        command: 'vp check',
+        dependsOn: [
+          '@dsh-bot/bot#check-types',
+          '@dsh-bot/runner#check-types',
+          '@dsh-bot/harness-runtime#check',
+        ],
+      },
+      unit: {
+        command:
+          'vp run --filter "@dsh-bot/*" --filter dsh-bot --filter "!@dsh-bot/workspace" unit',
+      },
+      e2e: { command: 'vp run dsh-bot#e2e' },
+      smoke: { command: 'vp run dsh-bot#test:smoke' },
+      verifyAll: {
+        command: ['vp run verify', 'vp run unit', 'vp run e2e', 'vp run smoke'],
+      },
+    },
+  },
   lint: {
     ignorePatterns,
     jsPlugins: [

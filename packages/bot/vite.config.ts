@@ -1,6 +1,18 @@
 import { defineConfig } from 'vite-plus'
 
 export default defineConfig({
+  run: {
+    tasks: {
+      'build-artifacts': {
+        command: ['vp build', 'vp exec tsc -p tsconfig.json', 'vpx scripts/build.mjs'],
+      },
+      'check-types': {
+        command: 'vp exec tsc --noEmit -p tests/tsconfig.json',
+        dependsOn: ['build-artifacts'],
+      },
+      unit: { command: 'vp test run', dependsOn: ['build-artifacts'] },
+    },
+  },
   build: {
     target: 'node24',
     outDir: 'lib',

@@ -11,6 +11,26 @@ export default defineConfig(({ mode }) => {
       }
     : { index: 'src/index.ts' }
   return {
+    run: {
+      tasks: {
+        'build-artifacts': {
+          command: 'vp build',
+          dependsOn: ['@dsh-bot/bot#build-artifacts'],
+        },
+        'build-fixtures': {
+          command: 'vp build --mode test-fixtures',
+          dependsOn: ['build-artifacts'],
+        },
+        'check-types': {
+          command: [
+            'vp exec tsc --noEmit -p tsconfig.json',
+            'vp exec tsc --noEmit -p tsconfig.tests.json',
+          ],
+          dependsOn: ['@dsh-bot/bot#build-artifacts'],
+        },
+        unit: { command: 'vp test run', dependsOn: ['build-fixtures'] },
+      },
+    },
     build: {
       target: 'node24',
       outDir: fixtures ? '.test-output' : 'lib',

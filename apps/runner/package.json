@@ -5,11 +5,11 @@
   "description": "Named-profile Harness Host managed independently of the desktop",
   "type": "module",
   "scripts": {
-    "build": "vp run @dsh-bot/bot#build && vp build",
-    "build:test": "vp run build && vp build --mode test-fixtures",
+    "build": "vp run build-artifacts",
+    "build:test": "vp run build-fixtures",
     "start": "node --expose-internals lib/index.js",
-    "check": "vp run @dsh-bot/bot#build && vp exec tsc --noEmit -p tsconfig.json && vp exec tsc --noEmit -p tsconfig.tests.json",
-    "test:unit": "vp run build:test && vp test run"
+    "check": "vp run check-types",
+    "test:unit": "vp run unit"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "catalog:",

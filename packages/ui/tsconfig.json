@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "paths": {
+      "@dsh-bot/ui/*": ["./src/*"]
+    },
     "jsx": "react-jsx",
     "target": "ESNext",
     "module": "ESNext",

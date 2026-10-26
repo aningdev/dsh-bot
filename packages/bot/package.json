@@ -40,9 +40,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "vp build && vp exec tsc -p tsconfig.json && vpx scripts/build.mjs",
-    "check": "vp run build && vp exec tsc --noEmit -p tests/tsconfig.json",
-    "test:unit": "vp run build && vp test run"
+    "build": "vp run build-artifacts",
+    "check": "vp run check-types",
+    "test:unit": "vp run unit"
   },
   "dependencies": {
     "zod": "catalog:"
