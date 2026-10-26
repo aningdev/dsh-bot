@@ -53,7 +53,7 @@ async function resolvePackage(declarer: string, name: string): Promise<string | 
   return undefined
 }
 
-/** Copy the installed production graph, including peers and applied Bun patches.
+/** Copy the installed production graph, including peers.
  * Each physical package keeps its own dependency edges; links are relative and stay inside the resource.
  * Root aliases support published dynamic loaders that resolve a sibling's optional package.
  * Workspace packages contribute only their runtime files, never source, tests, or references.
@@ -166,10 +166,14 @@ async function prepareNode(output: string, arch: string): Promise<void> {
 export async function prepareRunnerRuntime(platform: string, arch: string): Promise<void> {
   if (platform !== 'darwin' || process.platform !== platform || process.arch !== arch)
     throw new Error('Runner resource: build on the target macOS architecture')
-  execFileSync('bun', ['run', '--cwd', 'apps/runner', 'build'], {
-    cwd: workspace,
-    stdio: 'inherit',
-  })
+  execFileSync(
+    process.execPath,
+    [path.join(workspace, 'node_modules/vite-plus/bin/vp'), 'run', '@dsh-bot/runner#build'],
+    {
+      cwd: workspace,
+      stdio: 'inherit',
+    },
+  )
   await mkdir(path.dirname(runnerResource), { recursive: true })
   const staging = await mkdtemp(path.join(path.dirname(runnerResource), 'runner-stage-'))
   try {
@@ -183,9 +187,9 @@ export async function prepareRunnerRuntime(platform: string, arch: string): Prom
       arch,
       node: nodeVersion,
       lockSha256: createHash('sha256').update(lock).digest('hex'),
-      patches: Object.entries(z.record(z.string(), z.string()).parse(root.patchedDependencies)).map(
-        ([name, filename]) => ({ name, filename }),
-      ),
+      patches: Object.entries(
+        z.record(z.string(), z.string()).parse(root.patchedDependencies ?? {}),
+      ).map(([name, filename]) => ({ name, filename })),
       packages,
     }
     await writeFile(path.join(staging, 'runtime.json'), JSON.stringify(metadata, null, 2) + '\n')

@@ -1,6 +1,6 @@
 # Harness npm 运行时
 
-此工作区固定 dsh-bot 使用的 Harness npm 版本，并提供标准服务 bundle。它不启动独立进程，也不实现 Bot 生命周期。`apps/runner` 通过命名 profile 加载本包和 Bot 插件，承载同一棵 Host 插件树。
+此工作区声明 dsh-bot 使用的 Harness npm 依赖，并提供标准服务 bundle。它不启动独立进程，也不实现 Bot 生命周期。`apps/runner` 通过命名 profile 加载本包和 Bot 插件，承载同一棵 Host 插件树。
 
 在仓库根目录安装和调用 CLI：
 
@@ -10,7 +10,7 @@ bun run harness --version
 bun run harness --help
 ```
 
-版本以 [package.json](package.json) 为准；直接依赖的 DSH 服务包与该发行版一致，Cordis 与 Loader 使用该发行版要求的版本。参考子模块不参与产品构建。
+依赖列表以 [package.json](package.json) 为准，版本由[根清单](../../package.json)的 Bun catalog 统一管理；catalog 使用允许升级的 caret 版本范围，根锁文件记录实际安装版本；升级时统一适配 DSH 服务、Cordis、Loader 和兼容补丁。参考子模块不参与产品构建。
 
 ## Bundle 与 Runner
 

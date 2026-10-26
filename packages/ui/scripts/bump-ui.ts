@@ -1,10 +1,10 @@
-#!/usr/bin/env -S bun x tsx
+#!/usr/bin/env -S vpx
 
 import { spawn } from 'node:child_process'
 import { readdir } from 'node:fs/promises'
 
 const DEFAULT_UI_PATH = 'src/components/ui'
-const DEFAULT_EXECUTOR = 'bun'
+const DEFAULT_EXECUTOR = 'vp'
 const COMPONENT_EXTENSION = '.tsx'
 
 async function getComponentsNames(uiPath?: string) {
@@ -19,7 +19,7 @@ async function getComponentsNames(uiPath?: string) {
 }
 
 function mountInstallShadcnInstallCommand(components: string[]) {
-  const baseCommand = 'run shadcn add -y -o'
+  const baseCommand = 'exec shadcn add -y -o'
   const installCommand = `${baseCommand} ${components.join(' ')}`
 
   return installCommand.split(' ')

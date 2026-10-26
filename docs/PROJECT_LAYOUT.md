@@ -8,9 +8,11 @@
 
 桌面源码位于 apps/desktop，已通过现有受控 oRPC 和 Main 内的认证客户端连接 apps/runner，提供 Bot 创建、配置、列表、流式对话、历史恢复、工具活动、单次审批、执行中排队或追加、停止与独立撤回。apps/runner 使用命名 profile 发布 Bot Remote，packages/bot 提供产品插件，packages/harness-runtime 管理固定版本 Harness 依赖与基础服务 bundle。用户级 launchd 管理和随包 Node/生产依赖已实现；本机验证了开发进程的异常拉起与主动停止，以及随包资源启停、桌面关闭和重开时保持同一 PID。随包运行时独立版本安装和先停止再更新已实现；干净目标机、实际登录启动与人工升级仍待验收，见[服务验收](RUNNER_SERVICE.md)和[运行时说明](PACKAGED_RUNTIME.md)。Web、移动端与 Relay 不在当前 macOS 交付范围。
 
-产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责安装和脚本，Node/Electron 承担实际运行。hoisted 安装适配 Electron Forge，Bun 锁文件识别补丁的原因与移除条件见 [patches/README.md](../patches/README.md)。
+产品由 Bun 管理 apps/* 与 packages/*，仅维护根 bun.lock。Bun 负责依赖安装，根脚本统一通过 `vp run` 调度工作区任务；`vp check` 负责格式、lint 与类型检查，`vp test` 运行单元测试，`vp build` 构建 Bot 与 Runner，`vpx` 在 Node 上执行维护与冒烟脚本，无需直接依赖 tsx。Node/Electron 承担实际运行。Electron Forge 保留桌面开发与打包，Playwright 保留成品 E2E，Bot 在构建后用 TypeScript CLI 生成原有路径的声明，再调用公开 Typert 生成器。上游使用 pnpm、tsx、tsdown 和专用构建编排；本项目使用 npm 产物，沿用声明先于 Typert 的顺序，由 Vite Plus 统一已有工具入口，不引入上游整套编排。hoisted 安装适配 Electron Forge。当前不再维护本地第三方兼容补丁。
 
-引擎从 npm 公开入口消费，版本以 [运行时清单](../packages/harness-runtime/package.json) 为准。直接使用的 DSH 包锁定同一发行版，Cordis/Loader 使用该发行版要求的相容版本；各包 latest 标签不能作为相容依据。需要共享 Host 实例的服务在插件中使用 peerDependencies，并保留构建外部引用。
+引擎从 npm 公开入口消费，版本统一由[根清单](../package.json)的 Bun `catalog` 管理，各工作区的普通依赖和开发依赖使用 `catalog:` 引用，catalog 使用允许升级的 caret 范围（当前 DSH 为 `^0.2.1-rc.3`），根锁文件记录实际安装版本。Bot 的 `peerDependencies` 是 Harness 启动时直接读取的相容契约，保留明确版本范围，因为上游校验器不解析 catalog 协议；升级 catalog 时须同步这些契约。标准服务装配以[运行时清单](../packages/harness-runtime/package.json)为准。升级时统一适配直接使用的 DSH 包，并核验 Cordis/Loader 的相容性及绑定具体版本的兼容补丁；各包 latest 标签不能作为相容依据。需要共享 Host 实例的服务在插件中使用 peerDependencies，并保留构建外部引用。
+
+跨工作区共用的 React、类型定义、Zod、WebSocket、UI 依赖与构建工具，以及需要协同升级的 Electron Forge、oRPC、Vite Plus 和 Tailwind 包组，统一通过根 catalog 管理，使用允许升级的版本范围。仅单个工作区使用且无需协同升级的依赖留在所属清单。各工作区直接使用的 TypeScript 统一为 `^7.0.2`，Bot 构建通过 CLI 检查并生成声明；上游 Typert 生成器内部仍使用其自身依赖的 TypeScript 6 API。Zod 统一为 `^4.6.7`，并通过根 override 同步上游传递依赖，避免不同 minor 版本的 schema 类型不相容；升级后须验证上游存储和生成器行为。工作区内部依赖继续使用 `workspace:*`，Bot 的 Harness peer 契约仍保留显式相容范围。
 
 上游固定在 references/deepseek-harness Git submodule，仅供阅读、调试与兼容性研究，产品构建不从其 src 或 lib 导入。参考指针更新与 npm 引擎升级分别管理。独立工程将上游跟进集中在依赖升级和兼容验证，产品拥有自己的 UI、Bot 规则与交付流程。
 
