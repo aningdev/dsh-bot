@@ -14,6 +14,8 @@ const nativeImports = [
 ]
 const ignorePatterns = [
   'references/**',
+  // Verbatim upstream type declarations; formatting them would break provenance review.
+  'packages/vendor/**',
   '.vite-hooks/_/**',
   '**/routeTree.gen.ts',
   '**/node_modules/**',

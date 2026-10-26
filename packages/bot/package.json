@@ -12,7 +12,9 @@
     "lib/typert.host.d.ts",
     "lib/typert.remote-client.js",
     "lib/typert.remote-client.d.ts",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "lib/admission.js",
+    "lib/file-uploads.js"
   ],
   "type": "module",
   "exports": {
@@ -37,6 +39,14 @@
       "default": "./lib/typert.remote-client.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
+    "./admission": {
+      "types": "./lib/types/admission.d.ts",
+      "default": "./lib/admission.js"
+    },
+    "./file-uploads": {
+      "types": "./lib/types/file-uploads.d.ts",
+      "default": "./lib/file-uploads.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

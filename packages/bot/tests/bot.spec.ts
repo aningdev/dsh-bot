@@ -144,6 +144,8 @@ describe('Bot Controller public contract', () => {
     })
     agent.send(queued, 'next-turn', false)
     await first.sessions.flush(agent.session)
+    // Production shutdown order: the Runner quiesces the Bot before the profile is disposed.
+    await first.botController.quiesce()
     await closeHost(first)
     const second = await host(directory)
     const recovered = await second.botController.inputState(bot.botId, signal)
@@ -540,6 +542,8 @@ describe('Bot Controller public contract', () => {
       source: { kind: 'user' },
     })
     agent.send(message, 'next-turn', false)
+    // Production shutdown order: the Runner quiesces the Bot before the profile is disposed.
+    await ctx.botController.quiesce()
     await closeHost(ctx)
     const restarted = await host(directory)
     let prefix

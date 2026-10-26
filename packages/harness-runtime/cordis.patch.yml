@@ -72,11 +72,11 @@
     - id: runner-file-references
       name: '@deepseek-ai/dsh-file-reference-local'
     - id: runner-file-uploads
-      name: '@deepseek-ai/dsh-client-file-upload'
+      name: '@dsh-bot/bot/file-uploads'
     - id: runner-settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
     - id: runner-session-controller
-      name: '@deepseek-ai/dsh-api-session-controller'
+      name: '@dsh-bot/bot/session-controller'
     - id: agent-preset-registry
       name: '@deepseek-ai/dsh-agent-preset-registry'
       config:

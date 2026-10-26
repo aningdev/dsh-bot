@@ -12,15 +12,19 @@
     "test:unit": "vp run unit"
   },
   "dependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/cordis-plugin-loader": "catalog:",
     "@deepseek-ai/dsh": "catalog:",
     "@deepseek-ai/dsh-app-boot": "catalog:",
     "@deepseek-ai/dsh-base": "catalog:",
+    "@deepseek-ai/dsh-cmdline": "catalog:",
     "@deepseek-ai/dsh-home-paths": "catalog:",
+    "@deepseek-ai/dsh-http-proxy": "catalog:",
+    "@deepseek-ai/dsh-launch-environment": "catalog:",
     "@dsh-bot/bot": "workspace:*",
     "@dsh-bot/harness-runtime": "workspace:*"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
     "@deepseek-ai/dsh-agent-preset-registry": "catalog:",
     "@deepseek-ai/dsh-api-gateway": "catalog:",

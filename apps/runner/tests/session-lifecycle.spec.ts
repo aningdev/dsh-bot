@@ -22,7 +22,7 @@ async function integrationPatch(
     holdModel?: string
     holdFileReferences?: boolean
     holdCleanup?: boolean
-    manualOwner?: boolean
+    manualAdmission?: boolean
   } = {},
 ): Promise<string> {
   const filename = join(directory, 'session-lifecycle.yml')
@@ -30,14 +30,14 @@ async function integrationPatch(
     filename,
     JSON.stringify([
       ...(options.holdFileReferences ? [{ id: 'runner-file-references', disabled: true }] : []),
-      ...(options.manualOwner ? [{ id: 'bot-session-controller', disabled: true }] : []),
+      ...(options.manualAdmission ? [{ id: 'bot-admission', disabled: true }] : []),
       {
         insert: [
           {
             id: 'lifecycle-probe',
             name: new URL('../.test-output/session-controller-probe.js', import.meta.url).href,
             config: {
-              ownerLifecycle: options.manualOwner ?? false,
+              manualAdmission: options.manualAdmission ?? false,
               holdModel: options.holdModel ?? '',
               holdFileReferences: options.holdFileReferences ?? false,
               holdCleanup: options.holdCleanup ?? false,
@@ -135,10 +135,12 @@ test('cold Controller activation belongs to Bot and uses the latest configuratio
   const running = await start(directory, true, [await integrationPatch(directory)])
   const client = await connect(running.ready)
   await client.remote.$mount(SessionRemote)
-  expect(
-    (await client.remote.session.rename({ sessionId: SessionId(bot.sessionId), title: 'restored' }))
-      .ok,
-  ).toBe(true)
+  const renamed = await client.remote.session.rename({
+    sessionId: SessionId(bot.sessionId),
+    title: 'restored',
+  })
+  console.error('[dbg rename]', renamed.ok ? 'ok' : (renamed.error.message ?? ''))
+  expect(renamed.ok).toBe(true)
   let reply = ''
   for await (const frame of client.remote.bot.send(bot.botId, 'inspect configuration'))
     if (frame.type === 'text') reply += frame.text
@@ -413,7 +415,7 @@ test('raw intake holds admission through durable staging and withdrawal cancels 
   const directory = await home()
   const bot = await storedBot(directory)
   const running = await start(directory, true, [
-    await integrationPatch(directory, { holdFileReferences: true, manualOwner: true }),
+    await integrationPatch(directory, { holdFileReferences: true, manualAdmission: true }),
   ])
   const client = await connect(running.ready)
   await client.remote.$mount(SessionRemote)
@@ -452,7 +454,7 @@ test('raw intake holds admission through durable staging and withdrawal cancels 
       sessionId: SessionId(bot.sessionId),
       title: 'after withdrawal',
     }),
-  ).toMatchObject({ ok: false, error: { code: 'gateway/service-unavailable' } })
+  ).toMatchObject({ ok: false, error: { code: 'bot/operation-unavailable' } })
 })
 
 test.each(['IPC', 'SIGTERM'])(
@@ -534,7 +536,7 @@ test('a new Bot opens an empty stable Session before its first prompt and can st
 test('Runner refuses readiness when the standard API has no Bot lifecycle binding', async () => {
   const directory = await home()
   const patch = join(directory, 'unowned.yml')
-  await writeFile(patch, JSON.stringify([{ id: 'bot-session-controller', disabled: true }]))
+  await writeFile(patch, JSON.stringify([{ id: 'bot-admission', disabled: true }]))
   await expect(startFailure(directory, [patch])).rejects.toThrow('botSessionController')
 })
 

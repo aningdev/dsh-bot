@@ -80,6 +80,7 @@ export function runnerHarness() {
     let stderr = ''
     child.stderr!.on('data', (chunk) => {
       stderr = (stderr + String(chunk)).slice(-16000)
+      if (process.env.DSH_TEST_ECHO_STDERR) process.stderr.write(String(chunk))
     })
     const ready = await new Promise<Ready>((resolve, reject) => {
       const timer = setTimeout(() => {

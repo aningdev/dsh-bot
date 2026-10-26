@@ -29,7 +29,7 @@
 - 交互优先使用语义化 HTML，提供可访问名称、键盘操作和可见焦点；自定义交互同时验证鼠标与键盘路径。
 - 异步查询结果由 React Query 缓存，不复制到 Zustand；全局 QueryClient 只在 `src/renderer/lib/query-client.ts` 创建，通过 Provider 与 Router context 共享。
 - `src/renderer/lib/ipc-client.ts` 惰性创建唯一的 oRPC client 与 `createTanstackQueryUtils`，统一使用 `ipc` key prefix。actions 导出官方 utilities 生成的 query / mutation options，组件和 loader 不直接访问 IPC；不手写对应的 queryFn、mutationFn 或缓存键，取消信号由官方集成转发。
-- QueryClient 对 `ipc` prefix 的查询与 mutation 设置 `networkMode: "always"`，HTTP 保留在线语义；缓存键哈希使用 `createQueryKeyHashFn` 支持 oRPC 序列化类型。
+- QueryClient 对 `ipc` prefix 的查询与 mutation 设置 `networkMode: "always"`，HTTP 保留在线语义；缓存键哈希使用 `RPCJsonSerializer` 序列化键及类型元数据，再交给 TanStack `hashKey`，以支持 oRPC 序列化类型。
 - Router loader 负责预取，Query 负责缓存与有效期；非关键数据用不阻塞页面的 `prefetchQuery`，关键数据用 `ensureQueryData`。mutation 成功后使用官方 `.key()` / `.queryKey()` 失效相关查询；原生事件流仍由现有订阅持有，不为接入 Query 另建状态源。
 - 主题是唯一例外：[`theme.ts`](./src/renderer/actions/theme.ts) 拥有 DOM 与偏好持久化。首屏脚本与运行时必须共用同一套 normalize 规则，其余细节见 [README 的主题初始化](./README.md#theme-initialization)。
 - 窗口状态由 main 事件流持有，renderer 只订阅；平台读取独立于状态流，晚到的结果不覆盖已收到的窗口快照。

@@ -1,7 +1,6 @@
-/** Launch the Runner profile using the installed Harness launcher. */
+/** Launch the named Runner profile with product-owned shutdown ordering. */
 import { mkdir } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { isAbsolute, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
@@ -13,11 +12,11 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@dsh-bot/bot'
 import type {} from '@dsh-bot/bot/session-controller'
 
 import { publishConnection } from './connection-file.ts'
+import { runRunnerProfile } from './runner-profile.ts'
 
 async function main(): Promise<void> {
   const { values } = parseArgs({
@@ -25,50 +24,59 @@ async function main(): Promise<void> {
   })
   if (values.home === undefined || !isAbsolute(values.home))
     throw new Error('Provide --home with an absolute Runner data directory')
-  process.env.DSH_HOME = values.home
-  await mkdir(values.home, { recursive: true, mode: 0o700 })
-  const profileDir = join(values.home, 'profiles', 'runner')
+  const home = values.home
+  process.env.DSH_HOME = home
+  await mkdir(home, { recursive: true, mode: 0o700 })
+  const profileDir = join(home, 'profiles', 'runner')
   initProfile(profileDir, ['@deepseek-ai/dsh-base', '@dsh-bot/harness-runtime', '@dsh-bot/bot'])
-  const installAnchor = fileURLToPath(new URL('../package.json', import.meta.url))
+  // Resolve from the bundle location: a `new URL(..., import.meta.url)` form is an asset
+  // reference that the bundler rewrites into an inlined data URL.
+  const installAnchor = resolve(import.meta.dirname, '..', 'package.json')
   const profile = loadProfileDirectory('dsh', profileDir, installAnchor)
   reportSkippedBundles('dsh', profile)
   if (profile.skippedBundles.length > 0)
     throw new Error('Runner profile contains unavailable bundles')
   let connectionPublication: Promise<() => Promise<void>> | undefined
-  let shuttingDown = false
-  const application = runProfile({
+  const application = runRunnerProfile({
     environment: loadLayeredEnv('dsh'),
-    profile: 'runner',
-    resolvedProfile: { profile, installAnchor },
+    profile,
+    installAnchor,
     patchFiles: values.patch,
-    args: [],
-    beforeDispose: async (ctx) => {
-      shuttingDown = true
-      const bot = ctx.get('botController')
-      bot?.stopAdmission()
-      const failures: unknown[] = []
-      for (const close of [
-        async () => {
-          const withdraw = await connectionPublication
-          await withdraw?.()
-        },
-        () => ctx.get('botSessionController')?.close(),
-        () => bot?.quiesce(),
+    withdrawConnection: async () => {
+      const withdraw = await connectionPublication
+      await withdraw?.()
+    },
+    ready: async (ctx, signal) => {
+      for (const service of [
+        'webServer',
+        'connection',
+        'typertGateway',
+        'agentLoop',
+        'agentPresets',
+        'botController',
+        'sessionController',
+        'fileUploads',
+        'sessionFileReferences',
+        'botAdmission',
       ]) {
-        try {
-          await close()
-        } catch (error) {
-          failures.push(error)
-        }
+        if (ctx.get(service) === undefined)
+          throw new Error(`Runner required service is unavailable: ${service}`)
       }
-      if (failures.length > 0) throw new AggregateError(failures, 'Runner quiescence failed')
+      await ctx.agentPresets.resolve()
+      if (signal.aborted) return
+      const origin = ctx.webServer.getOrigin()
+      const connectUrl = ctx.connection.authenticatedUrl(origin + '/connect')
+      connectionPublication = publishConnection(home, { origin, connectUrl })
+      await connectionPublication
+      if (signal.aborted) return
+      if (process.connected) process.send?.({ type: 'ready', origin, connectUrl })
+      else console.log(JSON.stringify({ type: 'ready', origin }))
     },
   })
   let stopping: Promise<void> | undefined
   const stop = (): Promise<void> =>
     (stopping ??= (async () => {
-      const running = await application
-      await running.shutdown.shutdown(0)
+      await application.shutdown(0)
       if (process.connected)
         process.send?.({ type: 'shutdown-complete' }, () => {
           process.disconnect?.()
@@ -88,39 +96,7 @@ async function main(): Promise<void> {
       })
     }
   })
-  const { ctx, shutdown } = await application
-  try {
-    for (const service of [
-      'webServer',
-      'connection',
-      'typertGateway',
-      'agentLoop',
-      'agentPresets',
-      'botController',
-      'sessionController',
-      'fileUploads',
-      'sessionFileReferences',
-      'botSessionController',
-    ]) {
-      if (ctx.get(service) === undefined)
-        throw new Error(`Runner required service is unavailable: ${service}`)
-    }
-    await ctx.agentPresets.resolve()
-    if (stopping || shuttingDown) return
-    const origin = ctx.webServer.getOrigin()
-    const connectUrl = ctx.connection.authenticatedUrl(origin + '/connect')
-    connectionPublication = publishConnection(values.home, { origin, connectUrl })
-    const withdraw = await connectionPublication
-    if (stopping || shuttingDown) {
-      await withdraw()
-      return
-    }
-    if (process.connected) process.send?.({ type: 'ready', origin, connectUrl })
-    else console.log(JSON.stringify({ type: 'ready', origin }))
-  } catch (error) {
-    await shutdown.shutdown(1)
-    throw error
-  }
+  await application.startup
 }
 
 main().catch((error: unknown) => {

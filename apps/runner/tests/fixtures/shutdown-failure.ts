@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { initProfile, loadLayeredEnv, loadProfileDirectory } from '@deepseek-ai/dsh-app-boot'
-import { runProfile } from '@deepseek-ai/dsh/profile-boot'
+
+import { runRunnerProfile } from '../../src/runner-profile.ts'
 
 const directory = process.argv[2]
 if (directory === undefined) throw new Error('Missing test home')
@@ -12,14 +13,15 @@ const profileDir = join(directory, 'profiles', 'shutdown-test')
 initProfile(profileDir, ['@deepseek-ai/dsh-base'])
 const installAnchor = fileURLToPath(new URL('../package.json', import.meta.url))
 const profile = loadProfileDirectory('dsh', profileDir, installAnchor)
-const application = await runProfile({
+const application = runRunnerProfile({
   environment: loadLayeredEnv('dsh'),
-  profile: 'shutdown-test',
-  resolvedProfile: { profile, installAnchor },
-  args: [],
+  profile,
+  installAnchor,
   patchFiles: [],
-  beforeDispose: async () => {
+  ready: async () => {},
+  withdrawConnection: async () => {
     throw new Error('Expected teardown failure')
   },
 })
-await application.shutdown.shutdown(0)
+await application.startup
+await application.shutdown(0)

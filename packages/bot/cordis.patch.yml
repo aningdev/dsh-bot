@@ -25,5 +25,5 @@
               maxTokens: null
               reasoningEffort: null
               inputMode: queue
-    - id: bot-session-controller
-      name: '@dsh-bot/bot/session-controller'
+    - id: bot-admission
+      name: '@dsh-bot/bot/admission'

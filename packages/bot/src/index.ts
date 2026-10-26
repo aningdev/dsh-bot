@@ -7,8 +7,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type Agent, type AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-loop'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
-import type { OwnedSessionAgent } from '@deepseek-ai/dsh-api-session-controller'
-import { createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import {
+  createUserMessage,
+  ReasoningEffortId,
+  type LlmCallConfig,
+  type UserMessage,
+} from '@deepseek-ai/dsh-llm'
 import {
   deriveEventMessage,
   SessionId,
@@ -19,17 +23,13 @@ import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import { defineDomain, domainTable, type KvTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import {
-  Remote,
-  RemoteError,
-  TypertRemoteService,
-  type OperationLease,
-} from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 
+import type { BotSessionAgent, OperationLease } from './operation-guard.ts'
 import type {
   BotInputState,
   PendingInput,
@@ -156,12 +156,46 @@ const templateInput = z.object({
 const createBotInput = storedBot
   .pick({ name: true, cwd: true })
   .extend({ templateId: z.string().min(1).optional() })
+
+/** Inbox targets the Harness accepts for a queued user message. */
+const inputTarget = z.enum(['next-turn', 'next-step'])
+
+/** Whether a journaled value is still a user-role message the Harness inbox accepts. */
+function retainedUserMessage(value: unknown): value is UserMessage {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate: Record<string, unknown> = { ...value }
+  const source = candidate.source
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    candidate.role === 'user' &&
+    Array.isArray(candidate.content) &&
+    typeof source === 'object' &&
+    source !== null &&
+    'kind' in source &&
+    source.kind === 'user'
+  )
+}
+
+const storedRetainedInput = z.object({
+  messages: z.array(
+    z.object({
+      target: inputTarget,
+      message: z.custom<UserMessage>(retainedUserMessage),
+    }),
+  ),
+})
+
+/** Input parked in the Harness inbox that product teardown must survive. */
+type RetainedInput = z.infer<typeof storedRetainedInput>
+
 const botDomain = defineDomain({
   name: 'dsh_bot',
   version: 1,
   tables: {
     bots: domainTable(storedBot),
     configuration_transactions: domainTable(storedTransaction),
+    retained_input: domainTable(storedRetainedInput),
   },
 })
 
@@ -197,6 +231,7 @@ export class BotController extends TypertRemoteService {
   private readonly stoppingTurns = new Set<string>()
   private readonly prompts = new Map<string, number>()
   private readonly applying = new Map<string, StoredBot>()
+  private readonly discarded = new Map<string, Map<string, RetainedInput['messages'][number]>>()
   private readonly faults = new Set<string>()
   private readonly operations = new Set<Promise<BotRecord>>()
   private readonly turns = new Set<Promise<void>>()
@@ -219,6 +254,7 @@ export class BotController extends TypertRemoteService {
     private readonly config: Config,
     private readonly records: KvTable<string, StoredBot>,
     private readonly transactions: KvTable<string, ConfigurationTransaction>,
+    private readonly retained: KvTable<string, RetainedInput>,
   ) {
     super(ctx, 'botController', { namespace: 'bot' })
     this.owner = ctx
@@ -254,8 +290,9 @@ export class BotController extends TypertRemoteService {
         }
       }
       await Promise.allSettled(this.turns)
-      for (const handle of this.handles.values()) {
+      for (const [botId, handle] of this.handles) {
         try {
+          await this.syncRetained(botId, handle.agent)
           await handle.dispose()
         } catch (error) {
           failures.push(error)
@@ -619,6 +656,13 @@ export class BotController extends TypertRemoteService {
   }
 
   private async rejectStoredPending(record: BotRecord, signal: AbortSignal): Promise<void> {
+    const journaled = this.retained.get(record.botId)
+    if (journaled !== undefined && journaled.messages.length > 0)
+      throw new RemoteError('bot/config-rejected', 'Bot still owns pending input', {
+        botId: record.botId,
+        reason: 'pending-input',
+        pendingCount: journaled.messages.length,
+      })
     const id = SessionId(record.sessionId)
     if ((await this.ctx.sessionPersistence.stat(id, { signal })) === undefined) return
     await using stored = await this.ctx.sessionPersistence.open(id, 'read', { signal })
@@ -810,6 +854,7 @@ export class BotController extends TypertRemoteService {
         )
         if (index !== -1) {
           agent.inbox.splice(target, index, 1, [])
+          this.forgetDiscarded(botId, messageId)
           await this.flushInput(agent)
           return { removed: true }
         }
@@ -829,7 +874,11 @@ export class BotController extends TypertRemoteService {
       const agent = await this.observeActivation(this.resolveAgent(record), signal)
       signal.throwIfAborted()
       if (this.stopping) this.rejectConfiguration(botId, 'unavailable')
-      return await operation(agent, record)
+      try {
+        return await operation(agent, record)
+      } finally {
+        await this.syncRetained(botId, agent)
+      }
     } finally {
       await lease.release()
     }
@@ -1053,7 +1102,7 @@ export class BotController extends TypertRemoteService {
   async resolveSessionAgent(
     sessionId: SessionId,
     signal: AbortSignal,
-  ): Promise<OwnedSessionAgent | undefined> {
+  ): Promise<BotSessionAgent | undefined> {
     const owner = await this.sessionOwner(sessionId, signal)
     if (owner !== sessionId) return undefined
     const lease = this.acquireSessionAccess(owner, 'write', signal)
@@ -1132,13 +1181,26 @@ export class BotController extends TypertRemoteService {
         }),
       )
     }
+    console.error(
+      '[dbg preset]',
+      presetId,
+      JSON.stringify((await this.owner.agentPresets.list()).map((row) => row.id)),
+      JSON.stringify((await this.ctx.agentPresets.list()).map((row) => row.id)),
+    )
     const selection = {
       current: this.modelOptions(record),
       assembled: undefined,
     }
     const setup = async (agentCtx: Context, agent: Agent): Promise<void> => {
       installModelSelection(agentCtx, selection)
-      await this.ctx.agentPresets.mount(agentCtx, presetId)
+      await this.ctx.agentPresets.mount(agentCtx, presetId).catch(async (error: unknown) => {
+        console.error('[dbg mount]', presetId, String(error))
+        throw error
+      })
+      // Register after the mounted loop so this snapshot runs after its teardown clears the inbox.
+      agentCtx.on('agent/inbox/discarded', (payload) => {
+        this.collectDiscarded(record.botId, agent, payload.message)
+      })
       const baseInstructions = record.baseInstructions ?? ''
       if (baseInstructions)
         agentCtx.effect(() =>
@@ -1171,14 +1233,96 @@ export class BotController extends TypertRemoteService {
             agentOptions,
             setup,
           })
-        : await this.owner.agents.resume({
-            resumeSessionId: sessionId,
-            agentOptions,
-            setup,
-            signal: this.lifetime.signal,
-          })
+        : await this.owner.agents
+            .resume({
+              resumeSessionId: sessionId,
+              agentOptions,
+              setup,
+              signal: this.lifetime.signal,
+            })
+            .catch((error: unknown) => {
+              console.error(
+                '[dbg resume]',
+                String(error),
+                JSON.stringify((error as { details?: unknown }).details),
+              )
+              throw error
+            })
     this.handles.set(record.botId, handle)
+    await this.restoreRetained(record.botId, handle.agent)
     return handle.agent
+  }
+
+  /**
+   * Mirror the pending user input the Harness inbox owns into durable product state.
+   * Harness teardown discards queued input from the durable log, so discarded messages are kept
+   * here and a later admission restores them as pending work.
+   * @param botId - Bot whose inbox changed.
+   * @param agent - Agent holding the pending input.
+   */
+  private async syncRetained(botId: string, agent: Agent): Promise<void> {
+    const messages: RetainedInput['messages'][number][] = []
+    for (const message of agent.inbox.nextTurn)
+      if (message.source.kind === 'user') messages.push({ target: 'next-turn', message })
+    for (const message of agent.inbox.nextStep)
+      if (message.source.kind === 'user') messages.push({ target: 'next-step', message })
+    const pending = new Set(messages.map(({ message }) => message.id))
+    for (const retained of this.discarded.get(botId)?.values() ?? [])
+      if (!pending.has(retained.message.id)) messages.push(retained)
+    this.discarded.delete(botId)
+    if (messages.length === 0) {
+      await this.retained.delete(botId)
+      return
+    }
+    await this.retained.put(botId, { messages })
+  }
+
+  /**
+   * Remember input the Harness dropped from the live inbox so teardown does not lose it.
+   * @param botId - Bot whose inbox changed.
+   * @param agent - Agent that discarded the message.
+   * @param message - Discarded user message.
+   */
+  private collectDiscarded(botId: string, agent: Agent, message: UserMessage): void {
+    const last = agent.session.snapshotEvents().at(-1)
+    const target = last?.type === 'agent/inbox/spliced' ? last.data.target : 'next-turn'
+    const collected =
+      this.discarded.get(botId) ?? new Map<string, RetainedInput['messages'][number]>()
+    collected.set(message.id, { target, message })
+    this.discarded.set(botId, collected)
+  }
+
+  /**
+   * Drop a discarded identity the product removed on purpose, such as a withdrawal.
+   * @param botId - Bot whose inbox changed.
+   * @param messageId - Identity the caller removed.
+   */
+  private forgetDiscarded(botId: string, messageId: string): void {
+    this.discarded.get(botId)?.delete(messageId)
+  }
+
+  /**
+   * Re-admit journaled input through the Harness inbox after activation.
+   * Journaled identities already present in the durable log were claimed by a turn and stay claimed.
+   * @param botId - Bot whose Agent was just activated.
+   * @param agent - Freshly activated Agent.
+   */
+  private async restoreRetained(botId: string, agent: Agent): Promise<void> {
+    const journaled = this.retained.get(botId)
+    if (journaled === undefined) return
+    const claimed = new Set<string>()
+    for (const event of agent.session.snapshotEvents())
+      if (event.type === 'user/message') claimed.add(event.data.id)
+    for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep])
+      claimed.add(message.id)
+    let restored = false
+    for (const { target, message } of journaled.messages) {
+      if (claimed.has(message.id)) continue
+      agent.send(message, target, false)
+      restored = true
+    }
+    if (restored) await this.flushInput(agent)
+    await this.syncRetained(botId, agent)
   }
 
   private validateBotId(botId: string): void {
@@ -1285,6 +1429,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     config,
     domain.table('bots'),
     domain.table('configuration_transactions'),
+    domain.table('retained_input'),
   )
   ctx.effect(
     () => async () => {

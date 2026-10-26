@@ -6,6 +6,10 @@ import { sourceAlias } from './scripts/vite-shared'
 export default defineConfig({
   run: {
     tasks: {
+      dev: {
+        command: 'electron-forge start',
+        dependsOn: ['@dsh-bot/runner#build-artifacts'],
+      },
       unit: { command: 'vp test run', dependsOn: ['@dsh-bot/bot#build-artifacts'] },
       'package-e2e': {
         command: 'vp run package',

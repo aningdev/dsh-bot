@@ -5,24 +5,26 @@ import type {} from '@deepseek-ai/dsh-api-gateway'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import { Peer } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-client-file-upload'
+import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference'
 import { FileReferenceService } from '@deepseek-ai/dsh-file-reference'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import schema from '@deepseek-ai/schemastery'
 import type {} from '@dsh-bot/bot'
+import type {} from '@dsh-bot/bot/admission'
 
 export const name = 'session-controller-compatibility-probe'
-export const inject = ['botController', 'sessionController', 'fileUploads', 'typertGateway']
+export const inject = ['botController', 'fileUploads', 'typertGateway']
 
 /** Experimental setup; production never loads this plugin. */
 export interface Config {
-  readonly ownerLifecycle: boolean
+  readonly manualAdmission: boolean
   readonly holdFileReferences: boolean
   readonly holdCleanup: boolean
   readonly holdModel: string
 }
 export const Config: schema<Config> = schema.object({
-  ownerLifecycle: schema.boolean().default(false),
+  manualAdmission: schema.boolean().default(false),
   holdFileReferences: schema.boolean().default(false),
   holdCleanup: schema.boolean().default(false),
   holdModel: schema.string().default(''),
@@ -69,18 +71,23 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       operations.delete(phase)
     }
   }
+  const admission = config.manualAdmission
+    ? await ctx.plugin(await import('@dsh-bot/bot/admission'))
+    : undefined
   if (config.holdFileReferences) {
     class HeldReferences extends FileReferenceService {
-      static inject = ['agents']
-      list(agent: Agent, _query: string, signal: AbortSignal): Promise<[]> {
+      static inject = ['agents', 'botAdmission']
+      list(agent: Agent, _query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]> {
         const activeState = agent.ctx.fiber.state
-        return track(
-          (async () => {
+        const operation = this.ctx.botAdmission.run(
+          { sessionId: agent.id, mode: 'read', signal },
+          async (guarded) => {
+            const lifetime = guarded ?? signal
             try {
-              await hold('references', agent.id, signal)
+              await hold('references', agent.id, lifetime)
               if (this.ctx.agents.get(agent.id) !== agent)
                 throw new Error('Agent retired during discovery')
-              return []
+              return [] as FileReferenceCandidate[]
             } finally {
               if (config.holdCleanup) {
                 let readable = false
@@ -106,15 +113,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
                 agent.ctx.fiber.state === activeState ? 'live' : 'disposed',
               )
             }
-          })(),
+          },
         )
+        return track(operation)
       }
     }
     await ctx.plugin(HeldReferences)
   }
-  const bridge = config.ownerLifecycle
-    ? await ctx.plugin(await import('@dsh-bot/bot/session-controller'))
-    : undefined
   const initialization = Promise.withResolvers<void>()
   ctx.on(
     'api-session/error',
@@ -141,8 +146,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       else initialization.resolve()
     }
     if (message.type === 'compatibility:withdraw') {
-      if (bridge === undefined) throw new Error('No lifecycle integration to withdraw')
-      void bridge.dispose().then(
+      if (admission === undefined) throw new Error('No admission integration to withdraw')
+      void admission.dispose().then(
         () => report('bridge-withdrawn', ''),
         (error) => report('probe-error', '', String(error)),
       )
@@ -181,19 +186,21 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       typeof message.sessionId === 'string'
     ) {
       const sessionId = SessionId(message.sessionId)
+      const uploadLifetime = new AbortController()
       const upload = track(
         ctx.fileUploads.uploadStream({
           sessionId,
           name: 'held.txt',
-          data: async function* (signal) {
+          signal: uploadLifetime.signal,
+          data: (async function* () {
             try {
               yield Buffer.from('first chunk\n')
-              await hold('upload', sessionId, signal)
+              await hold('upload', sessionId, uploadLifetime.signal)
               yield Buffer.from('last chunk\n')
             } finally {
               report('upload-cleanup', sessionId)
             }
-          },
+          })(),
         }),
       )
       void upload.then(

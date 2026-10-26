@@ -1,117 +1,251 @@
-/** Connect standard Session APIs to the Bot's owned lifecycle and admission. */
+/** Product-owned Session Remote: Bot admission, ownership, and configuration policy. */
 import type { Context } from '@deepseek-ai/cordis'
-import type { GatewayOperation } from '@deepseek-ai/dsh-api-gateway'
-import type { SessionOperation } from '@deepseek-ai/dsh-api-session-controller'
-import type {} from '@deepseek-ai/dsh-client-file-upload'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import { RemoteError, type OperationLease } from '@deepseek-ai/dsh-typert-protocol'
+import {
+  SessionController,
+  type Config,
+  type SessionAttachmentRequest,
+  type SessionAttachmentValue,
+  type SessionCreateRequest,
+  type SessionCreateValue,
+  type SessionFollowFrame,
+  type SessionFollowRequest,
+  type SessionForkRequest,
+  type SessionForkValue,
+  type SessionPage,
+  type SessionPageRequest,
+  type SessionProjectionsRequest,
+  type SessionProjectionsValue,
+  type SessionPromptRequest,
+  type SessionPromptValue,
+  type SessionRenameRequest,
+  type SessionRenameValue,
+  type SessionSelectModelRequest,
+  type SessionSelectModelValue,
+  type SessionUpdateQueueRequest,
+  type SessionUpdateQueueValue,
+} from '@deepseek-ai/dsh-api-session-controller'
+import type { SessionAddress } from '@deepseek-ai/dsh-api-session-controller'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 
-import type {} from './index.ts'
+import { neverAborted, type BotAdmission } from './admission.ts'
+import type { BotController } from './index.ts'
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** Present while the Bot's standard Session bindings are installed. */
-    botSessionController: { readonly close: () => Promise<void> }
-  }
-}
+/** Live Agent or stable Session failure for one Session identity. */
+type AgentResolution = Awaited<ReturnType<SessionController['resolveAgent']>>
 
-/** Lifecycle integration loads after both the product owner and standard API services. */
-export const inject = ['botController', 'sessionController', 'typertGateway', 'fileUploads']
-/** Stable Loader identity for the integration. */
+/** Stable Loader identity for the product Session Remote. */
 export const name = 'bot-session-controller'
 
 /**
- * Register bounded operation guards and external Agent resolution.
- * @param ctx - Owning plugin fiber, disposed before the Bot and API services.
+ * Keep the standard Session Remote while the Bot owns activation and admission.
+ * Creation, forking, and model selection belong to Bot management instead.
  */
-export function apply(ctx: Context): void {
-  const acquire = async (
-    request: SessionOperation & { readonly signal: AbortSignal },
-  ): Promise<OperationLease> => {
-    if (
-      request.action === 'create' ||
-      request.action === 'fork' ||
-      request.action === 'selectModel'
+export default class BotSessionController extends SessionController {
+  static override inject = [...SessionController.inject, 'botAdmission', 'botController']
+
+  private readonly bot: BotController
+  private readonly admission: BotAdmission
+
+  /**
+   * @param ctx - Host context carrying the Bot Controller and admission boundary.
+   * @param config - Deployment policy forwarded to the standard Session Remote.
+   */
+  constructor(ctx: Context, config: Config) {
+    super(ctx, config)
+    console.error('[dbg ctor] bot-session-controller')
+    this.bot = ctx.botController
+    this.admission = ctx.botAdmission
+  }
+
+  /**
+   * Resolve a Session the Bot owns instead of activating it through generic routing.
+   * @param sessionId - Ordinary Session identity addressed by any Remote operation.
+   * @returns the Bot-owned Agent, or the standard resolution for unowned Sessions.
+   */
+  override async resolveAgent(sessionId: SessionId): Promise<AgentResolution> {
+    return this.admission.run({ sessionId, mode: 'write' }, async (signal) => {
+      const owned = await this.bot.resolveSessionAgent(sessionId, signal ?? neverAborted)
+      console.error('[dbg owned]', sessionId, owned === undefined ? 'unowned' : 'owned')
+      return owned === undefined ? super.resolveAgent(sessionId) : { agent: owned.agent }
+    })
+  }
+
+  /**
+   * Read one Session's inspection while the Bot's record stays replaceable.
+   * @param sessionId - Ordinary Session identity.
+   * @param signal - Caller cancellation of the durable read.
+   * @returns the standard inspection value.
+   */
+  override async inspect(sessionId: SessionId, signal?: AbortSignal): Promise<SessionInspection> {
+    return this.admission.run({ sessionId, mode: 'read', signal }, (guarded) =>
+      super.inspect(sessionId, guarded ?? signal),
     )
-      throw new RemoteError('bot/operation-unavailable', 'Use Bot management for this operation', {
-        operation: request.action,
-      })
-    if (request.sessionId === undefined) return { release() {} }
-    const owner = await ctx.botController.sessionOwner(request.sessionId, request.signal)
-    if (owner === undefined) return { release() {} }
-    const read = ['page', 'follow', 'projections', 'inspect', 'attachment'].includes(request.action)
-    const lease = ctx.botController.acquireSessionAccess(
-      owner,
-      read ? 'read' : request.action === 'prompt' ? 'prompt' : 'write',
-      request.signal,
+  }
+
+  /**
+   * Reject creation: the Bot creates Sessions with its configuration and workspace.
+   * @param _request - Ignored standard creation request.
+   * @returns never; creation is unavailable through this namespace.
+   */
+  override create(_request: SessionCreateRequest): Promise<SessionCreateValue> {
+    return reject('create')
+  }
+
+  /**
+   * Reject model selection: the Bot owns the model of every Agent it activates.
+   * @param _request - Ignored standard selection request.
+   * @returns never; selection is unavailable through this namespace.
+   */
+  override selectModel(_request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
+    return reject('selectModel')
+  }
+
+  /**
+   * Reject forking: configuration and workspace copying belong to Bot management.
+   * @param _request - Ignored standard fork request.
+   * @returns never; forking is unavailable through this namespace.
+   */
+  override fork(_request: SessionForkRequest): Promise<SessionForkValue> {
+    return reject('fork')
+  }
+
+  /**
+   * Rename a Session under write admission.
+   * @param request - Session identity and the normalized title.
+   * @returns title and committed event position.
+   */
+  override async rename(request: SessionRenameRequest): Promise<SessionRenameValue> {
+    console.error(
+      '[dbg rename-entry]',
+      this.constructor.name,
+      String(this.resolveAgent === BotSessionController.prototype.resolveAgent),
+      String(
+        this.resolveAgent === Object.getPrototypeOf(BotSessionController.prototype).resolveAgent,
+      ),
     )
     try {
-      if (request.action === 'follow')
-        await ctx.botController.prepareSessionFollow(owner, request.signal)
-      return lease
+      return await this.admission.run({ sessionId: request.sessionId, mode: 'write' }, () =>
+        super.rename(request),
+      )
     } catch (error) {
-      await lease.release()
-      throw error
+      throw new RemoteError('bot/operation-unavailable', String((error as Error)?.stack ?? error), {
+        operation: 'rename',
+      })
     }
   }
-  const controller = ctx.sessionController.registerLifecycle({
-    acquire,
-    resolveAgent: (sessionId, signal) => ctx.botController.resolveSessionAgent(sessionId, signal),
-  })
-  const uploads = ctx.fileUploads.registerUploadGuard(async (request) => {
-    const owner = await ctx.botController.sessionOwner(request.sessionId, request.signal)
-    return owner === undefined
-      ? undefined
-      : ctx.botController.acquireSessionAccess(owner, 'write', request.signal)
-  })
-  const gateway = ctx.typertGateway.registerOperationGuard(
-    async (request: GatewayOperation & { readonly signal: AbortSignal }) => {
-      if (request.namespace === 'bot') return undefined
-      if (request.resources === undefined)
-        throw new RemoteError('gateway/bad-request', 'Session resources could not be resolved', {})
-      const owners = new Set<SessionId>()
-      for (const resource of request.resources) {
-        if (resource.kind !== 'session') continue
-        const owner = await ctx.botController.sessionOwner(SessionId(resource.id), request.signal)
-        if (owner !== undefined) owners.add(owner)
-      }
-      if (owners.size === 0) return undefined
-      const leases: OperationLease[] = []
-      try {
-        const history =
-          request.namespace === 'session' &&
-          ['follow', 'page', 'projections', 'attachment'].includes(request.method)
-        for (const owner of [...owners].sort())
-          leases.push(
-            ctx.botController.acquireSessionAccess(
-              owner,
-              history ? 'read' : 'write',
-              request.signal,
-            ),
-          )
-        return {
-          lifetime:
-            request.namespace === 'session' && request.method === 'follow' ? 'opening' : 'call',
-          release: async () => {
-            for (const lease of leases.toReversed()) await lease.release()
-          },
-        }
-      } catch (error) {
-        for (const lease of leases.toReversed()) await lease.release()
-        throw error
-      }
+
+  /**
+   * Admit one streamed prompt for the Session's Bot.
+   * @param request - Prompt content and its target Session.
+   * @param signal - Caller cancellation of the streamed turn.
+   * @returns the standard prompt receipt.
+   */
+  override async prompt(
+    request: SessionPromptRequest,
+    signal: AbortSignal,
+  ): Promise<SessionPromptValue> {
+    return this.admission.run({ sessionId: request.sessionId, mode: 'prompt', signal }, (guarded) =>
+      super.prompt(request, guarded ?? signal),
+    )
+  }
+
+  /**
+   * Read one attachment under read admission.
+   * @param request - Session identity and attachment reference.
+   * @returns the standard attachment value.
+   */
+  override async attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue> {
+    return this.admission.run({ sessionId: request.sessionId, mode: 'read' }, () =>
+      super.attachment(request),
+    )
+  }
+
+  /**
+   * Update the queue of a Session under write admission.
+   * @param request - Queue action and its target Session.
+   * @returns the standard queue receipt.
+   */
+  override async updateQueue(request: SessionUpdateQueueRequest): Promise<SessionUpdateQueueValue> {
+    return this.admission.run({ sessionId: request.sessionId, mode: 'write' }, () =>
+      super.updateQueue(request),
+    )
+  }
+
+  /**
+   * Read one history page under read admission.
+   * @param request - Page window and its target Session.
+   * @param signal - Caller cancellation of the read.
+   * @returns the standard history page.
+   */
+  override async page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage> {
+    return this.admission.run(
+      { sessionId: addressSessionId(request.address), mode: 'read', signal },
+      (guarded) => super.page(request, guarded ?? signal),
+    )
+  }
+
+  /**
+   * Follow a Session, admitting replacement only until the stream has opened.
+   * @param request - Follow window and its target Session.
+   * @param signal - Caller cancellation of the stream.
+   * @returns frames produced by the standard Session history stream.
+   */
+  override async *follow(
+    request: SessionFollowRequest,
+    signal: AbortSignal,
+  ): AsyncIterable<SessionFollowFrame> {
+    const lease = await this.admission.acquire({
+      sessionId: addressSessionId(request.address),
+      mode: 'read',
+      follow: true,
+      signal,
+    })
+    try {
+      await lease?.releaseOpening()
+      yield* super.follow(request, lease?.signal ?? signal)
+    } finally {
+      await lease?.release()
+    }
+  }
+
+  /**
+   * Read Session projections under read admission.
+   * @param request - Projection request and its target Session.
+   * @param signal - Caller cancellation of the read.
+   * @returns the standard projection value.
+   */
+  override async projections(
+    request: SessionProjectionsRequest,
+    signal: AbortSignal,
+  ): Promise<SessionProjectionsValue> {
+    return this.admission.run({ sessionId: request.sessionId, mode: 'read', signal }, (guarded) =>
+      super.projections(request, guarded ?? signal),
+    )
+  }
+}
+
+/**
+ * Address the Session a page or follow request names, including subagent conversations.
+ * @param address - Session or subagent address carried by the request.
+ * @returns the addressed Session identity whose lineage the Bot answers for.
+ */
+function addressSessionId(address: SessionAddress): SessionId {
+  return address.kind === 'session' ? address.sessionId : address.childSessionId
+}
+
+/**
+ * Report that one standard Session operation belongs to Bot management.
+ * @param operation - Standard operation the caller attempted.
+ * @returns never; the caller receives a stable unavailable error.
+ */
+function reject(operation: string): never {
+  throw new RemoteError(
+    'bot/operation-unavailable',
+    'Session management belongs to the Bot Remote',
+    {
+      operation,
     },
   )
-  let closing: Promise<void> | undefined
-  const close = (): Promise<void> =>
-    (closing ??= (async () => {
-      const outcomes = await Promise.allSettled([gateway(), uploads(), controller()])
-      const failures = outcomes.flatMap((outcome) =>
-        outcome.status === 'rejected' ? [outcome.reason] : [],
-      )
-      if (failures.length > 0)
-        throw new AggregateError(failures, 'Session lifecycle withdrawal failed')
-    })())
-  ctx.provide('botSessionController', { close })
-  ctx.effect(() => close)
 }

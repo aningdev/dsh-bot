@@ -1,6 +1,7 @@
-/** Retirement must preserve operation ownership through asynchronous cleanup. */
-import { OperationGuardRegistry } from '@deepseek-ai/dsh-typert-protocol'
 import { expect, test } from 'vite-plus/test'
+
+/** Retirement must preserve operation ownership through asynchronous cleanup. */
+import { OperationGuardRegistry } from '../src/operation-guard.ts'
 
 test('opening releases replacement access while retirement still drains the consumer', async () => {
   const registry = new OperationGuardRegistry<{ signal?: AbortSignal }>(

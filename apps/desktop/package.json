@@ -7,7 +7,7 @@
   "author": "zhuxining",
   "main": ".vite/build/main.mjs",
   "scripts": {
-    "start": "electron-forge start",
+    "start": "vp run dev",
     "package": "electron-forge package",
     "release": "electron-forge release",
     "make": "electron-forge make",
