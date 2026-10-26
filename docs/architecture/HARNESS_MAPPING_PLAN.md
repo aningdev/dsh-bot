@@ -1,6 +1,6 @@
 # Harness 到 dsh-bot 的映射方案
 
-本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调。桌面 Main 已消费认证 Remote，提供 Bot 创建、配置、列表、流式对话、工具活动、单次审批与输入队列控制；launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](./DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](./PRODUCT_BLUEPRINT.md) 和 [launchd ADR](./adr/0002-launchd-owned-runner.md) 为准。
+本文基于固定上游 `0.2.1-rc.2` 说明本项目的复用方案。Runner profile、Bot Remote、配置事务、同一 Session 替换及进程重启路径已实现；标准 Session Controller 已通过受版本锁定的 Host 扩展协调。桌面 Main 已消费认证 Remote，提供 Bot 创建、配置、列表、流式对话、工具活动、单次审批与输入队列控制；launchd 和安装交付仍待后续票。源码依据见 [Desktop Host 调研](../research/DESKTOP_HOST_RESEARCH.md)；产品要求与进程所有权仍以 [产品蓝图](../PRODUCT_BLUEPRINT.md) 和 [launchd ADR](../adr/0002-launchd-owned-runner.md) 为准。
 
 ## 推荐选择
 
@@ -25,7 +25,7 @@ Runner 是实际运行的后台应用，目标由 launchd 管理。Host 表示 R
 | 官方测试模型 adapter                                   | Host 的测试 fixture + overlay       | 通过 `ctx.llm.registerAdapter` 注册，仅在测试加载                         |
 | 安装版本与资源清单                                     | `packages/harness-runtime`          | 保留当前固定依赖职责，不把它发展成另一套 Host 服务实现                    |
 
-上游 Controller 约定来自 [Remote cookbook](../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)；应用启动与资源职责来自 [Host 入口](../references/deepseek-harness/apps/desktop-host/src/index.ts)、[profile 管理](../references/deepseek-harness/apps/desktop/src/project-manager.ts) 和 [资源准备](../references/deepseek-harness/apps/desktop/scripts/prepare-dsh.ts)。上游 Desktop Host 清单是私有包，因此复用其启动模式，不能假设可直接安装这个包。
+上游 Controller 约定来自 [Remote cookbook](../../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)；应用启动与资源职责来自 [Host 入口](../../references/deepseek-harness/apps/desktop-host/src/index.ts)、[profile 管理](../../references/deepseek-harness/apps/desktop/src/project-manager.ts) 和 [资源准备](../../references/deepseek-harness/apps/desktop/scripts/prepare-dsh.ts)。上游 Desktop Host 清单是私有包，因此复用其启动模式，不能假设可直接安装这个包。
 
 目标目录如下；测试 fixture 和安装脚本只随当前需要建立。
 
@@ -58,7 +58,7 @@ Runner 在启动时通过 profile 加载 harness-runtime 提供的 bundle，再�
 
 ## profile 与 bundle
 
-应用使用自己隔离的 `DSH_HOME`，profile 名称为 `runner`，可写目录为 `$DSH_HOME/profiles/runner`。开发、测试、生产各有独立 home，不连接官方 Harness 的默认用户数据。应用使用 `loadProfileDirectory` 加载此目录，以 Runner 的 `package.json` 为 `installAnchor`，让上游解析器从应用依赖图同时发现 DSH 与产品包，然后调用 `runProfile`。复用的是官方应用自有 profile 的加载机制，不要求使用官方应用的 `desktop` 名称。[上游入口](../references/deepseek-harness/apps/desktop-host/src/index.ts)、[app-boot 说明](../references/deepseek-harness/packages/boot/app-boot/README.md)。
+应用使用自己隔离的 `DSH_HOME`，profile 名称为 `runner`，可写目录为 `$DSH_HOME/profiles/runner`。开发、测试、生产各有独立 home，不连接官方 Harness 的默认用户数据。应用使用 `loadProfileDirectory` 加载此目录，以 Runner 的 `package.json` 为 `installAnchor`，让上游解析器从应用依赖图同时发现 DSH 与产品包，然后调用 `runProfile`。复用的是官方应用自有 profile 的加载机制，不要求使用官方应用的 `desktop` 名称。[上游入口](../../references/deepseek-harness/apps/desktop-host/src/index.ts)、[app-boot 说明](../../references/deepseek-harness/packages/boot/app-boot/README.md)。
 
 profile 的 bundle 顺序建议如下；这是部署 profile 清单的一部分，不是根工作区的依赖清单。
 
@@ -74,7 +74,7 @@ profile 的 bundle 顺序建议如下；这是部署 profile 清单的一部分�
 
 `@dsh-bot/harness-runtime` 声明标准 `dsh.bundle.patch`，在 base 上补齐独立 WebServer、Connection、所需 Remote 贡献与 AgentPresetRegistry，并按 Bot preset 调整 base 的全局工具作用域。`@dsh-bot/bot` 的 patch 加载产品插件。测试通过调用时 overlay 更换模型组合。这些都是标准插件装配，模型循环、队列、权限和持久化仍使用上游实现；不是另写执行引擎。
 
-不加载 `dsh-web-app` 后，它提供的 `webStartup` 参数解析、前端资源服务、页面 boot injections 和浏览器自动打开也不再使用。Runner 通过自己的受校验配置提供监听地址等应用参数，通信继续使用独立的 `dsh-host-webserver`、`dsh-client-connection` 和 `dsh-api-gateway`。客户端在 Main 或自建 Web 中装配所需贡献，不依赖官方页面模块清单。具体依赖闭包与激活结果由 #3 的真实 profile 测试确定，不能仅从 Web bundle 删除一行就视为完成。[Connection 独立装配](../references/deepseek-harness/packages/client/connection/README.md)、[上游自有组合示例](../references/deepseek-harness/packages/bundle/sdk-minimal/cordis.patch.yml)。
+不加载 `dsh-web-app` 后，它提供的 `webStartup` 参数解析、前端资源服务、页面 boot injections 和浏览器自动打开也不再使用。Runner 通过自己的受校验配置提供监听地址等应用参数，通信继续使用独立的 `dsh-host-webserver`、`dsh-client-connection` 和 `dsh-api-gateway`。客户端在 Main 或自建 Web 中装配所需贡献，不依赖官方页面模块清单。具体依赖闭包与激活结果由 #3 的真实 profile 测试确定，不能仅从 Web bundle 删除一行就视为完成。[Connection 独立装配](../../references/deepseek-harness/packages/client/connection/README.md)、[上游自有组合示例](../../references/deepseek-harness/packages/bundle/sdk-minimal/cordis.patch.yml)。
 
 此处“不使用官方 Web”表示不加载其应用 bundle 或交付其页面。已核对当前安装的 `@deepseek-ai/dsh@0.2.1-rc.2` 清单，它直接依赖 `@deepseek-ai/dsh-web-app@0.2.1-rc.2`；因此依赖树仍包含官方 Web 包。继续消费公开 DSH launcher，同时将本项目的 profile 装配与页面交付独立管理，不为删除这项传递依赖而维护 launcher 分支。
 
@@ -102,9 +102,9 @@ Main 通过公开 `installConnection`、Gateway client、Typert Registry 与生�
 | 权限、工具审批、工具执行 | 上游权限、审批与工具插件                         | 按 Bot 配置装配和呈现                            |
 | 业务方法与流             | Gateway、Typert Remote                           | `bot` 命名空间、产品字段与错误码                 |
 
-`Bot template` 继续表示产品模板，`Agent preset` 继续表示 Harness 的运行时装配。创建 Bot 时将模板复制为自身配置，再映射为 preset；不能将产品模板直接改名成 preset，避免引入共享可变配置语义。[术语表](../GLOSSARY.md)、[preset 注册说明](../references/deepseek-harness/packages/preset/agent-preset-registry/README.md)。
+`Bot template` 继续表示产品模板，`Agent preset` 继续表示 Harness 的运行时装配。创建 Bot 时将模板复制为自身配置，再映射为 preset；不能将产品模板直接改名成 preset，避免引入共享可变配置语义。[术语表](../../GLOSSARY.md)、[preset 注册说明](../../references/deepseek-harness/packages/preset/agent-preset-registry/README.md)。
 
-Bot 包的 Host 实现与客户端贡献分开。沿用上游的 `./typert`、`./remote` 生成入口约定和客户端安全类型入口；普通插件入口只供执行侧加载。独立 npm 工程已通过公开生成器完成生成；npm protocol 识别所需的单行兼容补丁见 [补丁说明](../patches/README.md)，产品构建不依赖参考子模块的脚本。[生成约定](../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)。
+Bot 包的 Host 实现与客户端贡献分开。沿用上游的 `./typert`、`./remote` 生成入口约定和客户端安全类型入口；普通插件入口只供执行侧加载。独立 npm 工程已通过公开生成器完成生成；npm protocol 识别所需的单行兼容补丁见 [补丁说明](../../patches/README.md)，产品构建不依赖参考子模块的脚本。[生成约定](../../references/deepseek-harness/docs/cookbook/adding-a-remote-api.md)。
 
 ## 生命周期协调的取舍
 
@@ -133,13 +133,13 @@ flowchart LR
 
 Host 启动继续使用上游 `runProfile` 的环境、解析、Loader、故障和 shutdown 机制。只调整桌面专属桥接：客户端断开不触发 Host 退出，桌面连接已有 Host，launchd 承担进程监督。无需为此新增 BotEngine、执行调度器或另一套全局服务容器。
 
-Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Renderer 提供受控操作和流。保留标准 Remote 的结果、错误和取消语义，oRPC 只承担已有桌面 IPC。Main 的 oRPC Router 不接受任意 Remote 方法名透传；客户端也不取得模型密钥。首次实现需要验证生成客户端贡献和流在 Main 中的实际装配。[既有客户端调研](./HOST_AND_CLIENT_RESEARCH.md)。
+Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Renderer 提供受控操作和流。保留标准 Remote 的结果、错误和取消语义，oRPC 只承担已有桌面 IPC。Main 的 oRPC Router 不接受任意 Remote 方法名透传；客户端也不取得模型密钥。首次实现需要验证生成客户端贡献和流在 Main 中的实际装配。[既有客户端调研](../research/HOST_AND_CLIENT_RESEARCH.md)。
 
 上游父子 IPC 的 ready/fatal/shutdown 表达可以参考，但 launchd 不是 Electron IPC 父进程。后台地址、认证与重连需要有独立于某个窗口的本机发现方式；具体文件和凭据布局留在 launchd 票实施，不能把带凭据的 ready 消息原样写成所有进程可读的状态文件。
 
 ## 随包运行时
 
-固定 npm 依赖、生产资源物化、目标架构原生依赖、签名及成品 smoke 沿用上游交付原则。开发依赖管理仍使用 Bun；后台执行程序随安装携带，用户不需要系统 Node/Bun/pnpm/dsh。Host 不在启动时从 registry 临时安装核心依赖。[上游资源构建](../references/deepseek-harness/apps/desktop/scripts/prepare-dsh.ts)。
+固定 npm 依赖、生产资源物化、目标架构原生依赖、签名及成品 smoke 沿用上游交付原则。开发依赖管理仍使用 Bun；后台执行程序随安装携带，用户不需要系统 Node/Bun/pnpm/dsh。Host 不在启动时从 registry 临时安装核心依赖。[上游资源构建](../../references/deepseek-harness/apps/desktop/scripts/prepare-dsh.ts)。
 
 上游 Host 使用 Electron Node 模式，其 primary-runtime 也包含 Node 等离线组件。本项目此前选择独立 Node 后台，建议继续采用随包 Node 并验证 `--expose-internals` 和原生模块，而不把执行程序替换成 Bun。上游 runtime 内含多种 Office 依赖，不能为得到 Node 就不加区分地复制全部资源。此项是交付方案，尚未经过本项目安装包验证。
 
@@ -154,4 +154,4 @@ Main 使用 Connection/Gateway 与 Host 通信，再通过现有 oRPC 向 Render
 | #6 及后续桌面票   | Main 接入与现有 UI 操作                          | 经受控 oRPC 完成对话、工具和审批                           |
 | #11/#12：系统交付 | launchd、自带 Node、安装和升级                   | 桌面退出继续执行、异常拉起、主动停止及版本替换均有成品证据 |
 
-手搭的生产 `createBotHost` 已移除，正式启动使用命名 profile，确定性模型仅由测试 overlay 加载。操作和当前验证范围见 [Runner README](../apps/runner/README.md)；原始失败基线见 [#3 失败记录](./DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)。
+手搭的生产 `createBotHost` 已移除，正式启动使用命名 profile，确定性模型仅由测试 overlay 加载。操作和当前验证范围见 [Runner README](../../apps/runner/README.md)；原始失败基线见 [#3 失败记录](../research/DESKTOP_HOST_RESEARCH.md#3-实施前失败证据)。

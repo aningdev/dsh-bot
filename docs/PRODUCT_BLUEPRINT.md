@@ -1,6 +1,6 @@
 # dsh-bot 产品蓝图
 
-本文描述从零重建的目标，不表示所有能力已实现。当前进度见 [README](../README.md)，工程边界见 [PROJECT_LAYOUT](PROJECT_LAYOUT.md)，完整决策来源见 [NSH_REBUILD_PLAN](NSH_REBUILD_PLAN.md)。旧版 Electron 产品规则被本次决定替代。
+本文描述从零重建的目标，不表示所有能力已实现。当前进度见 [README](../README.md)，工程边界见 [PROJECT_LAYOUT](architecture/PROJECT_LAYOUT.md)，完整决策来源见 [NSH_REBUILD_PLAN](architecture/NSH_REBUILD_PLAN.md)。旧版 Electron 产品规则被本次决定替代。
 
 ## Bot 与会话
 

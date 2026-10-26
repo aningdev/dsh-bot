@@ -1,14 +1,14 @@
 # dsh-bot 工程与工作区
 
-当前重建使用 Bun 多工作区：两个应用和一个运行时包，只维护根 bun.lock。NSH 运行客户端，Node 运行后台；Bun 负责安装与脚本调度。旧 Electron 工程已退出，完整设计见 [重建方案](NSH_REBUILD_PLAN.md)。
+当前重建使用 Bun 多工作区：两个应用和一个运行时包，只维护根 bun.lock。NSH 运行客户端，Node 运行后台；Bun 负责安装与脚本调度。旧 Electron 工程已退出，完整设计见 [重建方案](../NSH_REBUILD_PLAN.md)。
 
-| 位置 | 责任 |
-| --- | --- |
-| apps/client | NSH TSX 三栏界面、连接、展示状态及平台适配 |
-| apps/runner | Node 入口、命名 profile、Bot 产品插件与后台生命周期 |
-| packages/harness-runtime | 同发行版精确依赖和基础服务 bundle |
-| scripts | 实际需要的开发、构建、交付和验收脚本 |
-| references | 固定上游参考，只读研究，不参与安装和构建 |
+| 位置                     | 责任                                                |
+| ------------------------ | --------------------------------------------------- |
+| apps/client              | NSH TSX 三栏界面、连接、展示状态及平台适配          |
+| apps/runner              | Node 入口、命名 profile、Bot 产品插件与后台生命周期 |
+| packages/harness-runtime | 同发行版精确依赖和基础服务 bundle                   |
+| scripts                  | 实际需要的开发、构建、交付和验收脚本                |
+| references               | 固定上游参考，只读研究，不参与安装和构建            |
 
 产品模块先在 apps/runner 内组织，不创建独立 bot、ui、shared、SDK、web、mobile 或 relay 包。出现实际复用或独立装配需求后再提取。客户端不导入后台实现；当前以官方 Cookie 认证加 HTTP/NDJSON 接入 Node 适配层，不单独提取契约包。
 

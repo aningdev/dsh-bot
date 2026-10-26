@@ -2,7 +2,7 @@
 
 基于 NSH 与 DeepSeek Harness 的 Bot 工作台。客户端使用 TSX 和 NSH 官方预编译原生运行时，后台使用 Node，通过命名 `dsh-bot` profile 启动 Harness；Bun 负责依赖和工程脚本。
 
-当前实现 macOS 三栏界面、Bot 默认配置、多独立会话、会话配置固定、文本流、历史恢复、取消执行、凭据状态及独立后台。首阶段仅启用文本，不加载工具。真实模型、移动端和正式签名发布尚未验收，完整决定见 [重建方案](docs/NSH_REBUILD_PLAN.md)。
+当前实现 macOS 三栏界面、Bot 默认配置、多独立会话、会话配置固定、文本流、历史恢复、取消执行、凭据状态及独立后台。首阶段仅启用文本，不加载工具。真实模型、移动端和正式签名发布尚未验收，完整决定见 [重建方案](docs/architecture/NSH_REBUILD_PLAN.md)。
 
 ## 工作区
 
@@ -58,10 +58,10 @@ git submodule update --init references/deepseek-harness references/nsh
 ```
 
 - [产品蓝图](docs/PRODUCT_BLUEPRINT.md)
-- [工程与工作区](docs/PROJECT_LAYOUT.md)
-- [界面规范](docs/UI_GUIDELINES.md)
-- [NSH 重建方案与验收范围](docs/NSH_REBUILD_PLAN.md)
-- [NSH 与 Harness 通信调研](docs/NSH_HARNESS_RESEARCH.md)
+- [工程与工作区](docs/architecture/PROJECT_LAYOUT.md)
+- [界面规范](docs/architecture/UI_GUIDELINES.md)
+- [NSH 重建方案与验收范围](docs/architecture/NSH_REBUILD_PLAN.md)
+- [NSH 与 Harness 通信调研](docs/research/NSH_HARNESS_RESEARCH.md)
 - [参考项目说明](references/README.md)
 - [领域术语](GLOSSARY.md)
 

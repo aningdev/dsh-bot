@@ -1,6 +1,6 @@
 # dsh-bot 开发约束
 
-修改产品行为前阅读 [产品蓝图](docs/PRODUCT_BLUEPRINT.md) 与 [术语表](GLOSSARY.md)；修改工作区、profile、通信或打包前阅读 [工程方案](docs/PROJECT_LAYOUT.md)；修改界面前阅读 [界面规范](docs/UI_GUIDELINES.md)。
+修改产品行为前阅读 [产品蓝图](docs/PRODUCT_BLUEPRINT.md) 与 [术语表](GLOSSARY.md)；修改工作区、profile、通信或打包前阅读 [工程方案](docs/architecture/PROJECT_LAYOUT.md)；修改界面前阅读 [界面规范](docs/architecture/UI_GUIDELINES.md)。
 
 - 在根目录使用 Bun 管理工作区和唯一的 bun.lock；客户端运行于 NSH，后台运行于 Node。
 - apps/client 拥有 NSH 页面、连接和平台适配；apps/runner 拥有后台与产品插件；packages/harness-runtime 管理固定版本 Harness npm 依赖。模块先在实际消费者内部组织。

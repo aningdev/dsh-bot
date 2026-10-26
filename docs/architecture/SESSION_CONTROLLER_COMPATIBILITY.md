@@ -1,12 +1,12 @@
 # Session Controller 共存验证
 
-正式 Runner profile 已接入标准 Session Controller、文件引用与上传，BotController 继续独占 Bot 的 AgentHandle、配置和 preset。固定 npm 基线缺少所需委托，因此当前通过根 Bun 锁文件应用五个运行时兼容补丁；这不是上游已经发布生命周期扩展的声明。包版本见 [runtime 清单](../packages/harness-runtime/package.json)，补丁职责和移除条件见 [补丁说明](../patches/README.md)。
+正式 Runner profile 已接入标准 Session Controller、文件引用与上传，BotController 继续独占 Bot 的 AgentHandle、配置和 preset。固定 npm 基线缺少所需委托，因此当前通过根 Bun 锁文件应用五个运行时兼容补丁；这不是上游已经发布生命周期扩展的声明。包版本见 [runtime 清单](../../packages/harness-runtime/package.json)，补丁职责和移除条件见 [补丁说明](../../patches/README.md)。
 
 产品仍通过 npm 公开入口与命名 `runner` profile 启动，不加载官方 Web 应用，不复制 Controller，不替换 AgentFactory，也不从参考子模块导入产品代码。Session 事件、查询、队列、权限和模型循环保持上游实现；没有新增 Session 格式或客户端传输协议。
 
 ## 所有权与操作窗口
 
-[产品适配器](../packages/bot/src/session-controller.ts) 连接以下 Host 接口；这些接口由补丁增加，不是新的客户端 Remote 方法。
+[产品适配器](../../packages/bot/src/session-controller.ts) 连接以下 Host 接口；这些接口由补丁增加，不是新的客户端 Remote 方法。
 
 | 所属包                 | 接口                                           | 作用                                                        |
 | ---------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
@@ -48,7 +48,7 @@ bun run --cwd apps/runner check
 bun run --cwd apps/runner test:unit
 ```
 
-[Runner 生命周期测试](../apps/runner/tests/session-lifecycle.spec.ts) 使用真实 Node、独立 home、正式命名 profile、JSONL、storageDomain、Connection/Gateway 和生成客户端，只替换外部模型。受控文件引用 provider、初始化和上传屏障仅存在于 [测试插件](../apps/runner/tests/fixtures/session-controller-probe.ts)，正常 build 不构建这些 fixture。
+[Runner 生命周期测试](../../apps/runner/tests/session-lifecycle.spec.ts) 使用真实 Node、独立 home、正式命名 profile、JSONL、storageDomain、Connection/Gateway 和生成客户端，只替换外部模型。受控文件引用 provider、初始化和上传屏障仅存在于 [测试插件](../../apps/runner/tests/fixtures/session-controller-probe.ts)，正常 build 不构建这些 fixture。
 
 | 路径                         | 验证结果                                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------- |
@@ -63,14 +63,14 @@ bun run --cwd apps/runner test:unit
 | 缺失生命周期绑定             | Runner 拒绝报告就绪                                                          |
 | 独立 create/fork/selectModel | 返回产品错误，Bot 配置和身份不变                                             |
 
-[操作窗口测试](../packages/bot/tests/operation-guard.spec.ts) 另验证无提供者的直通、取消、释放完成前等待、退役期间才交付的租约清理、失败获取和重新注册。真实模型、非 macOS、设备 Peer 授权、实际 subagent 执行、保存中途强制杀进程、launchd 与自带运行时仍未完成验证。
+[操作窗口测试](../../packages/bot/tests/operation-guard.spec.ts) 另验证无提供者的直通、取消、释放完成前等待、退役期间才交付的租约清理、失败获取和重新注册。真实模型、非 macOS、设备 Peer 授权、实际 subagent 执行、保存中途强制杀进程、launchd 与自带运行时仍未完成验证。
 
 ## npm 基线的缺口
 
 补丁前的三个真实进程复现保留在 Git 提交 `7febdc2cd3`：冷恢复缺少动态 Bot preset；预注册空 preset 后官方 Controller 持有 Agent 且采用旧模型；历史开场绕过 Bot 的替换拒绝。当前测试已改为对应的统一所有者正向契约，不能继续把基线缺口当作产品期望行为。
 
-参考源码固定在 `687f282e8625c6b8d11ff58211a90524be2e4317`，与运行补丁分别管理。[Agent Controller](../references/deepseek-harness/packages/api/session-controller/src/agent.ts) 的内部命令、lookup 闭包、upload resolver 和 `resolveObservedAgent` 不统一通过公开 facade；仅覆盖公开 `resolveAgent` 无法协调所有入口。其内部模型选择还优先使用历史投影或 request header，而不是 Bot 记录。
+参考源码固定在 `687f282e8625c6b8d11ff58211a90524be2e4317`，与运行补丁分别管理。[Agent Controller](../../references/deepseek-harness/packages/api/session-controller/src/agent.ts) 的内部命令、lookup 闭包、upload resolver 和 `resolveObservedAgent` 不统一通过公开 facade；仅覆盖公开 `resolveAgent` 无法协调所有入口。其内部模型选择还优先使用历史投影或 request header，而不是 Bot 记录。
 
-[history.follow](../references/deepseek-harness/packages/api/session-controller/src/history.ts) 先返回快照再触发 [后台 promotion](../references/deepseek-harness/packages/api/session-controller/src/index.ts)。[Typert lookup 类型](../references/deepseek-harness/packages/typert/protocol/src/types.ts) 只返回对象或 Context，[Gateway](../references/deepseek-harness/packages/api/gateway/src/index.ts) 原本在解析后才建立 invocation；因此只替换 lookup 也不能保护后续异步使用。[原始上传](../references/deepseek-harness/packages/client/file-upload/src/index.ts) 的 live Agent 路径还先于 resolver，需要单独覆盖整个上传。
+[history.follow](../../references/deepseek-harness/packages/api/session-controller/src/history.ts) 先返回快照再触发 [后台 promotion](../../references/deepseek-harness/packages/api/session-controller/src/index.ts)。[Typert lookup 类型](../../references/deepseek-harness/packages/typert/protocol/src/types.ts) 只返回对象或 Context，[Gateway](../../references/deepseek-harness/packages/api/gateway/src/index.ts) 原本在解析后才建立 invocation；因此只替换 lookup 也不能保护后续异步使用。[原始上传](../../references/deepseek-harness/packages/client/file-upload/src/index.ts) 的 live Agent 路径还先于 resolver，需要单独覆盖整个上传。
 
 仅补齐 preset、覆盖 facade、监听 `agent/created` 接管、做一次授权过滤或替换 AgentFactory 均不满足这些时间与所有权要求。当前选择在公开 npm 安装物上补充 Host 委托和操作生命周期，保持应用策略在 Bot 包。上游提供等价可消费接口后，统一升级同版 DSH 依赖、移除兼容补丁，并重新通过上述正向测试；不直接删除补丁后依赖基线行为。

@@ -16,21 +16,21 @@ NSH 可以作为新的原生客户端，Runner 继续用 Node 运行 Harness。U
 
 现有 Electron Main 的本机发现、认证、客户端装配与审批逻辑可作为行为依据，不能把整个文件搬进 NSH VM。当前源码使用 Node 文件系统、`ws` 和 Electron 所属应用边界。
 
-依据：[当前认证客户端](../apps/desktop/src/main/runner-client.ts)、[连接描述文件校验](../apps/desktop/src/main/runner-connection.ts)、[Harness Connection](../references/deepseek-harness/packages/client/connection/README.md)、[Gateway](../references/deepseek-harness/packages/api/gateway/README.md)。
+依据：[当前认证客户端](../../apps/desktop/src/main/runner-client.ts)、[连接描述文件校验](../../apps/desktop/src/main/runner-connection.ts)、[Harness Connection](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway](../../references/deepseek-harness/packages/api/gateway/README.md)。
 
 ## NSH 如何访问后端
 
-| 机制 | 适用范围 | 对本项目的含义 |
-| --- | --- | --- |
-| 全局 `fetch` | HTTP、流式响应、取消 | 原生端允许显式 Cookie；`redirect: 'manual'` 可读取 302 和 Location |
-| 全局 `WebSocket` | 浏览器形状的事件接口 | 构造器不提供自定义握手头，不能直接发送现有 API Cookie |
-| `websocket.WebSocket.connect` | Promise 形式的读、写、关闭 | 可设部分握手头，但拒绝 Cookie、Authorization 等凭据头 |
-| `nsh/host` | TSX 与嵌入它的原生宿主通信 | 需自行注册宿主函数；不是现成的 Node/Harness 连接器 |
-| Rust `nativeModule` / 应用 Rust 模块 | 自定义本机网络、系统操作 | 可实现受控认证 WebSocket 及本机发现，再向 TSX 暴露小接口 |
+| 机制                                 | 适用范围                   | 对本项目的含义                                                     |
+| ------------------------------------ | -------------------------- | ------------------------------------------------------------------ |
+| 全局 `fetch`                         | HTTP、流式响应、取消       | 原生端允许显式 Cookie；`redirect: 'manual'` 可读取 302 和 Location |
+| 全局 `WebSocket`                     | 浏览器形状的事件接口       | 构造器不提供自定义握手头，不能直接发送现有 API Cookie              |
+| `websocket.WebSocket.connect`        | Promise 形式的读、写、关闭 | 可设部分握手头，但拒绝 Cookie、Authorization 等凭据头              |
+| `nsh/host`                           | TSX 与嵌入它的原生宿主通信 | 需自行注册宿主函数；不是现成的 Node/Harness 连接器                 |
+| Rust `nativeModule` / 应用 Rust 模块 | 自定义本机网络、系统操作   | 可实现受控认证 WebSocket 及本机发现，再向 TSX 暴露小接口           |
 
 NSH TSX 在 QuickJS 中执行，Node 形状的标准模块只支持它声明的 API；不能由“支持 npm”推断任意 Node npm 包都可运行。原生端与 Web 端也不能混为一谈：Web 使用浏览器传输，不能设置自定义 WebSocket 握手头。
 
-依据：[NSH 网络文档](../references/nsh/website/docs/networking.md)、[标准模块](../references/nsh/website/modules/standard-modules.md)、[全局 WebSocket 原生实现](../references/nsh/crates/nsh-js/src/standard/websocket_native.rs)、[显式 WebSocket 选项校验](../references/nsh/crates/nsh-core/src/runtime/websocket.rs)、[宿主通道](../references/nsh/website/modules/nsh-host.md)、[Rust 模块](../references/nsh/website/modules/nsh-native.md)。
+依据：[NSH 网络文档](../../references/nsh/website/docs/networking.md)、[标准模块](../../references/nsh/website/modules/standard-modules.md)、[全局 WebSocket 原生实现](../../references/nsh/crates/nsh-js/src/standard/websocket_native.rs)、[显式 WebSocket 选项校验](../../references/nsh/crates/nsh-core/src/runtime/websocket.rs)、[宿主通道](../../references/nsh/website/modules/nsh-host.md)、[Rust 模块](../../references/nsh/website/modules/nsh-native.md)。
 
 ## 当前 Runner 的认证和调用链
 
@@ -43,7 +43,7 @@ NSH TSX 在 QuickJS 中执行，Node 形状的标准模块只支持它声明的 
 
 这是产品现有的非页面认证链。Harness 的普通浏览器页面另有浏览器 Cookie 交换，不能假定 NSH 原生 VM 有浏览器 Cookie jar。
 
-依据：[RunnerClient.authenticate](../apps/desktop/src/main/runner-client.ts)、[RunnerDescriptor](../apps/desktop/src/main/runner-connection.ts)、[Connection 认证与 Peer 所有权](../references/deepseek-harness/packages/client/connection/README.md)、[Gateway 调用、流与事件](../references/deepseek-harness/packages/api/gateway/README.md)。
+依据：[RunnerClient.authenticate](../../apps/desktop/src/main/runner-client.ts)、[RunnerDescriptor](../../apps/desktop/src/main/runner-connection.ts)、[Connection 认证与 Peer 所有权](../../references/deepseek-harness/packages/client/connection/README.md)、[Gateway 调用、流与事件](../../references/deepseek-harness/packages/api/gateway/README.md)。
 
 ## 建议的衔接方式
 
