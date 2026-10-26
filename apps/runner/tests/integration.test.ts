@@ -22,12 +22,14 @@ async function until<T>(read: () => Promise<T>, accept: (value: T) => boolean, t
 test('authenticated Harness sessions: isolation, text stream, fixed config, restart and cancellation', { timeout: 90_000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-bot-test-'))
   const requests: Record<string, unknown>[] = []
+  const authenticated: boolean[] = []
   let slow = false
   const mock = createServer((request, response) => {
     let body = ''
     request.on('data', chunk => { body += chunk })
     request.on('end', () => {
       requests.push(JSON.parse(body))
+      authenticated.push(request.headers['x-api-key'] === 'test-local-only')
       response.writeHead(200, { 'content-type': 'text/event-stream' })
       const events = [
         { type: 'message_start', message: { id: 'msg_1', model: 'deepseek-flash', usage: { input_tokens: 3, output_tokens: 0 } } },
@@ -100,6 +102,11 @@ test('authenticated Harness sessions: isolation, text stream, fixed config, rest
   try {
     await start()
     const denied = await fetch(origin + '/api/bot/state'); assert.notEqual(denied.status, 200)
+    assert.deepEqual(await api('credentials'), { configured: true, source: 'env', writable: true })
+    const credentialWrite = await fetch(origin + '/api/bot/credentials', {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ key: 'must-not-save' }),
+    })
+    assert.ok(!credentialWrite.ok, 'credential endpoint is read-only')
     const config = { name: 'One', model: 'deepseek-flash', instructions: 'literal {{bot_variable}}', cwd: home }
     const bot = await api('config', { config })
     const one = await api('conversation', { botId: bot.id })
@@ -110,12 +117,14 @@ test('authenticated Harness sessions: isolation, text stream, fixed config, rest
     await api('prompt', { id: one.id, requestId: randomUUID(), text: 'first message', mode: 'queue' })
     await until(async () => stream.messages(), value => value.some(item => item.text === 'Hello 世界') && !stream.history.running)
     assert.equal(requests.length, 1)
+    assert.equal(authenticated[0], true, 'launch environment credential must authenticate the model request')
     assert.equal(requests[0]!.model, 'deepseek-flash')
     assert.ok(JSON.stringify(requests[0]!.system).includes(config.instructions), 'literal instruction must reach official adapter')
     assert.ok(stream.frames.some(value => (value as { type: string }).type === 'assistant-stream'), 'must receive incremental frames')
     const isolated = await watch(two.id); assert.equal(isolated.messages().length, 0); await isolated.close()
     await stream.close()
     await stop(); await start()
+    assert.equal((await api('credentials')).source, 'env')
     const restored = await watch(one.id)
     assert.ok(restored.messages().some(item => item.text === 'Hello 世界'))
     assert.equal(requests.length, 1, 'reading after restart must not replay input')

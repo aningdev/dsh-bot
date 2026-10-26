@@ -100,10 +100,7 @@ export async function apply(ctx: Context): Promise<void> {
     return new Response(stream, { headers: { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' } })
   })
   const key = credentialRef('DEEPSEEK_API_KEY')
-  route('credentials', ['GET', 'POST'], async request => {
-    if (request.method === 'POST') await ctx.credentials.set(key, text(bodyFrom(await request.json()).key))
-    return Response.json(await ctx.credentials.describe(key))
-  })
+  route('credentials', ['GET'], async () => Response.json(await ctx.credentials.describe(key)))
   route('shutdown', ['POST'], async () => {
     setTimeout(() => process.kill(Number(process.env.DSH_BOT_SUPERVISOR_PID ?? process.pid), 'SIGTERM'), 100).unref()
     return Response.json({ stopping: true })

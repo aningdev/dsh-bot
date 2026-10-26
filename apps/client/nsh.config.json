@@ -6,6 +6,6 @@
   "capabilities": {
     "network": { "hosts": ["127.0.0.1"] },
     "fs": { "read": ["${homeDir}/.dsh-bot-nsh", "${pluginDir}"], "write": ["${dataDir}"] },
-    "process": { "execute": ["/usr/bin/open", "/usr/local/bin/node", "/opt/homebrew/bin/node", "node"], "env": [] }
+    "process": { "execute": ["/usr/bin/open", "/bin/sh"], "env": ["SHELL"] }
   }
 }

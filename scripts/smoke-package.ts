@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -10,9 +10,19 @@ const test = resolve('apps/runner/tests/service.test.ts')
 await rename(app, relocated)
 try {
   const runtime = join(relocated, 'Contents/Resources/nsh/Runner.app/Contents/Resources/runtime')
-  const child = spawn(join(runtime, 'bin/node'), ['--test', test], {
-    cwd: join(runtime, 'apps/runner'), stdio: 'inherit',
-    env: { HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8' },
+  try { await access(join(runtime, 'bin/node')); throw new Error('安装包不应携带 Node') }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+  const environment = { HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, PATH: '/usr/bin:/bin', SHELL: process.env.SHELL || '/bin/zsh', LANG: 'en_US.UTF-8' }
+  const probe = spawn('/bin/sh', [join(runtime, 'node-launcher.sh'), 'check'], { env: environment, stdio: ['ignore', 'pipe', 'inherit'] })
+  let output = ''
+  probe.stdout!.on('data', data => { output += data })
+  const status = await new Promise<number | null>((resolve, reject) => { probe.once('exit', resolve); probe.once('error', reject) })
+  if (status !== 0) throw new Error(`本机 Node 检测失败：${status}`)
+  const line = output.split('\n').findLast(value => value.startsWith('DSH_BOT_NODE:'))
+  if (!line) throw new Error('本机 Node 检测缺少结果')
+  const node = (JSON.parse(line.slice('DSH_BOT_NODE:'.length)) as { path: string }).path
+  const child = spawn(node, ['--test', test], {
+    cwd: join(runtime, 'apps/runner'), stdio: 'inherit', env: environment,
   })
   const code = await new Promise<number | null>((resolve, reject) => { child.once('exit', resolve); child.once('error', reject) })
   if (code !== 0) throw new Error(`成品后台验收失败：${code}`)
@@ -30,7 +40,7 @@ try {
   }
   try {
     const open = spawn('/usr/bin/open', ['-g', '-n', '-a', join(relocated, 'Contents/Resources/nsh/Runner.app'),
-      '--env', `DSH_BOT_HOME=${home}`, '--env', 'PATH=/usr/bin:/bin'], { stdio: 'inherit' })
+      '--env', `DSH_BOT_HOME=${home}`, '--env', 'PATH=/usr/bin:/bin', '--env', `SHELL=${environment.SHELL}`], { stdio: 'inherit' })
     const result = await new Promise<number | null>((resolve, reject) => { open.once('exit', resolve); open.once('error', reject) })
     if (result !== 0) throw new Error(`macOS open 失败：${result}`)
     supervisor = await until(async () => JSON.parse(await readFile(join(home, 'supervisor.json'), 'utf8')).pid as number, Number.isSafeInteger)
@@ -47,7 +57,7 @@ try {
   } finally {
     if (supervisor && alive(supervisor)) { process.kill(supervisor, 'SIGTERM'); await until(async () => !alive(supervisor!), Boolean) }
   }
-  console.info('成品后台已通过迁移目录、受限 PATH、认证、异常恢复、主动停止、旧路径更新与 macOS 后台助手启动验收。')
+  console.info(`成品使用本机 Node ${node}，已通过无内置 Node、迁移目录、受限 PATH、认证、异常恢复、主动停止、旧路径更新与 macOS 后台助手启动验收。`)
 } finally {
   await rename(relocated, app)
   await rm(temporary, { recursive: true, force: true })

@@ -2,7 +2,7 @@
 
 基于 NSH 与 DeepSeek Harness 的 Bot 工作台。客户端使用 TSX 和 NSH 官方预编译原生运行时，后台使用 Node，通过命名 `dsh-bot` profile 启动 Harness；Bun 负责依赖和工程脚本。
 
-当前实现 macOS 三栏界面、Bot 默认配置、多独立会话、会话配置固定、文本流、历史恢复、取消执行、凭据设置及独立后台。首阶段仅启用文本，不加载工具。真实模型、移动端和正式签名发布尚未验收，完整决定见 [重建方案](docs/NSH_REBUILD_PLAN.md)。
+当前实现 macOS 三栏界面、Bot 默认配置、多独立会话、会话配置固定、文本流、历史恢复、取消执行、凭据状态及独立后台。首阶段仅启用文本，不加载工具。真实模型、移动端和正式签名发布尚未验收，完整决定见 [重建方案](docs/NSH_REBUILD_PLAN.md)。
 
 ## 工作区
 
@@ -39,11 +39,13 @@ bun run test:package
 
 数据默认位于 `~/.dsh-bot-nsh`，与原有应用及默认 dsh 数据分离。开发时可通过 `DSH_BOT_HOME` 指定隔离目录；生成的客户端启动配置不纳入 Git。关闭客户端保留后台，主动停止后台通过认证接口完成。
 
+模型密钥直接复用后台启动环境中的 `DEEPSEEK_API_KEY`，无需在界面输入；客户端启动后台时会继承用户登录 Shell 导出的环境变量。沿用 Harness 凭据优先级：已有保存凭据优先，其次是启动环境，再其次是 `.env`。界面只显示配置状态，不读取密钥。修改环境变量后需重启后台才会生效。
+
 ## macOS 成品
 
-`package:macos` 输出 `dist/macos/DSH Bot.app`，同时携带官方 Node 24.15.0、Runner 与当前锁定依赖，无需用户另装 Node、Bun 或 dsh。首次构建下载 Node 归档并校验官方 SHA-256；后台助手内置在应用中，通过 macOS LaunchServices 启动。构建使用本地临时签名，尚未完成 Developer ID 签名与公证。
+`package:macos` 输出 `dist/macos/DSH Bot.app`，包含 Runner 与当前锁定依赖，不携带 Node。用户须安装 Node 24.9.0 或更新稳定版，无需安装 Bun 或 dsh。启动前通过用户登录交互 Shell 自动检测 Node，遵循用户环境的解析顺序，支持由 Shell 初始化的版本管理器；不提供手动路径设置。缺失、无法执行或版本不符时显示错误，安装或升级后点击“重新检测并启动”。后台助手通过 macOS LaunchServices 启动，后续进程沿用选中的 Node。构建使用本地临时签名，尚未完成 Developer ID 签名与公证。
 
-`test:package` 将产物移至临时目录，以全新数据目录及仅含系统命令的 PATH 验证内置 Node、认证、工作进程崩溃恢复、主动停止与旧安装路径更新，并验证 macOS 实际启动内置后台助手。该测试会暂时移动构建产物，不应与其他打包命令并行执行。
+`test:package` 将产物移至临时目录，确认没有内置 Node，以全新数据目录及仅含系统命令的 PATH 验证用户 Shell 检测本机 Node、认证、工作进程崩溃恢复、主动停止与旧安装路径更新，并验证 macOS 实际启动内置后台助手。测试需要用户登录 Shell 能找到符合要求的 Node。该测试会暂时移动构建产物，不应与其他打包命令并行执行。
 
 已在本机 Apple Silicon macOS 验证成品后台与原生窗口打开。受限 PATH 的验证不能替代全新机器安装；Intel macOS、真实模型、移动设备、正式签名分发及完整成品界面端到端流程仍待验证。目前运行依赖较大，未进行裁剪。
 

@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { cp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 
 if (process.platform !== 'darwin') throw new Error('macOS 安装包须在 macOS 上构建')
@@ -12,28 +11,18 @@ async function command(program: string, args: string[]) {
 }
 const template = await readFile('apps/client/nsh.config.json', 'utf8')
 await writeFile('apps/client/nsh.json', template)
-await writeFile('apps/client/launch.json', JSON.stringify({ packaged: true, home: '', node: '', service: '' }))
+const launcher = await readFile('scripts/node-launcher.sh', 'utf8')
+await writeFile('apps/client/launch.json', JSON.stringify({ packaged: true, home: '', launcher, service: '' }))
 try {
   await command('bun', ['run', '--cwd', 'apps/runner', 'build'])
   await command('nsh', ['package', 'apps/client/App.tsx', '--target', 'macos', '--out', out])
   const app = join(out, 'DSH Bot.app')
   const helper = join(app, 'Contents/Resources/nsh/Runner.app')
   const contents = join(helper, 'Contents'), runtime = join(contents, 'Resources/runtime')
+  await rm(helper, { recursive: true, force: true })
   await mkdir(join(contents, 'MacOS'), { recursive: true })
-  await mkdir(join(runtime, 'bin'), { recursive: true })
-  // Use the official standalone Node build; Homebrew Node depends on host dylibs.
-  const version = (await readFile('.node-version', 'utf8')).trim()
-  const name = `node-v${version}-darwin-${process.arch}`
-  const archiveName = name + '.tar.gz', cache = resolve('.cache/node')
-  await mkdir(cache, { recursive: true })
-  const archive = join(cache, archiveName), checksums = join(cache, `SHASUMS256-${version}.txt`)
-  await command('/usr/bin/curl', ['--fail', '--location', '--retry', '2', '--continue-at', '-', '--output', archive, `https://nodejs.org/dist/v${version}/${archiveName}`])
-  await command('/usr/bin/curl', ['--fail', '--location', '--output', checksums, `https://nodejs.org/dist/v${version}/SHASUMS256.txt`])
-  const checksum = (await readFile(checksums, 'utf8')).split('\n').find(line => line.endsWith('  ' + archiveName))?.split(' ')[0]
-  if (!checksum || createHash('sha256').update(await readFile(archive)).digest('hex') !== checksum) throw new Error('Node 下载校验失败')
-  await command('/usr/bin/tar', ['-xzf', archive, '-C', cache])
-  await cp(join(cache, name, 'bin/node'), join(runtime, 'bin/node'))
-  await cp(join(cache, name, 'LICENSE'), join(runtime, 'NODE-LICENSE'))
+  await mkdir(runtime, { recursive: true })
+  await cp('scripts/node-launcher.sh', join(runtime, 'node-launcher.sh'))
   await writeFile(join(runtime, 'package.json'), '{"private":true,"type":"module"}\n')
   // Copy the installed dependency closure, preserving lockfile-selected versions.
   const seen = new Set<string>()
@@ -72,12 +61,11 @@ try {
   }
   await copyPackage(resolve('apps/runner'))
   await writeFile(join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Runner</string><key>CFBundleIdentifier</key><string>dev.dshbot.runner</string><key>CFBundleName</key><string>DSH Bot Runner</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string><key>LSUIElement</key><true/></dict></plist>`)
-  await writeFile(join(contents, 'MacOS/Runner'), '#!/bin/sh\nrunner_contents=$(CDPATH= cd -- "$(/usr/bin/dirname -- "$0")/.." && pwd)\nexec "$runner_contents/Resources/runtime/bin/node" "$runner_contents/Resources/runtime/apps/runner/dist/service.js" start\n', { mode: 0o755 })
-  await command('/usr/bin/codesign', ['--force', '--sign', '-', join(runtime, 'bin/node')])
+  await writeFile(join(contents, 'MacOS/Runner'), '#!/bin/sh\nrunner_contents=$(CDPATH= cd -- "$(/usr/bin/dirname -- "$0")/.." && pwd)\nexec /bin/sh "$runner_contents/Resources/runtime/node-launcher.sh" start "$runner_contents/Resources/runtime/apps/runner/dist/service.js"\n', { mode: 0o755 })
   await command('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', helper])
   await command('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', app])
   await command('/usr/bin/codesign', ['--verify', '--deep', '--strict', app])
-  console.info(`已组装 ${app}；Node ${version}，${seen.size} 个运行时包。`)
+  console.info(`已组装 ${app}；使用用户本机 Node，${seen.size} 个运行时包。`)
 } finally {
   await command('bun', ['scripts/prepare-client.ts'])
 }

@@ -16,4 +16,4 @@
 
 依赖与脚本以各 package.json 为准。Harness 直接依赖精确锁定到同一版本；内部依赖使用 workspace:*，各工作区声明自身真实依赖。根目录统一协调检查、构建与测试，不沿用旧任务图或旧 E2E。
 
-macOS 产物由 `scripts/package-macos.ts` 组装官方 NSH 应用、内置 Runner.app、官方独立 Node 和已安装的生产依赖闭包；不重新解析依赖版本，不携带开发机的 Homebrew Node。`scripts/smoke-package.ts` 在迁移目录和受限 PATH 下验证成品后台及 LaunchServices 助手启动。当前仅本机 Apple Silicon macOS 验证，正式签名、公证、新机器安装、真实模型和移动端仍待完成。
+macOS 产物由 `scripts/package-macos.ts` 组装官方 NSH 应用、内置 Runner.app 和已安装的生产依赖闭包，不携带 Node，不重新解析依赖版本。`scripts/node-launcher.sh` 通过用户登录交互 Shell 自动检测本机 Node，要求 24.9.0 或更新稳定版；开发客户端与成品助手共用此逻辑，不提供手动路径设置。Shell 解析失败或 Node 不满足要求时由客户端提示重新检测。`scripts/smoke-package.ts` 在迁移目录和受限 PATH 下验证本机 Node 检测、成品后台及 LaunchServices 助手启动。当前仅本机 Apple Silicon macOS 验证，正式签名、公证、新机器安装、真实模型和移动端仍待完成。
