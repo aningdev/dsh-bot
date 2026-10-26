@@ -4,38 +4,68 @@
 
 ## 产品与多端
 
-**Bot（助手档案）**：具有稳定身份、名称、工作区与默认执行配置的助手档案，持有该 Bot 唯一的持续对话。
-_Avoid_：Agent、Bot template、独立进程
+**Bot（助手档案）**：具有稳定身份、名称、模板引用、工作区与会话指针的助手档案，由客户端持有，持有该 Bot 唯一的持续对话。
+_Avoid_：Agent、profile 别名、独立进程、Bot template
 
-**Bot template（Bot 模板）**：创建 Bot 时用于具体化初始配置的内置模板；创建后的 Bot 独立拥有这些配置，不随模板更新而改变。
-_Avoid_：共享可变配置、Harness Agent preset
+**Bot template（Bot 模板）**：具名的指令与能力组合，供 Bot 选择，以稳定模板标识引用；模板标识与模板当前定义是不同概念。
+_Avoid_：Bot 档案、永久内容快照、每 Bot 独立进程
 
-**Bot configuration（Bot 默认配置）**：由 Bot 持有、用于初始化该 Bot 对话的模型选择、指令、能力与默认工作目录。
-_Avoid_：模板引用、插件代码快照
+**Bot configuration（Bot 配置）**：Bot 的名称、模板引用、工作区、默认模型与归档状态；供应商连接与凭据属于共享设置。
+_Avoid_：模板本身、插件代码快照、每 Bot 供应商连接
 
-**Conversation（对话框）**：每个 Bot 唯一的持续聊天窗口，在同一消息流中容纳多段执行历史；它不决定后台的执行结构。
+**Conversation（对话）**：每个 Bot 唯一的持续聊天入口，容纳连续的多轮执行历史。
 _Avoid_：会话列表、新建会话、Harness Session、单次模型请求
 
-**Bot memory（Bot 记忆）**：由用户维护、按 Bot 共享的长期事实，在模型请求中注入且不由系统自动读写。
+**Bot registry（Bot 注册表）**：Bot 配置与对话指针的唯一权威集合，由桌面管理，移动端接收只读快照。
+_Avoid_：注册表同步协议、后台保存 Bot、移动端改 Bot
+
+**Profile（装配单元）**：Harness 的命名运行组合，确定一个后台加载的插件与能力；多个 Bot 可以共用一个 Profile。
+_Avoid_：Bot 别名、每 Bot 一个后台
+
+**Bot memory（Bot 记忆）**：由用户维护、按 Bot 共享的长期事实，与对话历史及自动摘要分开。
 _Avoid_：对话历史、自动摘要、检索索引
 
-**Conversation configuration（对话配置）**：Bot 首次打开时由 Bot 默认配置与用户选择具体化、之后保持固定并只能在空闲时显式应用的执行配置。
-_Avoid_：可变默认配置、凭据副本、插件代码快照、每会话配置
+**Conversation configuration（对话配置）**：对话实际使用的模板引用、工作区与当前模型选择；模板引用不等于永久内容快照，当前模型与 Bot 初始化默认值分开。
+_Avoid_：凭据副本、修改 Bot 即覆盖对话配置
 
-**Runner（后台执行宿主）**：独立于交互客户端存活、承载 Harness 并管理 Bot 与执行连接的后台运行单元。
-_Avoid_：Bot、客户端设备、自建 Agent 执行引擎
+**Runner（后台进程）**：由 launchd 托管的唯一 `dsh web` 进程，装配上游 profile `web` 并承载全部 Bot 的执行；产品不在其中注入任何自有代码。
+_Avoid_：Bot、每 Bot 一个进程、自建 Agent 执行引擎、后台监督器
 
-**Client（交互客户端）**：向 Runner 提交用户操作并展示执行状态的桌面或移动应用。
-_Avoid_：Runner、独立 Agent
+**Client（交互客户端）**：向后台提交用户操作并展示执行状态的桌面或移动应用；桌面管理 Bot 注册表，移动端只读快照。
+_Avoid_：Runner、独立 Agent、第二份权威执行状态
 
-**Device identity（设备身份）**：Runner 用于区分已配对交互端，并分别授权和撤销其访问的独立身份。
+**Device identity（设备身份）**：用于区分已配对交互端，并分别授权和撤销其访问的独立身份。
 _Avoid_：用户账号、网络连接、Bot 身份
 
 **Pairing（设备配对）**：用户确认一个新交互端可以连接指定 Runner 并获得相应访问权限的过程。
 _Avoid_：模型凭据配置、Relay 登录
 
-**Relay（连接中继）**：在不同网络间为 Client 与 Runner 转发连接和加密业务内容的中间设施，无法读取聊天正文、工具结果与审批内容。
-_Avoid_：Runner、执行状态权威、模型服务
+**Settings（后台设置）**：由后台管理、供各 Bot 共享的配置，包括模型供应商、端点和模型目录；与 Bot 配置及界面偏好分开。
+_Avoid_：客户端配置副本、Bot 私有供应商
+
+**Default model（默认模型）**：初始化对话时使用的模型选择，与已有对话的当前模型分开。
+_Avoid_：当前模型、API 密钥、供应商连接配置
+
+**Current model（当前模型）**：后台记录的对话模型选择，可以在对话中切换；已准备步骤使用的模型可能与最新选择不同。
+_Avoid_：Bot 默认模型、供应商配置
+
+**Archived Bot（已归档 Bot）**：从默认列表隐藏且停止接收新输入的 Bot，其历史、已接纳工作与待审批请求仍被保留。
+_Avoid_：已删除 Bot、已停止执行
+
+**Unconfirmed input（未确认输入）**：已经发起提交、但尚不能确认后台接纳结果的输入。
+_Avoid_：发送失败、未接纳、可自动重试
+
+**Pending input（待处理输入）**：后台已接纳、尚未被执行实例领取的输入。
+_Avoid_：本机草稿、未确认输入、Relay 投递队列
+
+**Credential（凭据）**：由后台管理的认证机密及其引用；设置页可以提交或移除密钥，只展示脱敏状态。
+_Avoid_：客户端保存 API key、界面回显密钥、密钥写进 Bot 配置
+
+**Relay（连接中继）**：公网上的转发服务，在移动端与本机 bridge 之间转发连接与加密业务内容；它不持 owner 凭据，无法读取聊天正文、工具结果与审批内容。
+_Avoid_：反向代理后台、Relay 即后台、Relay 保存会话
+
+**Bridge（本机出站桥）**：本机与 Relay 之间的连接桥，负责设备授权、转发到后台，以及向移动端提供只读 Bot 快照。
+_Avoid_：第二个执行引擎、会话存储、执行状态权威
 
 ## Harness 执行
 
@@ -57,8 +87,8 @@ _Avoid_：一次模型响应、工作目标完成
 **Step（执行步骤）**：一次模型请求及该响应引起的工具执行。
 _Avoid_：Turn、用户工作目标
 
-**Agent preset（Harness 运行时预设）**：Harness 中具名的 Agent 指令与可用能力组合，包含工具选择。
-_Avoid_：Bot template、Bot 档案、模型预设、权限预设
+**Agent preset（Harness 运行时预设）**：Harness 中具名的 Agent 指令与可用能力组合，包含工具选择；与产品中的 Bot 模板对应。
+_Avoid_：Bot 档案、模型预设、权限预设、第二套模板机制
 
 **Working directory（工作目录）**：执行工作时用于解析相对路径的本地目录，选择目录本身不授予文件访问或命令执行权限。
 _Avoid_：目录沙箱、文件权限范围

@@ -6,7 +6,7 @@
 
 `apps/desktop-host` 是官方 Electron 应用的执行侧入口，但完整运行能力由 `@deepseek-ai/dsh/profile-boot` 和 profile 选择的 bundle 提供。入口加载应用自己的 profile，启动标准插件树，追加桌面专属资源与控制，再将连接信息报告给 Electron。模型循环、Session 日志、工具和 API 实现不在这个入口中。[入口源码](../../references/deepseek-harness/apps/desktop-host/src/index.ts)、[profile 启动](../../references/deepseek-harness/apps/cli/src/profile-boot.ts)。
 
-本项目应复用命名 profile、公开插件和运行时解析机制，保留独立 Runner 应用。必须调整的是进程所有权：官方 Desktop Host 由 Electron 启动，父子 IPC 断开时自行停止；本项目已经决定由 launchd 管理 Runner，桌面退出后继续运行。这个差异不需要重写 Agent Loop，也不能通过原样使用 Desktop Host 入口解决。[Host 进程管理](../../references/deepseek-harness/apps/desktop/src/host-process.ts)、[Host 断连处理](../../references/deepseek-harness/apps/desktop-host/src/index.ts)、[本项目进程所有权](../ARCHITECTURE.md#9-打包与交付)。
+本项目应复用命名 profile、公开插件和运行时解析机制，保留独立 Runner 应用。必须调整的是进程所有权：官方 Desktop Host 由 Electron 启动，父子 IPC 断开时自行停止；本项目已经决定由 launchd 管理 Runner，桌面退出后继续运行。这个差异不需要重写 Agent Loop，也不能通过原样使用 Desktop Host 入口解决。[Host 进程管理](../../references/deepseek-harness/apps/desktop/src/host-process.ts)、[Host 断连处理](../../references/deepseek-harness/apps/desktop-host/src/index.ts)、[本项目进程所有权](../ARCHITECTURE.md#10-打包与交付)。
 
 | 层                                | 上游所有者                                | 本项目复用或调整                                                 |
 | --------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
@@ -92,7 +92,7 @@ Web overlay 还调整 Agent 作用域：禁用 base 中多种全局工具、指�
 
 Host 将带进程 token 的 URL 仅交给 Electron。Main 用它交换 Cookie，保存 Host 地址与 Cookie；应用静态资源从本地加载，其余请求经 Main 转发，转发响应过滤 `set-cookie` 等头。WebSocket 则由 Main 对属于当前窗口、匹配 Host 地址与应用 Origin 的请求补充认证头。[认证与 HTTP 转发](../../references/deepseek-harness/apps/desktop/src/web-document.ts)、[应用协议与 WebSocket 处理](../../references/deepseek-harness/apps/desktop/src/main.ts)。
 
-这条官方 UI 路径不同于本项目现有 actions → 受控 oRPC → Main。可复用的是 Connection/Gateway 与明确的客户端身份；无需为了复用 Host 就替换整个 React 前端或绕过现有 Main 控制。后台的模型凭据继续由执行侧持有，客户端模块的具体发布产物接入仍需验证。[本项目依赖方向](../ARCHITECTURE.md#2-进程与工作区)、[既有客户端调研](./HOST_AND_CLIENT_RESEARCH.md#复用时仍需解决的两项问题)。
+这条官方 UI 路径不同于本项目现有 actions → 受控 oRPC → Main。可复用的是 Connection/Gateway 与明确的客户端身份；无需为了复用 Host 就替换整个 React 前端或绕过现有 Main 控制。后台的模型凭据继续由执行侧持有，客户端模块的具体发布产物接入仍需验证。[本项目依赖方向](../ARCHITECTURE.md#2-仓库与组件)、[既有客户端调研](./HOST_AND_CLIENT_RESEARCH.md#复用时仍需解决的两项问题)。
 
 ## 停止、更新与任务接纳
 
@@ -102,7 +102,7 @@ Host 接到 `shutdown` 或父 IPC `disconnect` 后，合并并发停止操作，
 
 更新检查把运行中的 Agent、`nextTurn`/`nextStep` 待处理输入，以及运行中或停止中的 Jobs 计为活动工作。`lock` 在 `connection/request` 拒绝新请求，等待已接纳请求结束，再重新检查任务；`unlock` 释放锁。退出检查还查询已加载会话中的已武装 schedule；未加载会话不在其定时任务计数范围。[更新控制](../../references/deepseek-harness/apps/desktop-host/src/update-tasks.ts)、[退出检查](../../references/deepseek-harness/apps/desktop-host/src/quit-inspection.ts)。
 
-这套进程更新锁不能直接代替 Bot 配置事务：它控制的是特定 Connection 请求路径和全局任务检查，没有表达产品的 Bot 替换、故障及维护所有权，也没有证明其他内部入口均被阻断。严格保存规则仍由 Bot 所有者实施。桌面退出和 Runner 停止也必须分别处理；只有显式停止 Runner 或升级交接时才走后台有序停止。[产品配置语义](./HARNESS_INTEGRATION.md#同一-session-上应用新配置)、[后台进程归属](../ARCHITECTURE.md#8-持久化与并发归属)。
+这套进程更新锁不能直接代替 Bot 配置事务：它控制的是特定 Connection 请求路径和全局任务检查，没有表达产品的 Bot 替换、故障及维护所有权，也没有证明其他内部入口均被阻断。严格保存规则仍由 Bot 所有者实施。桌面退出和 Runner 停止也必须分别处理；只有显式停止 Runner 或升级交接时才走后台有序停止。[产品配置语义](./HARNESS_INTEGRATION.md#同一-session-上应用新配置)、[后台进程归属](../ARCHITECTURE.md#8-持久化与所有权)。
 
 ## 交付资源与不能直接照搬的部分
 

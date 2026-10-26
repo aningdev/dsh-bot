@@ -7,7 +7,7 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`GLOSSARY.md`** at the repo root.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
-This repo is single-context: one glossary and one ADR directory cover the whole product, including `apps/` and `packages/`. The apps split clients and processes; it does not split the vocabulary. Bot, Runner, Session, Client, Relay, and Device identity mean the same thing everywhere.
+This repo is single-context: one glossary covers the whole product; ADRs are created only when a decision needs a separate record. Bot、模板、Session、Client、Bridge、Relay 和设备身份在全仓库含义一致。执行后台使用官方 `dsh web`；产品代码包括 NSH 客户端，以及多端阶段的 bridge 与 Relay。
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
@@ -17,15 +17,19 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 /
 ├── GLOSSARY.md
 ├── docs/
-│   ├── adr/                       # 当前为空，决策记录按需创建
+│   ├── adr/                       # 需要时创建
 │   ├── BLUEPRINT.md
 │   ├── ARCHITECTURE.md
 │   ├── research/
 │   └── agents/
-└── apps/
+├── apps/
+│   ├── client/
+│   ├── bridge/                    # 多端阶段
+│   └── relay/                     # 多端阶段
+└── scripts/
 ```
 
-Product intent, architecture, and integration evidence live in `docs/` beside the ADRs. `docs/BLUEPRINT.md` owns confirmed product behavior, `docs/ARCHITECTURE.md` owns workspace, process and runtime structure, and `docs/research/` holds upstream evidence with its verification status (harness integration, host and client reuse, NSH communication, lifecycle prototype).
+Product intent, architecture, and integration evidence live in `docs/`. `docs/BLUEPRINT.md` owns confirmed product behavior, `docs/ARCHITECTURE.md` owns the target workspace, profile 装配、配置 UI、进程结构与分阶段验收, and `docs/research/` holds upstream evidence with its verification status. The tree above is the target layout; old `apps/runner` and `packages/harness-runtime` remain until reconstruction.
 
 ## Use the glossary's vocabulary
 

@@ -44,7 +44,7 @@ Bot 配置解析为上游 PresetDefinition 的插件条目，注册与释放由�
 
 推荐应用 Bot 生命周期插件从首次创建开始持有所有 AgentHandle。复用官方查询、跟随、审批和输入能力时，所有会激活或修改 Bot 的入口都必须受同一个生命周期所有者协调，包括历史跟随触发的冷恢复、文件引用与上传等间接入口。不能只串行化保存按钮，也不能在配置替换窗口直接暴露未受协调的官方接口。
 
-早期方案曾以运行时兼容补丁挂载标准 Session Controller，并由 Host 委托覆盖历史开场、后台 promotion、命令、lookup、方法使用与 upload。该方案连同其验证记录已随旧实现删除；当前实现不挂补丁、不生成 Remote，改由 `apps/runner` 的 `bot-product` 插件直接调用官方 `sessionController`，状态与拒绝规则见[架构文档](../ARCHITECTURE.md#5-配置保存的生命周期)。上游相关证据见[桌面 Host 调研](./DESKTOP_HOST_RESEARCH.md)。
+早期方案曾以运行时兼容补丁挂载标准 Session Controller，并由 Host 委托覆盖历史开场、后台 promotion、命令、lookup、方法使用与 upload。该方案连同其验证记录已随旧实现删除；当前实现不挂补丁、不生成 Remote，改由 `apps/runner` 的 `bot-product` 插件直接调用官方 `sessionController`，状态与拒绝规则见[架构文档](../ARCHITECTURE.md#11-复用与移除边界)。上游相关证据见[桌面 Host 调研](./DESKTOP_HOST_RESEARCH.md)。
 
 ## 当前 npm Runner 接入状态
 
