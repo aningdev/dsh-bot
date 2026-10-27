@@ -1,2 +1,6 @@
 .nsh/
 target/
+!nsh.json
+# Generated from pinned public npm packages by prepare:sdk.
+sdk.js
+presets.js

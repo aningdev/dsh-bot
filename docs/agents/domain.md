@@ -29,7 +29,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 └── scripts/
 ```
 
-Product intent, architecture, and integration evidence live in `docs/`. `docs/BLUEPRINT.md` owns confirmed product behavior, `docs/ARCHITECTURE.md` owns the target workspace, profile 装配、配置 UI、进程结构与分阶段验收, and `docs/research/` holds upstream evidence with its verification status. The tree above is the target layout; old `apps/runner` and `packages/harness-runtime` remain until reconstruction.
+Product intent, architecture, and integration evidence live in `docs/`. `docs/BLUEPRINT.md` owns confirmed product behavior, `docs/ARCHITECTURE.md` owns the target workspace, profile 装配、配置 UI、进程结构与分阶段验收, and `docs/research/` holds upstream evidence with its verification status. The tree above shows the single-machine layout and the reserved multi-device components; the old Runner and harness-runtime workspaces have been removed.
 
 ## Use the glossary's vocabulary
 

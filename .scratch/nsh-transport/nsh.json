@@ -1,0 +1,11 @@
+{
+  "name": "nsh-transport",
+  "id": "com.example.nshtransport",
+  "version": "1.0.0",
+  "build": 1,
+  "rust": ".",
+  "capabilities": {
+    "network": { "hosts": ["127.0.0.1"] },
+    "process": { "env": ["DSH_SPIKE_URL"] }
+  }
+}

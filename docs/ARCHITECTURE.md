@@ -2,7 +2,7 @@
 
 本文是整体技术方案的唯一真源，说明进程、工作区、配置 UI、协议、数据归属与实施顺序。产品规则见[产品蓝图](BLUEPRINT.md)，概念见[术语表](../GLOSSARY.md)，上游证据与历史探针见 [research](research/)。
 
-状态：主体分层与首版产品取舍已确认，代码重建尚未开始。首版采用上游模板重启语义，交付纯文本持续对话；独立指令、Bot 记忆与附件延后。现有 `apps/runner`、`packages/harness-runtime` 及客户端产品 REST 适配属于待替换的旧方案。本文区分已决定的目标、上游源码证据和待验证项；文档完成不代表功能已经交付。
+状态：单机重建已进入本地实现与验收，客户端、输入审批、模型设置及 launchd 路径已切换；旧 `apps/runner`、`packages/harness-runtime` 与客户端产品 REST 适配已移除。首版采用上游模板重启语义，交付纯文本持续对话；独立指令、Bot 记忆与附件延后。本文区分架构决定、上游源码证据和待验证项；本机验收范围见 README 与本地任务记录，多端及正式签名尚未交付。
 
 ## 1. 系统概览
 
@@ -143,6 +143,8 @@ LaunchAgent 使用已安装 `dsh` 的绝对路径，并显式设置 `DSH_HOME`�
 
 当前 settings 表单只提供动态字段，`applies` 为 `live`；普通插件配置不在该表单范围内，不能统一宣称下一请求生效或必须重启。环境变量用于引导与自动化，也是上游持续存在的凭据兜底来源；移除已保存密钥后可能重新显露环境值，界面须刷新来源状态。
 
+macOS launchd 不继承终端的临时导出变量。启动包装脚本经非交互登录 zsh 读取用户登录配置，再以同一 PID 执行官方 CLI，直接由后台继承凭据，不把环境密钥复制到 plist、客户端或凭据文件。shell 初始化输出不进入后台日志，登录配置加载后重新固定产品数据根。登录配置中的环境变量更改需重启后台；设置页保存的凭据仍遵循上游即时解析规则。
+
 接口依据见 [Settings Controller](../references/deepseek-harness/packages/api/settings-controller/src/index.ts)、[错误类型](../references/deepseek-harness/packages/api/settings-controller/src/types.ts)与 [llm-pi-ai 说明](../references/deepseek-harness/packages/llm/llm-pi-ai/README.zh.md)。运行发行版仍须实测这些契约。
 
 ### 最小审批
@@ -199,7 +201,7 @@ Bot 注册表采用方案 A：桌面独占写入，bridge 只读注册表并向�
 
 继续复用官方 profile 装配、连接认证、remote、Session 队列/取消/持久化、模型与凭据服务、agent preset 和审批协议。客户端自行实现 NSH 界面、transport 适配与 Bot 注册表，多端自行实现 bridge 和 Relay。
 
-移除旧 `apps/runner` 的产品插件、Host 服务、自建 REST、存储与监督器，以及 `packages/harness-runtime` 的自拼 bundle；不迁移旧专用测试。旧代码删除属于后续实施，本轮文档更新不执行删除。
+旧 `apps/runner` 的产品插件、Host 服务、自建 REST、存储与监督器，以及 `packages/harness-runtime` 的自拼 bundle 已移除；旧专用测试一并删除。客户端 SDK 从公开 npm 产物生成，后台继续使用用户安装的官方 CLI。
 
 其他已放弃方案包括：每 Bot 一个进程或 profile、自建 `dsh-bot` profile 名、`connection.json` 发现文件、自建模型配置副本、用 LaunchAgent 环境变量充当产品密钥配置，以及不提供工具审批的 NSH 客户端。
 

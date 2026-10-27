@@ -1,8 +1,0 @@
-- insert:
-    - id: webserver
-      name: '@deepseek-ai/dsh-host-webserver'
-      config:
-        host: 127.0.0.1
-        port: 0
-    - id: bot-product
-      name: '@dsh-bot/runner/plugin'

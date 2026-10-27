@@ -3,7 +3,7 @@
 修改产品行为前阅读 [产品蓝图](docs/BLUEPRINT.md) 与 [术语表](GLOSSARY.md)；修改工作区、profile、通信或打包前阅读[架构文档](docs/ARCHITECTURE.md)；修改界面前阅读该文档的「通信与配置 UI」与「复用与移除边界」两节。
 
 - 产品后台使用未经修改的官方 `dsh web`；客户端、bridge 与 Relay 的责任以架构文档为准，不把多端代码注入执行后台。
-- 在根目录使用 Bun 管理工作区和唯一的 bun.lock。单机代码放 `apps/client` 与 `scripts/`；多端阶段增加 `apps/bridge` 与 `apps/relay`。旧 `apps/runner` 与 `packages/harness-runtime` 待移除，不新增 `packages/*` 或自有 profile 包。
+- 在根目录使用 Bun 管理工作区和唯一的 bun.lock。单机代码放 `apps/client` 与 `scripts/`；多端阶段增加 `apps/bridge` 与 `apps/relay`。不新增 `packages/*` 或自有 profile 包。
 - 后台就是官方 `dsh web`，固定 profile `web`，数据根 `~/.dsh-bot`（`DSH_HOME`）。不得自建 profile 名（上游只认 `acp/web/headless/sdk/sdk-minimal`），不得按 Bot 分进程、分 profile 或分插件集。
 - Bot 是客户端持有的独立对象（`~/.dsh-bot/bots/<id>.json`），引用 profile，不是 profile 的别名。
 - 模板复用上游 agent preset，首版选择已安装的内置或用户模板，自建走上游 bundle 安装流程。初始化后固定模板 ID 与工作区；运行期保留已装配组合，重启按 ID 读取当前定义，不承诺永久内容快照。

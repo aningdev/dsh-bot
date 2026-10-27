@@ -1,12 +1,13 @@
 import { expect, open, test } from 'nsh/test'
 import { TextHistory } from './history'
 
-test('shows the three product areas while backend is unavailable', async () => {
+test('shows the three product areas while the backend is unavailable', async () => {
   const app = await open('./App.tsx', { width: 1200, height: 800, platform: 'macos', network: {} })
-  expect(app.texts()).toContain('选择或新建 Bot')
-  expect(app.texts()).toContain('当前会话实际配置')
-  expect(app.texts()).toContain('DeepSeek API 密钥')
   expect(app.texts()).toContain('新建 Bot')
+  expect(app.texts()).toContain('归档区')
+  expect(app.texts()).toContain('选择或新建 Bot')
+  expect(app.texts()).toContain('后台未连接')
+  app.dispose()
 })
 
 test('text view removes replaced history, ignores reasoning and reports interrupted turns', () => {

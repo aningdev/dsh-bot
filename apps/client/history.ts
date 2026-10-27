@@ -14,6 +14,15 @@ function streamText(value: unknown): string {
     return chunk.type === 'text-delta' && typeof chunk.text === 'string' ? chunk.text : ''
   }).join('') : ''
 }
+/**
+ * Only messages the person typed are shown. The Harness also records injected
+ * user-role context (time context, runtime context, reminders) under its own
+ * `source.kind`; those belong to the model prompt, not to the conversation.
+ */
+function fromUser(data: Record<string, unknown>): boolean {
+  const source = object(data.source)
+  return typeof source.kind === 'string' ? source.kind === 'user' : true
+}
 /** A disposable view of Harness history; no separate message persistence. */
 export class TextHistory {
   private events: Event[] = []
@@ -45,7 +54,7 @@ export class TextHistory {
     }
     const messages: Message[] = []
     for (const event of this.events) {
-      if (event.type === 'user/message') messages.push({ id: String(event.seq), role: 'user', text: content(event.data.content) })
+      if (event.type === 'user/message' && fromUser(event.data)) messages.push({ id: String(event.seq), role: 'user', text: content(event.data.content) })
       if (event.type === 'assistant/message') messages.push({ id: String(event.seq), role: 'assistant', text: content(object(event.data.message).content) })
     }
     if (this.live) messages.push({ id: 'live', role: 'assistant', text: this.live })

@@ -9,14 +9,19 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --cwd apps/runner build && bun scripts/prepare-client.ts && bun run --cwd apps/client dev",
-    "dev:runner": "bun run --cwd apps/runner dev",
-    "check": "bun scripts/prepare-client.ts && bun run --cwd apps/runner check && bun run --cwd packages/harness-runtime check && bun run --cwd apps/client check",
-    "build": "bun scripts/prepare-client.ts && bun run --cwd apps/runner build && bun run --cwd apps/client build",
-    "test": "bun scripts/prepare-client.ts && bun run --cwd apps/runner test && bun run --cwd apps/client test",
+    "prepare:sdk": "bun scripts/prepare-client.ts",
+    "dev": "bun run prepare:sdk && bun run --cwd apps/client dev",
+    "check": "bun run prepare:sdk && bun run --cwd apps/client check",
+    "build": "bun run prepare:sdk && bun run --cwd apps/client build",
+    "test": "bun run prepare:sdk && bun run test:backend && bun run --cwd apps/client test",
+    "test:e2e": "bun run prepare:sdk && bun run --cwd apps/client test:e2e",
     "package:macos": "bun scripts/package-macos.ts",
     "test:package": "bun scripts/smoke-package.ts",
-    "harness": "bun run --cwd packages/harness-runtime dsh"
+    "backend": "bun scripts/backend/cli.ts",
+    "backend:install": "bun scripts/backend/cli.ts install",
+    "backend:start": "bun scripts/backend/cli.ts start",
+    "backend:stop": "bun scripts/backend/cli.ts stop",
+    "test:backend": "bun test scripts/backend/launchd.test.ts"
   },
   "devDependencies": {
     "@types/node": "26.6.5",
