@@ -7,7 +7,7 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`GLOSSARY.md`** at the repo root.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 
-This repo is single-context: one glossary covers the whole product; ADRs are created only when a decision needs a separate record. Bot、模板、Session、Client、Bridge、Relay 和设备身份在全仓库含义一致。执行后台使用官方 `dsh web`；产品代码包括 NSH 客户端，以及多端阶段的 bridge 与 Relay。
+This repo is single-context: one glossary covers the whole product; ADRs are created only when a decision needs a separate record. Bot、模板、Session、Client、Bridge、Relay 和设备身份在全仓库含义一致。执行后台使用官方 `dsh web`；产品代码包括 NSH 客户端、薄 Rust 宿主和按需增加的 dsh 能力插件，以及多端阶段独立部署的 Relay。宿主是随 App 打包并注册应用后台身份的轻量辅助程序，内部分为 `DshProcess`、`HostControl` 与后续 `Bridge`；能力实现和专属数据归插件，NSH 直接使用标准 API 与 dsh 公开接口提供本地操作、产品交互和插件管理。后台注册与成品身份验收以架构文档为准。
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
@@ -24,8 +24,10 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 │   └── agents/
 ├── apps/
 │   ├── client/
-│   ├── bridge/                    # 多端阶段
+│   ├── host/                      # App 内轻量 Rust 后台辅助程序；后续内置 Bridge
 │   └── relay/                     # 多端阶段
+├── packages/
+│   └── dsh-plugin-*/              # 后续按需增加能力插件
 └── scripts/
 ```
 

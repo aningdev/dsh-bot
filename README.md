@@ -2,7 +2,7 @@
 
 基于 NSH 与 DeepSeek Harness 的本机 Bot 工作台。桌面客户端管理 Bot、持续对话、审批和模型设置；执行后台使用用户已安装的官方 `dsh web`，由 launchd 托管。
 
-产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界与后续多端设计见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。单机实现位于 `apps/client` 与 `scripts`；旧 Runner、产品 REST 与随包 Harness runtime 已移除。bridge、Relay 与移动端尚未实现。
+产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界与后续多端设计见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。单机实现位于 `apps/client` 与 `scripts`；旧 Runner、产品 REST 与随包 Harness runtime 已移除。下一轮将以随 App 打包的轻量 Rust 后台辅助程序管理 dsh，通过 `SMAppService` 注册应用后台身份，替换当前 shell 服务入口；NSH 直接使用标准 API 完成本地操作，并通过官方客户端直连 dsh。辅助程序只含进程与控制模块及后续 Bridge，不设 Rust `ProductService`；辅助程序、内置 Bridge、Relay 与移动端尚未实现，系统后台设置的 App 名称、图标与归属仍需签名成品验证。以下运行与验收说明对应现有实现。
 
 ## 开发与运行
 
@@ -34,7 +34,7 @@ bun run backend:stop
 - 审批展示工具名称及操作说明，允许一次或拒绝；取消清理审批。归档后既有工作与审批保留，阻止新输入。
 - 「模型与供应商」页经上游 settings/credentials 保存共享设置，携带已读 revision；密钥提交后清空、不回显、不进入 Bot 文件。Bot 初始化前修改默认模型，初始化后切换当前对话模型。
 
-独立指令、Bot 记忆、附件、模板编辑器、独立目标管理与多端连接留待后续阶段。模板使用上游已安装的 agent preset，不引入产品后台插件。
+独立指令、Bot 记忆、附件、模板编辑器、独立目标管理与多端连接留待后续阶段。模板使用上游已安装的 agent preset。后续 Bot 能力通过 dsh 插件生态扩展，必要的产品插件放在 `packages/dsh-plugin-*`；NSH 直接通过公开接口提供产品交互与插件管理界面，能力实现和专属数据归插件。
 
 ## 检查与成品
 
@@ -56,12 +56,13 @@ macOS 成品为 `dist/macos/DSH Bot.app`，只包含 NSH 客户端与原生传�
 参考源码仅供阅读、调试和兼容性研究：
 
 ```sh
-git submodule update --init references/deepseek-harness references/nsh
+git submodule update --init references/deepseek-harness references/nsh references/waku references/lorca
 ```
 
 - [上游 Desktop 架构调研](docs/research/DESKTOP_ARCHITECTURE.md)
 - [NSH 与 Harness 通信调研](docs/research/NSH_HARNESS_RESEARCH.md)
 - [生命周期原型记录](docs/research/agent-lifecycle-prototype.md)
+- [Lorca 常驻后台与多端调研](docs/research/LORCA_ARCHITECTURE.md)
 - [参考项目说明](references/README.md)
 
 研究文档保留当时的证据与验证范围；旧方案的结论以当前蓝图和架构为准。

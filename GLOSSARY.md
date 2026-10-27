@@ -28,8 +28,11 @@ _Avoid_：对话历史、自动摘要、检索索引
 **Conversation configuration（对话配置）**：对话实际使用的模板引用、工作区与当前模型选择；模板引用不等于永久内容快照，当前模型与 Bot 初始化默认值分开。
 _Avoid_：凭据副本、修改 Bot 即覆盖对话配置
 
-**Runner（后台进程）**：由 launchd 托管的唯一 `dsh web` 进程，装配上游 profile `web` 并承载全部 Bot 的执行；产品不在其中注入任何自有代码。
-_Avoid_：Bot、每 Bot 一个进程、自建 Agent 执行引擎、后台监督器
+**Runner（执行后台）**：承载全部 Bot 执行的官方 Harness 后台，其会话与执行状态由 Harness 管理。
+_Avoid_：Bot、每 Bot 一个进程、自建 Agent 执行引擎、宿主
+
+**Host（本机宿主）**：归属于桌面 App、独立于界面运行的轻量后台辅助程序，拥有执行后台的生命周期，提供连接发现与后续多端桥接。
+_Avoid_：Runner、Agent 引擎、产品业务网关、统一聊天接口、权威会话存储
 
 **Client（交互客户端）**：向后台提交用户操作并展示执行状态的桌面或移动应用；桌面管理 Bot 注册表，移动端只读快照。
 _Avoid_：Runner、独立 Agent、第二份权威执行状态
