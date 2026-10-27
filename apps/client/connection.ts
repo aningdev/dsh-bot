@@ -1,6 +1,6 @@
 // Official `dsh web` protocol client: bootstrap cookie, Remote streams, no
 // custom endpoints. Everything the UI needs is projected to plain values.
-import { Transport } from 'dsh-client/native'
+export { backendInfo, launchUrl, startBackend, watchBackendStatus, usesHostControl, unregisterBackend } from './host-control'
 import { AuthenticatedSocket } from './socket'
 import { Context, installConnection, TypertRegistry, Gateway, sessionRemote } from './sdk.js'
 import { agentPresetsRemote, settingsRemote, llmRemote } from './presets.js'
@@ -71,17 +71,6 @@ function unwrap<T = any>(result: any): T {
   return result.value as T
 }
 
-/** The login URL of the running backend, injected by the desktop host or the e2e driver. */
-export async function startBackend(): Promise<void> { await Transport.startBackend() }
-
-export function launchUrl(): string {
-  try {
-    return Transport.probeUrl()
-  } catch (error) {
-    throw new Error(`未发现可连接后台：${readableError(error)}。可点击「启动官方后台」或重新发现。`)
-  }
-}
-
 const agentTag = Symbol('dsh-bot.agent')
 function agentScope() {}
 interface Scope {
@@ -90,6 +79,9 @@ interface Scope {
 }
 
 export class Connection {
+  private epoch = 0
+  private connecting?: AbortController
+  private generationSubscription?: () => void
   private ctx?: any
   private scopes = new Map<string, Scope>()
   private followId = 0
@@ -107,6 +99,9 @@ export class Connection {
 
   async connect(loginUrl: string): Promise<void> {
     if (this.ctx) throw new Error('已经连接后台')
+    const epoch = ++this.epoch
+    const controller = new AbortController()
+    this.connecting = controller
     const login = new URL(loginUrl)
     if (login.protocol !== 'http:' || login.hostname !== '127.0.0.1') throw new Error('后台地址必须是本机回环地址')
     const token = login.searchParams.get('token')
@@ -116,12 +111,13 @@ export class Connection {
     url.searchParams.set('interactions', 'answer')
     let response: Response
     try {
-      response = await fetch(url.toString(), { redirect: 'manual', signal: AbortSignal.timeout(10000) })
+      response = await fetch(url.toString(), { redirect: 'manual', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]) })
     } catch (error) {
       throw new Error(`认证请求失败：${readableError(error).replaceAll(token, '<已隐藏>')}`)
     }
     const cookie = response.headers.get('set-cookie')?.split(';')[0]
     if (response.status !== 302 || !cookie) throw new Error(`认证失败：后台返回 ${response.status}，未取得 Cookie`)
+    if (epoch !== this.epoch) throw new Error('连接已被新的宿主状态替代')
     const ctx: any = new Context()
     this.ctx = ctx
     this.origin = login.origin
@@ -133,7 +129,8 @@ export class Connection {
           fetch: (input: string | URL, init: RequestInit) => {
             const headers = new Headers(init.headers)
             headers.set('cookie', cookie)
-            return fetch(new URL(String(input), login.origin).toString(), { ...init, headers })
+            const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal
+            return fetch(new URL(String(input), login.origin).toString(), { ...init, headers, signal })
           },
           createWebSocket: (target: string) => new AuthenticatedSocket(target, cookie),
         },
@@ -142,7 +139,7 @@ export class Connection {
       ctx.typert.contexts.registerClient('agent', {
         identity: (candidate: any) => candidate?.[agentTag],
         resolve: (id: unknown) => {
-          if (typeof id !== 'string') return undefined
+          if (typeof id !== 'string' || epoch !== this.epoch || this.ctx !== ctx) return undefined
           this.scope(id)
           return this.scopes.get(id)?.ctx
         },
@@ -156,10 +153,13 @@ export class Connection {
       ctx.remote.$on('approval/request', function (this: any, request: any) {
         return owner.answerApproval(request.agent?.[agentTag] ?? this?.[agentTag], request)
       })
-      await this.waitForGeneration()
+      if (epoch !== this.epoch || this.ctx !== ctx) throw new Error('连接已被新的宿主状态替代')
+      await this.waitForGeneration(ctx, controller.signal)
+      if (epoch !== this.epoch || this.ctx !== ctx) throw new Error('连接已被新的宿主状态替代')
       this.ready = true
       this.onGenerationChange?.(true)
-      ctx.connection.generation.subscribe(() => {
+      this.generationSubscription = ctx.connection.generation.subscribe(() => {
+        if (epoch !== this.epoch || this.ctx !== ctx) return
         const next = !!ctx.connection.generation.getSnapshot()
         if (next === this.ready) return
         this.ready = next
@@ -167,26 +167,30 @@ export class Connection {
       })
     } catch (error) {
       await ctx.fiber.dispose().catch(() => undefined)
-      this.ctx = undefined
+      if (this.ctx === ctx) this.ctx = undefined
       throw error instanceof Error ? error : new Error(readableError(error))
     }
   }
 
-  private waitForGeneration(): Promise<void> {
-    const ctx = this.ctx
+  private waitForGeneration(ctx: any, signal: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        unsubscribe()
-        reject(new Error('等待后台事件流超时。'))
-      }, 15000)
-      const check = () => {
-        if (!ctx.connection.generation.getSnapshot()) return
+      let unsubscribe = () => {}
+      const finish = (error?: Error) => {
         clearTimeout(timer)
         unsubscribe()
-        resolve()
+        signal.removeEventListener('abort', abort)
+        if (error) reject(error)
+        else resolve()
       }
-      const unsubscribe = ctx.connection.generation.subscribe(check)
-      check()
+      const abort = () => finish(new Error('连接已被新的宿主状态替代'))
+      const timer = setTimeout(() => finish(new Error('等待后台事件流超时。')), 15000)
+      const check = () => {
+        if (ctx.connection.generation.getSnapshot()) finish()
+      }
+      unsubscribe = ctx.connection.generation.subscribe(check)
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) abort()
+      else check()
     })
   }
 
@@ -379,14 +383,19 @@ export class Connection {
   }
 
   async dispose(): Promise<void> {
+    this.epoch++
+    this.connecting?.abort()
+    this.connecting = undefined
+    this.generationSubscription?.()
+    this.generationSubscription = undefined
+    const ctx = this.ctx
+    this.ctx = undefined
+    this.ready = false
     const scopes = [...this.scopes.values()]
     this.scopes.clear()
     for (const scope of scopes) {
       try { await scope.dispose() } catch { /* already gone */ }
     }
-    const ctx = this.ctx
-    this.ctx = undefined
-    this.ready = false
     if (ctx) await ctx.fiber.dispose().catch(() => undefined)
   }
 }

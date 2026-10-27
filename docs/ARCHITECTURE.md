@@ -2,7 +2,7 @@
 
 本文是整体技术方案的唯一真源，说明进程、工作区、配置 UI、协议、数据归属与实施顺序。产品规则见[产品蓝图](BLUEPRINT.md)，概念见[术语表](../GLOSSARY.md)，上游证据与历史探针见 [research](research/)。
 
-状态：现有单机版本已实现 NSH 客户端直连官方 `dsh web`，launchd 通过 shell 包装入口托管 dsh。下一轮采用「NSH 标准 API + App 内轻量 Rust 后台辅助程序 + 官方客户端协议」：辅助程序随 `.app` 打包，通过 `SMAppService` 注册用户级后台服务，负责 dsh 生命周期和连接发现；NSH 直接负责本地操作与产品交互。目标是让系统后台设置将服务识别为本 App，不能以 `sh` 作为产品后台服务入口。辅助程序与注册方案尚未实现，名称、图标和归属须以实际打包、签名成品验证，已有脚本验收不能替代。旧 `apps/runner`、`packages/harness-runtime` 与产品 REST 已移除，不重新引入。首版交付纯文本持续对话，独立指令、Bot 记忆与附件延后；多端及正式签名尚未交付。
+状态：现有单机版本已实现 NSH 客户端直连官方 `dsh web`，launchd 通过 shell 包装入口托管 dsh。下一轮采用「NSH 标准 API + App 内轻量 Rust 后台辅助程序 + 官方客户端协议」：辅助程序随 `.app` 打包，通过 `SMAppService` 注册用户级后台服务，负责 dsh 生命周期和连接发现；NSH 直接负责本地操作与产品交互。目标是让系统后台设置将服务识别为本 App，不能以 `sh` 作为产品后台服务入口。辅助程序、私有控制通道与 NSH 连接换代已实现并通过隔离进程及真实 NSH 测试；应用关联服务提供独立预览包，尚未替换现有入口。注册适配在 NSH 主进程内调用 `SMAppService`。隔离 App 的注册、状态查询与等待注销已通过，但 ad-hoc 签名辅助程序被 macOS 以 `OS_REASON_CODESIGNING | Launch Constraint Violation` 拒绝启动；本机没有有效代码签名身份，因此应用关联服务的实际启动验收阻塞，不能迁移默认入口。签名后的系统名称、图标、批准、重新登录和升级迁移仍须成品验证。旧 `apps/runner`、`packages/harness-runtime` 与产品 REST 已移除，不重新引入。首版交付纯文本持续对话，独立指令、Bot 记忆与附件延后；多端及正式签名尚未交付。
 
 ## 1. 系统概览
 
@@ -65,11 +65,36 @@ DSH_HOME=~/.dsh-bot /absolute/path/to/dsh web --host 127.0.0.1 --port 0 --no-ope
 
 | Module | 职责 | 权威来源 |
 | --- | --- | --- |
-| `DshProcess` | CLI 解析、登录环境、初始化、spawn、ready、版本、日志及子进程回收 | 当前受管子进程与生命周期记录 |
-| `HostControl` | 本机宿主状态、连接发现、启动/停止/重启入口 | `DshProcess` |
+| `DshProcess`（`apps/host/src/dsh_process/`，公开入口为 `Lifecycle`） | CLI 解析、登录环境、初始化、spawn、ready、版本、日志、子进程回收及并发启动归并 | 当前受管子进程与生命周期记录 |
+| `HostControl`（`apps/host/src/host_control/`） | 本机宿主状态、连接发现、启动/停止/重启入口及共享控制协议 | `DshProcess` |
 | `Bridge` | 后续设备配对、远端授权、官方协议转发及获授权的产品交互访问 | 设备授权、上游协议与产品权限规则 |
 
-先实现 `DshProcess` 与 `HostControl`，多端阶段再加入 `Bridge`。不设 `ProductService`：本地配置与产品交互由 NSH 直接完成，已有 dsh remote 由官方客户端调用，不为每个方法增加 Rust 包装。Rust 原生适配与常驻进程是两回事：仅为补足 NSH 标准 API 的缺口，可使用 NSH 进程内原生模块，无须另起后台。
+先实现 `DshProcess` 与 `HostControl`，多端阶段再加入 `Bridge`。宿主源码按职责组织：
+
+```text
+apps/host/src/
+├── main.rs                 # 启动模式、参数、信号与装配
+├── lib.rs                  # Module 声明及共享控制 Interface 的兼容导出
+├── config.rs               # 路径与启动配置校验
+├── runtime.rs              # 私有运行文件与标识生成
+├── host_control/
+│   ├── mod.rs              # 控制 Interface
+│   ├── server.rs           # socket、同用户校验、请求分派、状态订阅
+│   └── protocol.rs         # 共享协议类型、帧、响应校验与本机调用
+└── dsh_process/
+    ├── mod.rs              # Lifecycle：串行操作与并发启动归并
+    ├── lifecycle.rs        # 启停、ready、generation 与自动恢复策略
+    ├── state.rs            # 持久化用户启停意图与失败预算
+    ├── guardian.rs         # guardian 执行模式、生命周期锁与进程组回收
+    ├── environment.rs      # 登录环境与 CLI 路径、版本检查
+    └── logs.rs             # 脱敏后的诊断日志轮转
+```
+
+`HostControl` 只通过 `Lifecycle` 访问当前状态和生命周期操作，不访问其内部进程锁或 guardian；监控线程同样调用 `Lifecycle::tick`。`dsh_process/` 的子模块均为私有实现，只有 `Lifecycle` 和供可执行入口分派的 `run_guardian` 对外导出，guardian 不属于控制通道操作。`main.rs` 不实现控制协议或生命周期策略，`lib.rs` 保留 NSH 原生适配已使用的共享控制 Interface 导出。
+
+`Lifecycle` 在内部串行处理启动、停止、重启与自动恢复；请求处理器不持有进程锁，也不解释启动去重规则。并发 `ensure` 通过独立的启动尝试编号共享一次结果，范围覆盖准备、等待 ready 与失败清理，避免后到请求在清理结束后再次清空预算并启动。状态快照在慢启动期间仍可读取。
+
+不设 `ProductService`：本地配置与产品交互由 NSH 直接完成，已有 dsh remote 由官方客户端调用，不为每个方法增加 Rust 包装。Rust 原生适配与常驻进程是两回事：仅为补足 NSH 标准 API 的缺口，可使用 NSH 进程内原生模块，无须另起后台。
 
 参考 Gallery 的 [Standard APIs](../references/nsh/examples/gallery/demos/StandardActions.tsx)、[WebSocket 示例](../references/nsh/examples/gallery/demos/StandardWebSockets.tsx)及 [AI Chat CLI 调用](../references/nsh/examples/gallery/demos/chat/local.ts)：NSH 支持文件、子进程、TCP 和两种 WebSocket 接口，权限由 [nsh.json](../references/nsh/examples/gallery/nsh.json) 声明。AI Chat 每轮启动 CLI、将历史拼成输入，停止或离开页面时杀掉子进程；这是页面生命周期示例，不用于本产品的常驻 dsh。Web 与移动端的该聊天示例是模拟流，不能视为真实多端执行验收。标准 WebSocket 仍[禁止调用方设置 Cookie / Authorization 握手头](../references/nsh/crates/nsh-core/src/runtime/websocket.rs)，无认证回显成功不代表 dsh 认证可直接复用，现有原生传输适配按缺口保留。
 
@@ -175,6 +200,8 @@ NSH 复用精确锁定版本的官方客户端与生成的 remote；原生 trans
 
 Rust 在用户私有运行目录创建 Unix domain socket，目录权限 `0700`、socket `0600`，检查连接方 UID。NSH 原生层访问 socket；控制响应不进入公开 HTTP 端点或渲染日志。协议采用有长度上限的逐行 JSON，含协议版本、关联 ID、操作与结构化结果；接收端校验字段、大小和调用权限，断开后不自动重放操作。
 
+单次响应和状态订阅共用 `apps/host/src/host_control/protocol.rs` 中的信封与状态解码规则，经 `lib.rs` 兼容导出给 NSH 原生适配，统一检查版本、关联 ID、状态及连接地址；公开状态禁止携带认证 URL，只有 ready 状态的 `connectionInfo` 可以返回它。NSH 原生适配负责 socket 和订阅资源，`apps/client/host-control.ts` 负责发现、明确启动与服务操作，`host-protocol.ts` 校验原生字符串边界并投影为客户端类型；界面和官方协议连接不解析控制通道 JSON。
+
 控制 Interface 仅包含：
 
 | 操作                     | 语义                                                                                                                                                           |
@@ -188,8 +215,10 @@ Rust 在用户私有运行目录创建 Unix domain socket，目录权限 `0700`�
 
 ### 连接与恢复顺序
 
-1. NSH 连接宿主，订阅状态并以 `attach` 调用 `ensureDsh`；遇用户停机或预算耗尽只展示状态与明确启动入口，不循环尝试。只有用户操作才传 `userStart`。宿主不可用时通过安装好的系统入口启动宿主，宿主启动仍尊重持久停机标记；不由每个窗口直接 spawn dsh。
-2. ready 后取得当前 generation 的连接信息，用官方客户端完成认证、连接和初始状态读取；连接信息只是引导，认证失败须重新向宿主核对。
+`apps/client/backend-connection.ts` 的 `BackendConnection` 统一负责宿主发现、状态订阅、generation 更换、旧资源清理和窗口关闭；对界面发布连接与可发送状态。`Connection` 保留官方协议认证、remote、事件流与会话作用域，取消令牌使旧认证和读取在换代时失效。`BotApp` 只处理产品状态及当前 Bot 的订阅，不自行管理宿主 generation；目录、队列等异步读取经协调器检查所属连接，旧结果不回写。事件流在认证完成前发生的就绪变化也须保留，连接结束不能将已断开的流重新标为可发送。
+
+1. NSH 以 `attach` 调用 `ensureDsh` 查询当前宿主；遇用户停机或预算耗尽只展示状态与明确启动入口，不循环尝试。只有用户操作才传 `userStart`。宿主不可用时通过安装好的系统入口明确启动宿主，宿主启动仍尊重持久停机标记；不由每个窗口直接 spawn dsh。
+2. ready 后取得当前 generation 的连接信息，建立宿主状态订阅，再用官方客户端完成认证、连接和初始状态读取；连接信息只是引导，认证失败须重新向宿主核对。
 3. 同一 generation 内网络断开，由官方客户端的连接恢复流程重建认证与订阅；原生 transport 不独立重试写请求。按上游游标、快照及历史契约恢复，不能假定 WebSocket 重连自动补齐全部事件。
 4. generation 变化或进程退出时取消旧连接的读取与订阅，丢弃旧 Cookie 和连接缓存；重新取得信息并建立新的官方客户端。旧异步结果不得覆盖新代状态，未确认写入保留核对记录。
 5. 重新读取既有 Session、队列、投影与 pending 审批，核对初始化与未确认输入。状态恢复不能重新创建 Session、重新发送输入或自动答复审批。

@@ -1,14 +1,16 @@
 //! Authenticated loopback transport for the DSH Bot client. No protocol logic lives here.
 use futures_util::{SinkExt, StreamExt};
-use nsh_core::ui::prelude::*;
+use nsh_core::prelude::*;
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, http::HeaderValue, Message};
+mod host_control;
+use host_control::HostControl;
 
 #[native_module("dsh-client/native")]
 fn native(registry: &mut Registry) {
     registry.module::<Transport>().class::<Socket>();
-    registry.module::<Store>();
+    registry.module::<Store>().module::<HostControl>().class::<host_control::HostWatch>();
 }
 
 /// Authenticated loopback WebSocket transport for the desktop client.
@@ -51,11 +53,9 @@ impl Transport {
             if line.starts_with("[launch ") {
                 valid = line.contains(&format!(" pid={pid} version={expected}"));
                 ready = None;
-            } else if valid {
-                if let Some(url) = line.split("dsh web: ").nth(1) {
-                    let url = url.split_whitespace().next().unwrap_or("");
-                    if url.starts_with("http://127.0.0.1:") { ready = Some(url.to_owned()); }
-                }
+            } else if valid && let Some(url) = line.split("dsh web: ").nth(1) {
+                let url = url.split_whitespace().next().unwrap_or("");
+                if url.starts_with("http://127.0.0.1:") { ready = Some(url.to_owned()); }
             }
         }
         ready.ok_or_else(|| "后台版本或当前启动信息未确认，请安装受支持版本并重新启动后台".into())
@@ -175,9 +175,7 @@ xml(&wrapper.to_string_lossy()), xml(&cli.to_string_lossy()), xml(expected), xml
 pub struct Store;
 
 fn store_root() -> Result<std::path::PathBuf, String> {
-    if let Ok(value) = std::env::var("DSH_BOTS_HOME") {
-        if !value.is_empty() { return Ok(std::path::PathBuf::from(value)); }
-    }
+    if let Ok(value) = std::env::var("DSH_BOTS_HOME") && !value.is_empty() { return Ok(std::path::PathBuf::from(value)); }
     let home = std::env::var("HOME").map_err(|_| "No home directory".to_string())?;
     if home.is_empty() { return Err("No home directory".into()); }
     Ok(std::path::PathBuf::from(home).join(".dsh-bot").join("bots"))

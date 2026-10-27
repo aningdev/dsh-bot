@@ -1,4 +1,5 @@
-import { signal, cleanup, View, Text, Input, Scroll } from 'nsh'
+import { signal, cleanup, View, Text, Scroll } from 'nsh'
+import { Input } from 'nsh/base'
 import { Connection, readableError } from './connection'
 
 const field = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground'

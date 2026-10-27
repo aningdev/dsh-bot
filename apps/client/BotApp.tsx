@@ -1,11 +1,13 @@
-import { signal, cleanup, Input, Scroll, Text, View, List } from 'nsh'
-import { SafeAreaView, SelectionArea } from 'nsh/base'
+import { signal, cleanup, Scroll, Text, View, List } from 'nsh'
+import { Input } from 'nsh/base'
 import { homedir } from 'os'
 import { ModelSettings } from './ModelSettings'
 import {
-  Connection, readableError, launchUrl, startBackend,
+  Connection, readableError,
   type CatalogModel, type CatalogPreset, type ApprovalRequest, type ApprovalDecision,
 } from './connection'
+import { BackendConnection } from './backend-connection'
+import { backendHost, usesHostControl } from './host-control'
 import { TextHistory, type Message } from './history'
 import {
   hostEnv, isWorkspace, loadBot, loadBots, newBotId, newRequestId, newSessionId, saveBot,
@@ -100,13 +102,49 @@ export function BotApp() {
     try { return await work() } finally { release() }
   }
 
-  connection.onGenerationChange = available => {
-    if (!disposed) ready.set(available)
-  }
+  connection.approvals(async request => {
+    if (disposed || request.signal?.aborted) return 'cancelled'
+    if (!bots().some(bot => bot.sessionId === request.sessionId)) return 'unavailable'
+    return new Promise<ApprovalDecision>(resolve => {
+      const key = `${request.sessionId}/${request.callId ?? crypto.randomUUID()}`
+      const finish = (outcome: ApprovalDecision) => {
+        request.signal?.removeEventListener('abort', abort)
+        approvals.delete(key)
+        refreshApproval()
+        resolve(outcome)
+      }
+      const abort = () => finish('cancelled')
+      approvals.set(key, { request, resolve: finish })
+      request.signal?.addEventListener('abort', abort, { once: true })
+      refreshApproval()
+    })
+  })
 
-  async function refreshModels() {
-    const catalog = await connection.modelCatalog()
-    if (disposed) return
+  const backend = new BackendConnection(backendHost, connection, state => {
+    online.set(state.phase === 'connected')
+    ready.set(state.ready)
+    connecting.set(state.phase === 'connecting')
+    note.set(state.message)
+    if (state.phase !== 'connected') {
+      selectionEpoch++
+      stopWatch()
+      queue.set([])
+    }
+  }, () => {
+    void backend.read(() => Promise.all([connection.modelCatalog(), connection.presetCatalog()]), ([catalog, roster]) => {
+      applyModels(catalog)
+      presets.set(roster)
+      if (!formPreset()) formPreset.set(roster.find(item => item.isDefault)?.id ?? roster[0]?.id ?? '')
+      const bot = current() ?? bots().find(item => !item.archived)
+      if (bot) void select(bot.id)
+    }, error => {
+      catalogError.set(`读取后台模板与模型目录失败：${readableError(error)}`)
+      const bot = current() ?? bots().find(item => !item.archived)
+      if (bot) void select(bot.id)
+    })
+  })
+
+  function applyModels(catalog: Awaited<ReturnType<Connection['modelCatalog']>>) {
     models.set(catalog.models)
     const failures = catalog.failures.length ? `不可用的提供方：${catalog.failures.map(item => `${item.name}（${item.message}）`).join('、')}` : ''
     catalogError.set(catalog.models.length ? failures : `后台没有可用的模型，请先配置供应商与凭据。${failures}`)
@@ -115,49 +153,10 @@ export function BotApp() {
     }
   }
 
-  async function connectBackend() {
-    if (connecting() || disposed) return
-    connecting.set(true)
-    try {
-      await connection.dispose()
-      await connection.connect(launchUrl())
-      online.set(true)
-      ready.set(false)
-      connection.approvals(async request => {
-        if (disposed || request.signal?.aborted) return 'cancelled'
-        if (!bots().some(bot => bot.sessionId === request.sessionId)) return 'unavailable'
-        return new Promise<ApprovalDecision>(resolve => {
-          const key = `${request.sessionId}/${request.callId ?? crypto.randomUUID()}`
-          const finish = (outcome: ApprovalDecision) => {
-            request.signal?.removeEventListener('abort', abort)
-            approvals.delete(key)
-            refreshApproval()
-            resolve(outcome)
-          }
-          const abort = () => finish('cancelled')
-          approvals.set(key, { request, resolve: finish })
-          request.signal?.addEventListener('abort', abort, { once: true })
-          refreshApproval()
-        })
-      })
-      try {
-        const [, roster] = await Promise.all([refreshModels(), connection.presetCatalog()])
-        presets.set(roster)
-        if (!formPreset()) formPreset.set(roster.find(item => item.isDefault)?.id ?? roster[0]?.id ?? '')
-      } catch (error) {
-        catalogError.set(`读取后台模板与模型目录失败：${readableError(error)}`)
-      }
-      ready.set(true)
-      note.set('已连接后台')
-      const bot = current() ?? bots().find(item => !item.archived)
-      if (bot) await select(bot.id)
-    } catch (error) {
-      online.set(false)
-      ready.set(false)
-      note.set(readableError(error))
-    } finally {
-      connecting.set(false)
-    }
+  async function refreshModels() {
+    await backend.read(() => connection.modelCatalog(), applyModels, error => {
+      catalogError.set(`读取后台模型目录失败：${readableError(error)}`)
+    })
   }
 
   function stopWatch() {
@@ -519,8 +518,9 @@ export function BotApp() {
     if (!online() || !bot?.sessionId || polling || disposed) return
     polling = true
     try {
-      const items = await connection.queue(bot.sessionId)
-      if (selectedId() === bot.id && !disposed) queue.set(items)
+      await backend.read(() => connection.queue(bot.sessionId!), items => {
+        if (selectedId() === bot.id) queue.set(items)
+      })
     } catch { /* A transient read failure cannot change the last known queue. */ }
     finally { polling = false }
   }
@@ -549,7 +549,7 @@ export function BotApp() {
     disposed = true
     stopWatch()
     clearInterval(queueTimer)
-    void connection.dispose().finally(() => {
+    void backend.dispose().finally(() => {
       for (const pending of [...approvals.values()]) pending.resolve('cancelled')
     })
   })
@@ -560,7 +560,7 @@ export function BotApp() {
       bots.set(loaded.bots)
       damaged.set(loaded.damaged)
       if (loaded.damaged.length) note.set(`有 ${loaded.damaged.length} 个 Bot 文件无法读取，已跳过。`)
-      await connectBackend()
+      if (!disposed) await backend.connect()
     } catch (error) { if (!disposed) note.set(readableError(error)) }
   })()
 
@@ -597,15 +597,17 @@ export function BotApp() {
       || (!!bot && !bot.preset) || (!!bot && (!bot.model.provider || !bot.model.model))
   }
 
-  return <SafeAreaView class="flex-1 bg-background">
+  return <View class="flex-1 bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
     <View class="flex-1 flex-row">
       <View class="w-56 border-r border-border p-4 gap-3">
         <Text class="text-xl font-semibold text-foreground">DSH Bot</Text>
         <Button id="backend-start" label="启动官方后台" disabled={connecting()} onPress={() => {
-          connecting.set(true)
-          void startBackend().then(() => { connecting.set(false); return connectBackend() }).catch(error => { connecting.set(false); report(error) })
+          void backend.start()
         }} />
-        <Button id="backend-reconnect" label="重新发现并连接后台" disabled={connecting()} onPress={() => { void connectBackend() }} />
+        <Button id="backend-reconnect" label="重新发现并连接后台" disabled={connecting()} onPress={() => { void backend.connect() }} />
+        {usesHostControl() ? <Button id="backend-unregister" label="停止全部 Bot 并卸载后台服务" disabled={connecting()} onPress={() => {
+          void backend.unregister()
+        }} /> : null}
         <Button id="model-settings" label="模型与供应商" onPress={() => settingsOpen.set(true)} />
         <Button id="bot-new" label="新建 Bot" onPress={() => {
           creating.set(true); selectionEpoch++; selectedId.set(''); stopWatch(); refreshApproval()
@@ -632,7 +634,7 @@ export function BotApp() {
           <Text class="text-lg font-semibold text-foreground">{creating() ? '新建 Bot' : selected()?.name ?? '选择或新建 Bot'}</Text>
           <Text class="text-xs text-muted-foreground">{online() ? (ready() ? '后台已连接' : '后台正在同步') : '后台未连接'}</Text>
         </View>
-        <SelectionArea style={{ flex: 1 }}>
+        <View selectable style={{ flex: 1 }}>
           <List each={messages()} keyExtractor={item => item.id} estimatedItemSize={100} style={{ flex: 1 }}
             contentStyle={{ padding: 24, gap: 18 }} maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 50 }}>
             {item => <View class="gap-2">
@@ -640,12 +642,12 @@ export function BotApp() {
               <Text class="text-base text-foreground">{item().text}</Text>
             </View>}
           </List>
-        </SelectionArea>
+        </View>
         {pendingApproval() ? <View class="border-t border-border p-4 gap-2">
           <Text class="text-sm font-semibold text-foreground">需要确认：{pendingApproval()!.toolName}</Text>
           <Text class="text-xs text-muted-foreground">{pendingApproval()!.reason}{pendingApproval()!.callId ? `（调用 ${pendingApproval()!.callId}）` : ''}</Text>
           <Button id="approval-details" label={approvalDetails() ? '收起详情' : '展开详情'} onPress={() => approvalDetails.set(!approvalDetails())} />
-          {approvalDetails() ? <SelectionArea><Text class="text-xs text-muted-foreground">{pendingApproval()!.details}</Text></SelectionArea> : null}
+          {approvalDetails() ? <View selectable><Text class="text-xs text-muted-foreground">{pendingApproval()!.details}</Text></View> : null}
           <View class="flex-row gap-2">
             <Button id="approve" label="允许一次" onPress={() => decide('allowed-once')} />
             <Button id="reject" label="拒绝" onPress={() => decide('rejected')} />
@@ -733,5 +735,5 @@ export function BotApp() {
         </View> : <Text class="text-sm text-muted-foreground">选择或新建 Bot</Text>}
       </View></Scroll>
     </View>
-  </SafeAreaView>
+  </View>
 }

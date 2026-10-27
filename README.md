@@ -2,7 +2,7 @@
 
 基于 NSH 与 DeepSeek Harness 的本机 Bot 工作台。桌面客户端管理 Bot、持续对话、审批和模型设置；执行后台使用用户已安装的官方 `dsh web`，由 launchd 托管。
 
-产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界与后续多端设计见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。单机实现位于 `apps/client` 与 `scripts`；旧 Runner、产品 REST 与随包 Harness runtime 已移除。下一轮将以随 App 打包的轻量 Rust 后台辅助程序管理 dsh，通过 `SMAppService` 注册应用后台身份，替换当前 shell 服务入口；NSH 直接使用标准 API 完成本地操作，并通过官方客户端直连 dsh。辅助程序只含进程与控制模块及后续 Bridge，不设 Rust `ProductService`；辅助程序、内置 Bridge、Relay 与移动端尚未实现，系统后台设置的 App 名称、图标与归属仍需签名成品验证。以下运行与验收说明对应现有实现。
+产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界与后续多端设计见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。默认单机入口位于 `apps/client` 与 `scripts`；旧 Runner、产品 REST 与随包 Harness runtime 已移除。`apps/host` 已实现轻量 Rust 后台辅助程序：管理 dsh 进程、提供私有控制通道；NSH 通过官方客户端直连 dsh，直接使用标准 API 完成本地操作。新的应用关联服务以预览包提供，注册时由 NSH 主进程调用 `SMAppService`，尚未替换默认 shell 服务入口。不设 Rust `ProductService`；Bridge、Relay 与移动端尚未实现。系统后台设置的 App 名称、图标、批准、重新登录与升级迁移仍需成品验收。以下默认运行说明对应原有入口。
 
 ## 开发与运行
 
@@ -26,6 +26,20 @@ bun run backend:stop
 
 后台启动脚本通过 macOS 的非交互登录 zsh 读取已导出的环境变量，因此可直接使用登录环境中的 `DEEPSEEK_API_KEY`，无需在设置页重复录入。launchd 本身不会继承当前终端的临时 `export`；需要在登录 shell 配置（如 `~/.zprofile`）中导出，修改后重启后台。密钥不写入 plist 或客户端文件，shell 初始化输出不进入后台日志；数据根仍固定为 `~/.dsh-bot`。
 
+## Rust 宿主预览
+
+```sh
+bun run test:host
+bun run test:host-client
+bun run package:macos:host
+```
+
+预览成品位于 `dist/macos-host/DSH Bot.app`，App、Rust 宿主与服务组件的最低系统目标统一为 macOS 14.0（尚未在该最低版本实机验收）。**当前应用关联服务启动验收阻塞：ad-hoc 签名的辅助程序被 macOS 以 `OS_REASON_CODESIGNING | Launch Constraint Violation` 拒绝执行，本机没有有效签名身份。默认入口暂不切换。** 可用 `DSH_CODESIGN_IDENTITY` 为打包指定已安装的代码签名身份；指定身份后仍须重新验证实际服务启动，不能只看签名校验或注册成功。首次打开和「重新连接」只查询状态；明确点击「启动官方后台」才注册应用后台服务并启动 dsh，必要时转到系统设置批准。关闭窗口保留后台，主动停止会持久保存停机意图。宿主崩溃后先回收旧 dsh 进程组，连续异常退出达到预算后阻止自动重启。
+
+预览与原入口使用同一 `~/.dsh-bot`，启动前会检查旧 `dev.dshbot.backend` 服务；若仍注册则拒绝接管。**实际服务启动验收通过后才能切换**：先退出旧客户端并显式卸载旧服务（`bun run backend -- uninstall`），不会自动迁移或同时启动第二套后台。需要回退时，在预览中点击「停止全部 Bot 并卸载后台服务」，关闭预览后再使用原入口；不要并行运行两种入口。
+
+`test:host-client` 在临时数据根使用真实官方 dsh 与真实 NSH，覆盖只读首次连接、明确启动、存活窗口跨宿主重启、generation 切换后重新认证，以及手动停止后重开不自动启动。该测试不注册实际系统服务；预览包只作 ad-hoc 签名，不代表系统批准、正式签名或升级验收。
+
 ## 单机功能
 
 - Bot 先保存，首次打开时检查配置并自动初始化唯一对话；未就绪对象保留修复入口，初始化后固定模板与工作区。未确认创建保留候选标识，恢复失败保留原指针。
@@ -46,6 +60,8 @@ bun run build
 bun run package:macos
 bun run test:package
 ```
+
+`test` 包含后台脚本、Rust 宿主生命周期与控制协议、客户端连接竞态及 NSH 基础界面测试；`test:host-client` 另外验证真实宿主与 NSH 的连接换代。连接竞态覆盖认证中换代、旧读取结果丢弃、关闭时清理及连接完成前断流；宿主测试覆盖并发启动失败与失败清理期间的请求归并。
 
 `test:e2e` 在临时数据根启动真实官方 `dsh web`，使用真实 NSH 运行界面，并连接外部确定性 Messages 服务；不读取用户模型密钥，也不向后台注入测试插件。覆盖注册表、初始化与恢复、丢失响应、队列与审批、归档、设置和凭据。`prepare:sdk` 从精确锁定的公开 npm 包生成客户端 SDK，不导入参考子模块源码。
 
