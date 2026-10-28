@@ -1,11 +1,5 @@
-export type HostPhase = 'stopped' | 'preparing' | 'starting' | 'ready' | 'stopping' | 'failed' | 'recovering'
-export interface HostStatus {
-  phase: HostPhase | 'unavailable'
-  generation?: string
-  reason?: string
-  blocked: boolean
-}
-export interface BackendInfo { url: string; generation?: string }
+import type { BackendInfo, HostStatus } from '../../infrastructure/host/protocol'
+export type { BackendInfo, HostPhase, HostStatus } from '../../infrastructure/host/protocol'
 
 /** Private control/discovery adapter; lifecycle commands are never retried here. */
 export interface BackendHost {

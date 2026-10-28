@@ -5,9 +5,9 @@ import { expect, open, test } from 'nsh/test'
  * Runs with DSH_E2E_FAULT=drop-create-result.
  */
 
-import { botsRoot, listRecords, readRecord } from '../registry'
+import { botsRoot, listRecords, readRecord } from './registry'
 
-const workspace = `${botsRoot()}-workspace`
+const workspace = async () => `${await botsRoot()}-workspace`
 
 interface Record_ {
   name: string
@@ -19,7 +19,7 @@ interface Record_ {
 
 async function records(): Promise<Record_[]> {
   const result: Record_[] = []
-  for (const name of listRecords()) result.push(JSON.parse(readRecord(name)) as Record_)
+  for (const name of await listRecords()) result.push(JSON.parse(await readRecord(name)) as Record_)
   return result
 }
 
@@ -42,12 +42,12 @@ function some(texts: string[], needle: string): boolean {
 }
 
 test('d) 创建结果丢失后，重试核对后台并复用同一个对话', async () => {
-  const app = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await app.waitFor('id:bot-new', { timeout: 30000 })
   await app.waitUntil(() => some(app.texts(), '后台已连接'), { timeout: 30000 })
   await app.press('id:bot-new')
   await app.type('id:bot-name', '结果丢失 Bot')
-  await enterWorkspace(app, workspace)
+  await enterWorkspace(app, await workspace())
   await app.press('id:bot-save')
   await app.waitFor('label:结果丢失 Bot', { timeout: 15000 })
   await app.waitFor('id:message-input', { timeout: 15000 })

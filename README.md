@@ -13,7 +13,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-在客户端点击「启动官方后台」，随后创建 Bot、选择模板、工作区和默认模型。也可通过脚本管理同一个 LaunchAgent：
+客户端包含三栏工作台与独立设置页。在「设置 → 后台」点击「启动官方后台」，随后在工作台新建 Bot、选择模板、工作区和默认模型；Bot 编辑、模型选择和工具审批通过弹窗完成。也可通过脚本管理同一个 LaunchAgent：
 
 ```sh
 bun run backend:install
@@ -46,7 +46,7 @@ bun run package:macos:host
 - 纯文本流式对话；普通输入排队、撤回未领取项。停止取消当前活动并保留队列，不承诺持续暂停。
 - 草稿与未确认输入在本地保存；结果未知时先核对后台，客户端不会自动重发。
 - 审批展示工具名称及操作说明，允许一次或拒绝；取消清理审批。归档后既有工作与审批保留，阻止新输入。
-- 「模型与供应商」页经上游 settings/credentials 保存共享设置，携带已读 revision；密钥提交后清空、不回显、不进入 Bot 文件。Bot 初始化前修改默认模型，初始化后切换当前对话模型。
+- 「设置 → 模型与供应商」经上游 settings/credentials 保存共享设置，携带已读 revision；密钥提交后清空、不回显、不进入 Bot 文件。Bot 初始化前修改默认模型，初始化后切换当前对话模型。
 
 独立指令、Bot 记忆、附件、模板编辑器、独立目标管理与多端连接留待后续阶段。模板使用上游已安装的 agent preset。后续 Bot 能力通过 dsh 插件生态扩展，必要的产品插件放在 `packages/dsh-plugin-*`；NSH 直接通过公开接口提供产品交互与插件管理界面，能力实现和专属数据归插件。
 
@@ -55,15 +55,18 @@ bun run package:macos:host
 ```sh
 bun run check
 bun run test
+bun run test:startup
 bun run test:e2e
 bun run build
 bun run package:macos
 bun run test:package
 ```
 
-`test` 包含后台脚本、Rust 宿主生命周期与控制协议、客户端连接竞态及 NSH 基础界面测试；`test:host-client` 另外验证真实宿主与 NSH 的连接换代。连接竞态覆盖认证中换代、旧读取结果丢弃、关闭时清理及连接完成前断流；宿主测试覆盖并发启动失败与失败清理期间的请求归并。
+`test` 包含后台脚本、Rust 宿主生命周期与控制协议、客户端连接竞态、注册表 I/O、服务操作策略、旧入口发现与并发启动及 NSH 基础界面测试；`test:host-client` 另外验证真实宿主与 NSH 的连接换代。连接竞态覆盖认证中换代、旧读取结果丢弃、关闭时清理及连接完成前断流；宿主测试覆盖并发启动失败与失败清理期间的请求归并。
 
-`test:e2e` 在临时数据根启动真实官方 `dsh web`，使用真实 NSH 运行界面，并连接外部确定性 Messages 服务；不读取用户模型密钥，也不向后台注入测试插件。覆盖注册表、初始化与恢复、丢失响应、队列与审批、归档、设置和凭据。`prepare:sdk` 从精确锁定的公开 npm 包生成客户端 SDK，不导入参考子模块源码。
+`test:startup` 在 macOS 上通过真实 `nsh run` 开发宿主加载客户端，验证应用能挂载且环境变量指定的隔离注册表被正确保留；使用独立夹具、不连接真实后台，结束后清理进程与目录。开发加载器与 `nsh test` 的模块导入行为存在差异，因此这项检查单独覆盖桌面启动。
+
+`test:e2e` 在临时数据根启动真实官方 `dsh web`，使用真实 NSH 运行界面，并连接外部确定性 Messages 服务；不读取用户模型密钥，也不向后台注入测试插件。覆盖注册表、初始化与恢复、丢失响应、队列与审批、归档、设置和凭据。注册表与旧入口安装测试通过独立 NSH 夹具调用生产文件和进程 API，验证原子保存、官方 CLI 版本检查、日志权限、超过 64 MiB 的旧日志发现与启动资源打包，不登记系统服务；数据放在 `~/.dsh-bot-e2e/` 下的独立运行目录，并在结束后清理。`prepare:sdk` 从精确锁定的公开 npm 包生成客户端 SDK，同时从 `scripts/backend` 生成旧入口所需的版本与脚本资源，不导入参考子模块源码。
 
 macOS 成品为 `dist/macos/DSH Bot.app`，只包含 NSH 客户端与原生传输，使用用户安装的官方后台。构建提供本机 ad-hoc 签名；Developer ID 签名、公证、Intel macOS、真实供应商与移动端均需分别验收。本地任务和验收记录在 `.scratch/nsh-rebuild`，不发布 GitHub issue。
 

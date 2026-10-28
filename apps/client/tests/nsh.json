@@ -1,0 +1,18 @@
+{
+  "name": "DSH Bot test fixtures",
+  "id": "dev.dshbot.test-fixtures",
+  "version": "0.1.0",
+  "build": 1,
+  "rust": "..",
+  "capabilities": {
+    "network": { "hosts": ["127.0.0.1"] },
+    "fs": {
+      "read": ["/"],
+      "write": ["${homeDir}/.dsh-bot-e2e"]
+    },
+    "process": {
+      "execute": ["/bin/chmod", "/bin/sh", "/usr/bin/awk"],
+      "env": ["DSH_BOTS_HOME", "DSH_HOST_SOCKET", "DSH_E2E_FAULT", "DSH_SPIKE_URL"]
+    }
+  }
+}

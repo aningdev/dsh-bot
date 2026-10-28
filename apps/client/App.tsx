@@ -1,4 +1,4 @@
 import { mount } from 'nsh'
-import { BotApp } from './BotApp'
+import { ClientApp } from './frontend/main'
 
-mount(BotApp)
+mount(ClientApp)

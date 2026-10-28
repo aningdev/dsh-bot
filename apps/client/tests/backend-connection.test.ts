@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { BackendConnection, type BackendHost, type BackendInfo, type BackendState, type HostStatus, type ProtocolConnection } from '../backend-connection'
-import { checkServiceResult, decodeBackendInfo, decodeHostStatus } from '../host-protocol'
+import { BackendConnection, type BackendHost, type BackendInfo, type BackendState, type HostStatus, type ProtocolConnection } from '../frontend/application/backend/connection'
+import { checkServiceResult, decodeBackendInfo, decodeHostStatus } from '../frontend/infrastructure/host/protocol'
 
 function deferred<T>() {
   let resolve!: (value: T) => void

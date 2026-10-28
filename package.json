@@ -15,6 +15,7 @@
     "build": "bun run prepare:sdk && bun run --cwd apps/client build",
     "test": "bun run prepare:sdk && bun run test:backend && bun run test:host && bun run --cwd apps/client test",
     "test:e2e": "bun run prepare:sdk && bun run --cwd apps/client test:e2e",
+    "test:startup": "bun run prepare:sdk && bun scripts/test-client-startup.ts",
     "package:macos": "bun scripts/package-macos.ts",
     "package:macos:host": "bun scripts/package-macos.ts --host-preview",
     "test:host": "cargo test --manifest-path apps/host/Cargo.toml",

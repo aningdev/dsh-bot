@@ -1,7 +1,7 @@
 import { expect, open, test } from 'nsh/test'
 const visible = (app: { texts(): string[] }, text: string) => app.texts().some(item => item.includes(text))
 test('供应商目录与凭据状态可读取，密钥保存后不回显并可移除', async () => {
-  const app = await open('../App.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
   try {
     await app.waitUntil(() => visible(app, '后台已连接'), { timeout: 30000 })
     await app.press('id:model-settings')
@@ -16,7 +16,7 @@ test('供应商目录与凭据状态可读取，密钥保存后不回显并可�
     await app.waitUntil(() => visible(app, '已移除存储值'), { timeout: 15000 })
     expect(visible(app, 'fixture-managed-secret-never-display')).toBe(false)
     // A second UI owns another live Connection and commits a newer revision.
-    const peer = await open('../App.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
+    const peer = await open('./bot-app-probe.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
     let original = ''
     try {
       await peer.waitUntil(() => visible(peer, '后台已连接'), { timeout: 15000 })

@@ -13,9 +13,11 @@ const cliPath = Bun.which('dsh')
 if (!cliPath) throw new Error('未安装官方 dsh')
 const version = JSON.parse(await readFile('scripts/backend/pinned-version.json', 'utf8')).release
 const root = await mkdtemp('/tmp/dsh-native-')
-const bots = join(homedir(), '.dsh-bot-e2e')
+const fixtureParent = join(homedir(), '.dsh-bot-e2e')
+await mkdir(fixtureParent, { recursive: true })
+const fixtureRoot = await mkdtemp(join(fixtureParent, 'host-client-'))
+const bots = join(fixtureRoot, 'bots')
 await mkdir(join(root, 'logs'), { recursive: true })
-await rm(bots, { recursive: true, force: true })
 const child = spawn(resolve('target/debug/dsh-host'), ['serve', '--data-root', root, '--dsh', await realpath(cliPath), '--logs', join(root, 'logs'), '--version', version, '--startup-ms', '30000'], { stdio: ['ignore', 'ignore', 'inherit'] })
 const exited = new Promise<void>(resolve => child.once('exit', () => resolve()))
 try {
@@ -33,5 +35,5 @@ try {
     await Promise.race([exited, new Promise<never>((_, reject) => { timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Host cleanup timeout')) }, 15000) })])
   } finally { clearTimeout(timer) }
   await rm(root, { recursive: true, force: true })
-  await rm(bots, { recursive: true, force: true })
+  await rm(fixtureRoot, { recursive: true, force: true })
 }

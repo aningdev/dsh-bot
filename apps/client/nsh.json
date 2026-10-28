@@ -9,6 +9,14 @@
       "hosts": [
         "127.0.0.1"
       ]
+    },
+    "fs": {
+      "read": ["/"],
+      "write": ["${homeDir}/.dsh-bot/bots", "${homeDir}/.dsh-bot/bin", "${homeDir}/Library/Logs/dsh-bot", "${homeDir}/Library/LaunchAgents", "${homeDir}/.dsh-bot-e2e", "${dataDir}"]
+    },
+    "process": {
+      "execute": ["/usr/bin/id", "/bin/launchctl", "/bin/chmod", "/bin/sh", "/usr/bin/awk"],
+      "env": ["DSH_BOTS_HOME", "DSH_E2E_FAULT", "DSH_HOST_SOCKET"]
     }
   }
 }

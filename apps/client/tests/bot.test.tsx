@@ -5,9 +5,9 @@ import { expect, open, test } from 'nsh/test'
  * `tests/e2e.ts`) with an external deterministic Messages fixture.
  */
 
-import { botsRoot, listRecords, readRecord, writeRecord } from '../registry'
+import { botsRoot, listRecords, readRecord, writeRecord } from './registry'
 
-const workspace = `${botsRoot()}-workspace`
+const workspace = async () => `${await botsRoot()}-workspace`
 
 interface Record_ {
   id: string
@@ -23,7 +23,7 @@ interface Record_ {
 
 async function records(): Promise<Record_[]> {
   const result: Record_[] = []
-  for (const name of listRecords()) result.push(JSON.parse(readRecord(name)) as Record_)
+  for (const name of await listRecords()) result.push(JSON.parse(await readRecord(name)) as Record_)
   return result.sort((left, right) => left.name.localeCompare(right.name))
 }
 
@@ -52,18 +52,18 @@ function some(texts: string[], needle: string): boolean {
 }
 
 test('a) 保存 Bot 注册表并落盘，字段与表单一致', async () => {
-  const app = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await app.waitFor('id:bot-new', { timeout: 30000 })
   await app.waitUntil(() => some(app.texts(), '后台已连接'), { timeout: 30000 })
   await app.press('id:bot-new')
   await app.type('id:bot-name', '测试 Bot')
-  await enterWorkspace(app, workspace)
+  await enterWorkspace(app, await workspace())
   await app.press('id:bot-save')
   await app.waitFor('label:测试 Bot', { timeout: 15000 })
 
   const saved = await record('测试 Bot')
   expect(saved.name).toBe('测试 Bot')
-  expect(saved.workspace).toBe(workspace)
+  expect(saved.workspace).toBe(await workspace())
   expect(saved.archived).toBe(false)
   expect(saved.preset.length > 0).toBe(true)
   expect(saved.model.provider.length > 0).toBe(true)
@@ -77,7 +77,7 @@ test('a) 保存 Bot 注册表并落盘，字段与表单一致', async () => {
 })
 
 test('b) 已初始化的唯一对话显示用户消息与 Agent 文本', async () => {
-  const app = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await app.waitFor('label:测试 Bot', { timeout: 30000 })
   await app.press('label:测试 Bot')
   await app.waitFor('id:message-input', { timeout: 15000 })
@@ -101,13 +101,13 @@ test('b) 已初始化的唯一对话显示用户消息与 Agent 文本', async (
 
 test('c) 关闭重开恢复同一对话与未发送草稿，且不重放 prompt', async () => {
   const before = await record('测试 Bot')
-  const first = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const first = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await first.waitFor('text:你好，测试初始化', { timeout: 30000 })
   await first.type('id:message-input', '未发送的草稿')
   await eventually(first, async () => (await record('测试 Bot')).draft?.text === '未发送的草稿')
   first.dispose()
 
-  const second = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const second = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await second.waitFor('text:你好，测试初始化', { timeout: 30000 })
   await eventually(second, async () => second.value('id:message-input') === '未发送的草稿', 15000)
   expect(second.value('id:message-input')).toBe('未发送的草稿')
@@ -121,6 +121,7 @@ test('c) 关闭重开恢复同一对话与未发送草稿，且不重放 prompt'
   expect(second.texts().filter(text => text === '你好，测试初始化').length).toBe(1)
 
   // 初始化后模板与工作区固定，改名不影响对话指针
+  await second.press('id:bot-settings')
   await second.clear('id:bot-rename')
   await second.type('id:bot-rename', '改名后的 Bot')
   await second.press('id:bot-rename-save')
@@ -132,7 +133,7 @@ test('c) 关闭重开恢复同一对话与未发送草稿，且不重放 prompt'
 })
 
 test('e1) 模板缺失时显示明确原因并阻止发送', async () => {
-  const app = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await app.waitFor('id:bot-new', { timeout: 30000 })
   await app.waitUntil(() => some(app.texts(), '后台已连接'), { timeout: 30000 })
   await app.press('id:bot-new')
@@ -160,14 +161,14 @@ test('e2) 恢复失败分类显示、保留原指针并阻止发送', async () =
     name: '损坏指针 Bot',
     preset: healthy.preset,
     model: healthy.model,
-    workspace,
+    workspace: await workspace(),
     archived: false,
     createdAt: new Date().toISOString(),
     sessionId: 'sess_does_not_exist_in_backend',
   }
-  writeRecord('bot_broken.json', JSON.stringify(broken, null, 2) + '\n')
+  await writeRecord('bot_broken.json', JSON.stringify(broken, null, 2) + '\n')
 
-  const app = await open('../App.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1400, height: 900, platform: 'macos', network: 'live' })
   await app.waitFor('label:损坏指针 Bot', { timeout: 30000 })
   await app.press('label:损坏指针 Bot')
   await app.waitUntil(() => some(app.texts(), '对话无法恢复'), { timeout: 20000 })
@@ -177,7 +178,7 @@ test('e2) 恢复失败分类显示、保留原指针并阻止发送', async () =
   await app.type('id:message-input', '恢复失败时不应发出')
   expect(app.enabled('id:send')).toBe(false)
 
-  const still = JSON.parse(readRecord('bot_broken.json')) as Record_
+  const still = JSON.parse(await readRecord('bot_broken.json')) as Record_
   expect(still.sessionId).toBe('sess_does_not_exist_in_backend')
   expect(still.initializing).toBe(undefined)
   app.dispose()

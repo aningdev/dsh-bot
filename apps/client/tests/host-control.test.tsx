@@ -1,9 +1,8 @@
 import { expect, open, test } from 'nsh/test'
 import { HostControl } from 'dsh-client/native'
-import { startBackend } from '../connection'
 
 test('宿主经 NSH 提供连接；两个窗口共享进程，窗口关闭不停止，重启切换 generation', async () => {
-  expect(HostControl.enabled()).toBe(true)
+  expect(await HostControl.reachable()).toBe(true)
   const initial = JSON.parse(await HostControl.request('ensureDsh', 'attach'))
   expect(initial.phase).toBe('stopped')
   const watch = await HostControl.watch()
@@ -11,7 +10,7 @@ test('宿主经 NSH 提供连接；两个窗口共享进程，窗口关闭不停
   const options = { width: 1400, height: 950, platform: 'macos' as const, network: 'live' as const }
   const windows: Awaited<ReturnType<typeof open>>[] = []
   try {
-    await startBackend()
+    await HostControl.request('ensureDsh', 'userStart')
     const before = JSON.parse(await HostControl.request('status', ''))
     expect(before.phase).toBe('ready')
     expect(before.url).toBe(undefined)

@@ -1,5 +1,6 @@
 import { View, Text, signal, cleanup, mount } from 'nsh'
-import { Connection, launchUrl } from '../connection'
+import { Connection } from '../frontend/infrastructure/dsh/connection'
+import { launchUrl } from '../frontend/application/backend/host'
 
 export default function HostProbe() {
   const state = signal('connecting')

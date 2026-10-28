@@ -12,8 +12,11 @@ import { startModelFixture } from './model-fixture'
  */
 
 const clientDir = join(import.meta.dir, '..')
-// ${homeDir}/.dsh-bot-e2e is the only granted test root in nsh.json.
-const botsRoot = join(homedir(), '.dsh-bot-e2e')
+// Keep every run within the manifest's dedicated test write root.
+const fixtureParent = join(homedir(), '.dsh-bot-e2e')
+await mkdir(fixtureParent, { recursive: true })
+const fixtureRoot = await mkdtemp(join(fixtureParent, 'run-'))
+const botsRoot = join(fixtureRoot, 'bots')
 const testWorkspace = `${botsRoot}-workspace`
 
 function waitForExit(child: ChildProcess): Promise<number> {
@@ -80,6 +83,7 @@ try {
   const runs = onboarding ? [
     { label: '首次配置、原 Bot 模型修复与草稿发送', file: 'tests/onboarding.test.tsx', fault: '' },
   ] : [
+    { label: '旧入口标准 API 安装、权限和资源打包', file: 'tests/legacy-installation.test.tsx', fault: '' },
     { label: 'a/b/c/e 注册表、初始化、重开恢复、模板缺失与恢复失败', file: 'tests/bot.test.tsx', fault: '' },
     { label: '初始化期间草稿与重开恢复', file: 'tests/initialization-draft.test.tsx', fault: 'delay-init-commit' },
     { label: '未就绪工作区修复', file: 'tests/bot-repair.test.tsx', fault: '' },
@@ -129,8 +133,7 @@ try {
   }
   await model.close().catch(() => undefined)
   await rm(root, { recursive: true, force: true })
-  await rm(botsRoot, { recursive: true, force: true })
-  await rm(testWorkspace, { recursive: true, force: true })
+  await rm(fixtureRoot, { recursive: true, force: true })
 }
 
 if (failure) {

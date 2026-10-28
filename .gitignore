@@ -6,6 +6,7 @@ dist/
 coverage/
 *.tsbuildinfo
 *.log
+apps/client/frontend/infrastructure/host/legacy/assets.ts
 
 # Local credentials and agent state
 .env

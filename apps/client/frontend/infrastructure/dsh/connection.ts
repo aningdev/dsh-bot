@@ -1,6 +1,5 @@
 // Official `dsh web` protocol client: bootstrap cookie, Remote streams, no
 // custom endpoints. Everything the UI needs is projected to plain values.
-export { backendInfo, launchUrl, startBackend, watchBackendStatus, usesHostControl, unregisterBackend } from './host-control'
 import { AuthenticatedSocket } from './socket'
 import { Context, installConnection, TypertRegistry, Gateway, sessionRemote } from './sdk.js'
 import { agentPresetsRemote, settingsRemote, llmRemote } from './presets.js'

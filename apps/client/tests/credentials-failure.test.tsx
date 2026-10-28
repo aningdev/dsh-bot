@@ -2,7 +2,7 @@ import { expect, open, test } from 'nsh/test'
 const visible = (app: { texts(): string[] }, text: string) => app.texts().some(item => item.includes(text))
 /** The driver makes the isolated credentials document unwritable as a file. */
 test('配置成功、凭据写入失败时分别报告状态并清空密钥，不补偿删除配置', async () => {
-  const app = await open('../App.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
+  const app = await open('./bot-app-probe.tsx', { width: 1600, height: 1100, platform: 'macos', network: 'live' })
   try {
     await app.waitUntil(() => visible(app, '后台已连接'), { timeout: 15000 })
     await app.press('id:model-settings')

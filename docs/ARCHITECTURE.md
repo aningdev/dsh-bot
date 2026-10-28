@@ -194,13 +194,63 @@ NSH 负责能力展示、插件启停与配置管理界面、操作反馈及修�
 
 ### 连接与传输
 
-NSH 复用精确锁定版本的官方客户端与生成的 remote；原生 transport 只补足 NSH 的 HTTP / WebSocket、Cookie、流和取消能力。token 引导、Cookie、Peer、订阅、游标、投影、审批答复和错误语义沿用上游。认证入口及返回状态按实际发行版验证，Cookie 按服务返回值管理，不硬编码名称。Waku 的手写 HTTP 信封、WebSocket 帧解析与统一 Driver 事件转换均不移植。
+NSH 复用精确锁定版本的官方客户端与生成的 remote；HTTP 与取消使用 NSH 的 `fetch`，原生 transport 补足携带 Cookie 的 WebSocket 握手和连接释放。token 引导、Cookie、Peer、订阅、游标、投影、审批答复和错误语义沿用上游。认证入口及返回状态按实际发行版验证，Cookie 按服务返回值管理，不硬编码名称。Waku 的手写 HTTP 信封、WebSocket 帧解析与统一 Driver 事件转换均不移植。
+
+### 客户端目录与页面
+
+根 `App.tsx` 保持 NSH 挂载入口，`nsh.json`、Cargo 配置与 `src/lib.rs` 保留框架位置；TypeScript 放入 `frontend/`：
+
+```text
+frontend/
+├── main.tsx                # 连接与应用模型装配、NSH 导航及窗口清理
+├── ui/
+│   ├── workbench/          # Bot 列表、对话、只读检查栏与操作弹窗
+│   ├── settings/           # 设置分类、后台操作与供应商编辑弹窗
+│   └── shared/             # 按钮与原生 Dialog 外壳
+├── application/
+│   ├── bots/               # Bot 记录、注册表校验与字段更新、Bot 操作
+│   ├── conversation/       # 对话选择、初始化核对、草稿、输入与审批
+│   ├── models/             # 模型选择、共享设置 revision 与凭据操作
+│   └── backend/            # 连接换代、服务操作与临时旧入口策略
+└── infrastructure/
+    ├── dsh/                # 官方 SDK、remote、认证连接与文本历史投影
+    ├── host/               # 原生控制协议、系统调用与旧入口文件/进程适配
+    └── storage/            # 标准文件 API、工作区事实与单记录事务
+```
+
+`ui` 绑定应用模型和用户动作；`application` 持有产品状态、业务规则及异步流程，调用 `infrastructure` 的传输与系统事实接口。基础设施不依赖应用层或界面；`main.tsx` 负责装配和资源归属。注册表的读取最新内容、应用字段修改与原子替换保持同一个串行事务，层间拆分不能拆开该临界区。
+
+主页面只有工作台与设置，通过 NSH `createNavStack` / `NavStack` / `NavPage` 导航。工作台采用 Bot 列表、持续对话、只读检查栏三栏；新建、Bot 编辑与修复、模型选择、审批及供应商编辑使用 NSH `Dialog`。页面切换保留工作台模型与草稿，后台连接归窗口生命周期；关闭审批弹窗只收起界面，待审批请求继续保留。组件和弹窗按所属页面收拢，不按 Web URL 增设路由目录。
+
+### 客户端原生适配
+
+`apps/client/src/` 只承载 NSH 进程内的本地适配，按职责组织：
+
+```text
+apps/client/src/
+├── lib.rs                  # 原生 Module / Class 注册与兼容导出
+├── transport/
+│   ├── mod.rs              # Transport Interface
+│   └── socket.rs           # 认证 WebSocket、有界队列与连接释放
+└── host_control/
+    ├── mod.rs              # HostControl Interface、控制端点与请求
+    ├── service.rs          # SMAppService 的动态库调用与 OS 状态返回
+    └── watch.rs            # 有界状态订阅及关闭、释放
+```
+
+`frontend/application/bots/registry.ts` 校验 Bot 记录并提供字段更新入口，`frontend/infrastructure/storage/records.ts` 使用 NSH 标准 `fs/promises`、`path`、`os` 读写文件、检查工作区；同一 Bot 的更新在队列内读取最新记录、应用字段变更，再以临时文件原子替换，避免异步草稿、改名、归档与初始化互相覆盖。读取只将不存在视为空，权限与其他 I/O 错误向调用方报告。目录与命令权限在 `nsh.json` 声明，不另建 Rust 文件接口或环境变量接口。
+
+`frontend/application/backend/service.ts` 与 `host.ts` 负责服务登记、系统批准、旧服务冲突与明确启动的产品规则；`frontend/infrastructure/host/control.ts` 使用标准进程 API 查询旧服务与激活已登记宿主。原生 `HostControl` 只补足 Unix socket、状态订阅与 SMAppService 调用，返回 OS 状态，由 TypeScript 解释操作顺序和用户提示。
+
+`Transport` 仅创建认证 WebSocket；`Socket` 与 `HostWatch` 各自拥有任务、队列和释放逻辑；控制通道的帧与响应校验复用宿主共享协议。原生 `HostControl.serviceAvailable` 只报告 App 内系统服务组件是否存在，由 TypeScript 结合显式开发 socket 决定使用哪条后台路径。
+
+旧 LaunchAgent 入口的产品策略暂留在 `frontend/application/backend/legacy-policy.ts`，标准系统适配放在 `frontend/infrastructure/host/legacy/`，不再保留 Rust `legacy_backend` 或原生 `probeUrl` / `startBackend`。该兼容模块通过 NSH 标准文件与进程 API 执行原有发现、版本核对、安装和明确启动；发现通过固定系统命令流式扫描旧日志，只接受当前 PID、固定版本与最近启动标记对应的 ready 行，避免整读日志的大小上限。启动脚本与版本从 `scripts/backend` 的同一份源生成并打入客户端 bundle，不在成品运行时查找源码目录。兼容入口保留到签名成品通过迁移验收，不新增规则或迁入宿主。
 
 ### 本机宿主控制通道
 
 Rust 在用户私有运行目录创建 Unix domain socket，目录权限 `0700`、socket `0600`，检查连接方 UID。NSH 原生层访问 socket；控制响应不进入公开 HTTP 端点或渲染日志。协议采用有长度上限的逐行 JSON，含协议版本、关联 ID、操作与结构化结果；接收端校验字段、大小和调用权限，断开后不自动重放操作。
 
-单次响应和状态订阅共用 `apps/host/src/host_control/protocol.rs` 中的信封与状态解码规则，经 `lib.rs` 兼容导出给 NSH 原生适配，统一检查版本、关联 ID、状态及连接地址；公开状态禁止携带认证 URL，只有 ready 状态的 `connectionInfo` 可以返回它。NSH 原生适配负责 socket 和订阅资源，`apps/client/host-control.ts` 负责发现、明确启动与服务操作，`host-protocol.ts` 校验原生字符串边界并投影为客户端类型；界面和官方协议连接不解析控制通道 JSON。
+单次响应和状态订阅共用 `apps/host/src/host_control/protocol.rs` 中的信封与状态解码规则，经 `lib.rs` 兼容导出给 NSH 原生适配，统一检查版本、关联 ID、状态及连接地址；公开状态禁止携带认证 URL，只有 ready 状态的 `connectionInfo` 可以返回它。NSH 原生适配负责 socket 和订阅资源，`frontend/application/backend/host.ts` 负责发现、明确启动与服务操作，`frontend/infrastructure/host/protocol.ts` 校验原生字符串边界并投影为客户端类型；界面和官方协议连接不解析控制通道 JSON。
 
 控制 Interface 仅包含：
 
@@ -215,7 +265,7 @@ Rust 在用户私有运行目录创建 Unix domain socket，目录权限 `0700`�
 
 ### 连接与恢复顺序
 
-`apps/client/backend-connection.ts` 的 `BackendConnection` 统一负责宿主发现、状态订阅、generation 更换、旧资源清理和窗口关闭；对界面发布连接与可发送状态。`Connection` 保留官方协议认证、remote、事件流与会话作用域，取消令牌使旧认证和读取在换代时失效。`BotApp` 只处理产品状态及当前 Bot 的订阅，不自行管理宿主 generation；目录、队列等异步读取经协调器检查所属连接，旧结果不回写。事件流在认证完成前发生的就绪变化也须保留，连接结束不能将已断开的流重新标为可发送。
+`frontend/application/backend/connection.ts` 的 `BackendConnection` 统一负责宿主发现、状态订阅、generation 更换、旧资源清理和窗口关闭；对界面发布连接与可发送状态。`Connection` 保留官方协议认证、remote、事件流与会话作用域，取消令牌使旧认证和读取在换代时失效。`frontend/application/conversation/` 处理产品状态及当前 Bot 的订阅，不自行管理宿主 generation；目录、队列等异步读取经协调器检查所属连接，旧结果不回写。事件流在认证完成前发生的就绪变化也须保留，连接结束不能将已断开的流重新标为可发送。
 
 1. NSH 以 `attach` 调用 `ensureDsh` 查询当前宿主；遇用户停机或预算耗尽只展示状态与明确启动入口，不循环尝试。只有用户操作才传 `userStart`。宿主不可用时通过安装好的系统入口明确启动宿主，宿主启动仍尊重持久停机标记；不由每个窗口直接 spawn dsh。
 2. ready 后取得当前 generation 的连接信息，建立宿主状态订阅，再用官方客户端完成认证、连接和初始状态读取；连接信息只是引导，认证失败须重新向宿主核对。

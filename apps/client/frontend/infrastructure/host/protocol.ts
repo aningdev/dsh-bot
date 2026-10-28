@@ -1,4 +1,12 @@
-import type { BackendInfo, HostPhase, HostStatus } from './backend-connection'
+export type HostPhase = 'stopped' | 'preparing' | 'starting' | 'ready' | 'stopping' | 'failed' | 'recovering'
+export interface HostStatus {
+  phase: HostPhase | 'unavailable'
+  generation?: string
+  reason?: string
+  blocked: boolean
+}
+export interface BackendInfo { url: string; generation?: string }
+
 
 const phases = new Set<HostPhase>(['stopped', 'preparing', 'starting', 'ready', 'stopping', 'failed', 'recovering'])
 
@@ -33,9 +41,21 @@ export function decodeBackendInfo(text: string): BackendInfo {
   return { url: url.toString(), generation: status.generation! }
 }
 
-export function checkServiceResult(text: string): void {
+export interface ServiceStatus {
+  status: 'notRegistered' | 'enabled' | 'requiresApproval' | 'unsupported' | 'notFound' | 'unknown' | 'error'
+  error?: string
+}
+
+export function decodeServiceStatus(text: string): ServiceStatus {
   const result: unknown = JSON.parse(text)
   if (!result || typeof result !== 'object') throw new Error('无效系统服务响应')
   const value = result as Record<string, unknown>
-  if (value.status !== 'notRegistered') throw new Error(typeof value.error === 'string' ? value.error : '后台服务卸载未确认，请重新检查')
+  if (!['notRegistered', 'enabled', 'requiresApproval', 'unsupported', 'notFound', 'unknown', 'error'].includes(value.status as string)
+    || (value.error != null && typeof value.error !== 'string')) throw new Error('系统服务协议不兼容')
+  return value as unknown as ServiceStatus
+}
+
+export function checkServiceResult(text: string): void {
+  const value = decodeServiceStatus(text)
+  if (value.status !== 'notRegistered') throw new Error(value.error ?? '后台服务卸载未确认，请重新检查')
 }

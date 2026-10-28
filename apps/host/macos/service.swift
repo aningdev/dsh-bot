@@ -46,23 +46,6 @@ func manage(_ operation: String) throws -> [String: String] {
             }
             if let error = result.error { throw error }
         }
-    case "activate":
-        guard service.status == .enabled else { return ["status": status()] }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        process.arguments = ["kickstart", "gui/\(getuid())/dev.dsh-bot.host"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        let deadline = Date().addingTimeInterval(10)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.025) }
-        if process.isRunning {
-            kill(process.processIdentifier, SIGKILL)
-            process.waitUntilExit()
-            throw NSError(domain: "DSHService", code: 3, userInfo: [NSLocalizedDescriptionKey: "后台宿主启动超时，请检查系统后台项目"])
-        }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw NSError(domain: "DSHService", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法启动已注册的后台宿主"] ) }
     default: throw NSError(domain: "DSHService", code: 2, userInfo: [NSLocalizedDescriptionKey: "不支持的服务操作"])
     }
     return ["status": status()]
