@@ -98,13 +98,36 @@ test('explicit startup checks registration and OS approval before activation', a
   expect(ready.calls).toEqual(['status', 'activate'])
 })
 
-test('unregister requires a confirmed stop, and legacy ownership blocks new registration', async () => {
+test('unregister requires a confirmed stop, and old registration blocks new ownership', async () => {
   const running = access('notRegistered', true)
   running.adapter.stop = async () => { throw new Error('stop unconfirmed') }
   await expect(running.service.unregister()).rejects.toThrow('stop unconfirmed')
   expect(running.calls).toEqual([])
   const legacy = access('notRegistered')
   legacy.adapter.legacyInstalled = async () => true
-  await expect(legacy.service.prepare(true)).rejects.toThrow('旧后台服务仍已登记')
+  await expect(legacy.service.prepare(true)).rejects.toThrow('检测到旧后台服务')
   expect(legacy.calls).toEqual([])
+})
+
+test('development uses only its host socket and cannot unregister an App service', async () => {
+  const development = access('notRegistered')
+  development.adapter.development = true
+  await development.service.prepare(false)
+  await development.service.prepare(true)
+  await expect(development.service.unregister()).rejects.toThrow('开发宿主未登记 App 后台服务')
+  expect(development.calls).toEqual([])
+  development.adapter.legacyInstalled = async () => true
+  await expect(development.service.prepare(true)).rejects.toThrow('检测到旧后台服务')
+  expect(development.calls).toEqual([])
+})
+
+test('unknown migration state and missing App components fail without activation', async () => {
+  const unknown = access('enabled')
+  unknown.adapter.legacyInstalled = async () => { throw new Error('无法确认旧后台的系统登记状态') }
+  await expect(unknown.service.prepare(true)).rejects.toThrow('无法确认旧后台的系统登记状态')
+  expect(unknown.calls).toEqual([])
+  const missing = access('notRegistered')
+  missing.adapter.service = async () => { throw new Error('当前构建没有系统服务组件') }
+  await expect(missing.service.prepare(true)).rejects.toThrow('当前构建没有系统服务组件')
+  expect(missing.calls).toEqual([])
 })

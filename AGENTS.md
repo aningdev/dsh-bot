@@ -15,7 +15,7 @@
 ## 组件与依赖
 
 - 全部 Bot 共用未经修改的官方 `dsh web`、`web` profile 与隔离数据根 `~/.dsh-bot`（`DSH_HOME`）；不按 Bot 拆进程、profile 或插件集，不自拼执行运行时。
-- `apps/client` 的 TypeScript 负责界面、Bot 注册表、本地操作与产品策略，优先使用 NSH 标准 API；官方客户端与生成 remote 直连 dsh，承担认证、订阅、恢复与业务调用。
+- `apps/client` 的 TypeScript 负责界面、Bot 注册表、本地操作与产品策略，优先使用 NSH 标准 API；官方客户端与生成 remote 直连 dsh，承担认证、订阅、恢复与业务调用。NSH 能执行命令不改变职责：dsh 运行准备、启动、ready 发现、监控与回收由宿主独占，客户端仅负责服务登记的产品流程与控制调用；旧 LaunchAgent 管理链已删除，仅保留只读迁移冲突检测，脚本复用宿主控制入口。
 - `apps/client/src` 仅补足 NSH 标准 API 的实际缺口，返回传输结果或系统事实；新增原生接口前核实缺口。常驻 `apps/host` 负责 App 后台身份、dsh 生命周期、连接发现及后续 Bridge。两者均不设 `ProductService`、转换业务事件或提供统一聊天接口。
 - Bot 能力优先复用 dsh 插件；明确缺口放 `packages/dsh-plugin-*`，能力规则、专属数据与执行注入归插件，经官方安装与 profile 声明式 bundle 装配。NSH 直接调用公开接口提供插件管理与产品交互。
 - 多端只经宿主内 Bridge 出站，Relay 独立放 `apps/relay`，只转发密文、不持 owner 凭据；后台保持本机访问。沿用官方协议与 transport 抽象，Bot 只读快照另设契约，不增加注册表同步或第二份权威执行状态。

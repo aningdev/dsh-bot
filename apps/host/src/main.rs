@@ -59,7 +59,7 @@ fn main() {
         Some((mode, rest)) if mode == "serve-app" && rest.is_empty() => {
             let home = std::env::var("HOME").map_err(|_| "无法确定用户目录".to_string());
             home.and_then(|home| {
-                let pin: serde_json::Value = serde_json::from_str(include_str!("../../../scripts/backend/pinned-version.json")).map_err(|_| "无效发行版配置")?;
+                let pin: serde_json::Value = serde_json::from_str(include_str!("../supported-dsh.json")).map_err(|_| "无效发行版配置")?;
                 let root = PathBuf::from(home).join(".dsh-bot");
                 let config = Config { logs: root.join("logs"), root, cli: PathBuf::from("dsh"), version: pin["release"].as_str().ok_or("缺少发行版版本")?.into(), startup_timeout: Duration::from_secs(30) };
                 config.prepare()?;

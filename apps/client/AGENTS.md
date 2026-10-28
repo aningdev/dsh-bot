@@ -22,7 +22,7 @@
 
 ## 原生接口与权限
 
-- 本地文件、工作区、普通进程操作与服务登记策略留在 TypeScript；HTTP / HTTPS 与普通 WS / WSS 使用 NSH 标准 API。原生 `CookieWebSocket` 仅补足当前标准握手 API 拒绝 Cookie 的缺口；能力授权与认证限制的区别见架构文档第 7 节，升级后实测复核。Rust 另适配 Unix socket / 状态订阅、`SMAppService` 系统调用等已核实缺口；返回系统事实，产品分支由 TypeScript 解释。服务操作与 `frontend/application/backend/`、`frontend/infrastructure/host/legacy/` 中的临时兼容遵守[宿主约束](../host/AGENTS.md)。
+- Bot 注册表、草稿、工作区等客户端本地操作与服务登记策略留在 TypeScript；dsh 运行目录、CLI / 环境准备、启动、ready 发现、监控与回收由宿主独占，`infrastructure/host` 只调用控制接口与提供系统适配，不复制 dsh 管理策略。HTTP / HTTPS 与普通 WS / WSS 使用 NSH 标准 API。原生 `CookieWebSocket` 仅补足当前标准握手 API 拒绝 Cookie 的缺口；能力授权与认证限制的区别见架构文档第 7 节，升级后实测复核。Rust 另适配 Unix socket / 状态订阅、`SMAppService` 系统调用等已核实缺口；返回系统事实，产品分支由 TypeScript 解释。服务操作与旧服务冲突检测遵守[宿主约束](../host/AGENTS.md)；显式开发 socket 与 App 系统服务均调用同一 Host，不因组件缺失恢复客户端自行安装、启动或发现 dsh 的回退。
 - 新增文件、网络、进程或环境访问时同步核对产品 `nsh.json` 的 capabilities，限定操作、路径、主机与变量；测试专属权限放测试 manifest，不为测试方便扩大产品权限。
 - 扩张原生接口前记录所查标准能力、安装版与目标平台、具体缺口及释放方式；升级后复核，标准能力通过同等契约验证时迁移调用方并删除原适配。模块导出的 `host` 是嵌入 App 通道，不替代本项目后台宿主；窗口 API 与普通命令 API 不接管常驻 dsh 的生命周期。
 - `src/lib.rs` 保持原生注册入口，导出最小 Interface；修改 Rust 导出后运行工作区检查以重新生成声明，并核对 TypeScript 调用。`.nsh/` 是 CLI 生成内容，`sdk.js` / `presets.js` 由根准备脚本生成，修改其源文件或生成入口，不手工修补产物。

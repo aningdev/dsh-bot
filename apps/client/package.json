@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nsh run App.tsx",
+    "dev": "DSH_HOST_SOCKET=${DSH_HOST_SOCKET:-$HOME/.dsh-bot/host/control.sock} nsh run App.tsx",
     "check": "nsh check App.tsx",
     "build": "nsh build App.tsx --release",
-    "test": "bun test tests/backend-connection.test.ts tests/local-adapters.test.ts tests/legacy-backend.test.ts && nsh test App.test.tsx",
+    "test": "bun test tests/backend-connection.test.ts tests/local-adapters.test.ts && nsh test App.test.tsx",
     "test:e2e": "bun tests/e2e.ts --onboarding && bun tests/e2e.ts"
   },
   "dependencies": {

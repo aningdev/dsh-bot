@@ -11,7 +11,7 @@ const build = Bun.spawn(['cargo', 'build', '--manifest-path', 'apps/host/Cargo.t
 if (await build.exited !== 0) throw new Error('Host build failed')
 const cliPath = Bun.which('dsh')
 if (!cliPath) throw new Error('未安装官方 dsh')
-const version = JSON.parse(await readFile('scripts/backend/pinned-version.json', 'utf8')).release
+const version = JSON.parse(await readFile('apps/host/supported-dsh.json', 'utf8')).release
 const root = await mkdtemp('/tmp/dsh-native-')
 const fixtureParent = join(homedir(), '.dsh-bot-e2e')
 await mkdir(fixtureParent, { recursive: true })

@@ -83,7 +83,6 @@ try {
   const runs = onboarding ? [
     { label: '首次配置、原 Bot 模型修复与草稿发送', file: 'tests/onboarding.test.tsx', fault: '' },
   ] : [
-    { label: '旧入口标准 API 安装、权限和资源打包', file: 'tests/legacy-installation.test.tsx', fault: '' },
     { label: 'a/b/c/e 注册表、初始化、重开恢复、模板缺失与恢复失败', file: 'tests/bot.test.tsx', fault: '' },
     { label: '初始化期间草稿与重开恢复', file: 'tests/initialization-draft.test.tsx', fault: 'delay-init-commit' },
     { label: '未就绪工作区修复', file: 'tests/bot-repair.test.tsx', fault: '' },

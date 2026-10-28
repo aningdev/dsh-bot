@@ -2,7 +2,9 @@
 
 本文是整体技术方案的唯一真源，说明进程、工作区、配置 UI、协议、数据归属与实施顺序。产品规则见[产品蓝图](BLUEPRINT.md)，概念见[术语表](../GLOSSARY.md)，上游证据与历史探针见 [research](research/)。
 
-状态：现有单机版本已实现 NSH 客户端直连官方 `dsh web`，launchd 通过 shell 包装入口托管 dsh。下一轮采用「NSH 标准 API + App 内轻量 Rust 后台辅助程序 + 官方客户端协议」：辅助程序随 `.app` 打包，通过 `SMAppService` 注册用户级后台服务，负责 dsh 生命周期和连接发现；NSH 直接负责本地操作与产品交互。目标是让系统后台设置将服务识别为本 App，不能以 `sh` 作为产品后台服务入口。辅助程序、私有控制通道与 NSH 连接换代已实现并通过隔离进程及真实 NSH 测试；应用关联服务提供独立预览包，尚未替换现有入口。注册适配在 NSH 主进程内调用 `SMAppService`。隔离 App 的注册、状态查询与等待注销已通过，但 ad-hoc 签名辅助程序被 macOS 以 `OS_REASON_CODESIGNING | Launch Constraint Violation` 拒绝启动；本机没有有效代码签名身份，因此应用关联服务的实际启动验收阻塞，不能迁移默认入口。签名后的系统名称、图标、批准、重新登录和升级迁移仍须成品验证。旧 `apps/runner`、`packages/harness-runtime` 与产品 REST 已移除，不重新引入。首版交付纯文本持续对话，独立指令、Bot 记忆与附件延后；多端及正式签名尚未交付。
+状态：单机代码已统一为「NSH 标准 API + App 内轻量 Rust 后台辅助程序 + 官方客户端协议」。`apps/host` 独占 dsh 生命周期与连接发现，NSH 直连官方 `dsh web` 并负责本地操作与产品交互；默认 App 打包携带 Host，通过 NSH 主进程内的 `SMAppService` 适配登记用户级后台服务。开发模式显式连接同一 Host 的 Unix socket。客户端旧 LaunchAgent 管理链、shell 启动资产和 `scripts/backend` 已删除，不再按组件缺失回退到旧后台。
+
+代码收敛不等于成品验收通过：辅助程序、私有控制通道与 NSH 连接换代已通过隔离进程及真实 NSH 测试；隔离 App 的注册、状态查询与等待注销已通过，但此前 ad-hoc 签名辅助程序被 macOS 以 `OS_REASON_CODESIGNING | Launch Constraint Violation` 拒绝启动，本机没有有效代码签名身份。应用关联服务实际启动、系统名称与图标、批准、重新登录和升级迁移仍须签名成品验证，当前不能宣称发布就绪。旧 `apps/runner`、`packages/harness-runtime` 与产品 REST 保持移除。首版交付纯文本持续对话，独立指令、Bot 记忆与附件延后；多端及正式签名尚未交付。
 
 ## 1. 系统概览
 
@@ -25,7 +27,7 @@ flowchart LR
     H -.->|转发原协议并校验设备权限| W
 ```
 
-实线为下一轮单机目标，虚线为后续多端阶段。系统边界：
+实线为当前单机组件与调用关系，虚线为后续多端阶段；系统服务的交付验收边界见第 10、12 节。系统边界：
 
 1. 官方 `dsh web` 使用上游 `web` profile，承载全部 Bot；产品通过声明式 bundle 使用官方或产品能力插件，保持官方 CLI、Agent Loop、输入队列与会话存储的实现不变。
 2. Rust 宿主是 App 内的轻量后台辅助程序，负责子进程所有权、启动发现、版本检查、日志与退出清理，后续承载 Bridge。NSH 标准 API 负责本地文件、普通命令与网络操作，NSH 中的官方客户端负责认证、remote、订阅、状态恢复与审批；Bot 能力由 dsh 插件实现。
@@ -38,9 +40,9 @@ flowchart LR
 
 | 位置          | 职责                                                                     | 阶段               |
 | ------------- | ------------------------------------------------------------------------ | ------------------ |
-| `apps/client` | NSH TSX 界面、官方协议客户端、Bot 注册表、模型设置页、审批与原生网络适配 | 已有，迁移连接发现 |
-| `apps/host`   | 随 App 打包的 Rust 后台辅助程序：dsh 进程、控制与发现；后续内置 Bridge | 下一轮新增         |
-| `scripts`     | 构建、macOS 组装与验收；现有 LaunchAgent 脚本待迁移为 App 服务注册 | 已有，迁移交付入口 |
+| `apps/client` | NSH TSX 界面、官方协议客户端、Bot 注册表、模型设置页、审批与原生网络适配 | 已实现 |
+| `apps/host`   | 随 App 打包的 Rust 后台辅助程序：dsh 进程、控制与发现；后续内置 Bridge | 已实现，系统服务待签名验收 |
+| `scripts`     | 构建、macOS 组装与验收；不管理另一套 dsh 进程 | 已统一 Host 入口 |
 | `apps/relay`  | 设备连接路由、密文转发及有界投递队列                                     | 多端，尚未创建     |
 | `packages/dsh-plugin-*` | 按需实现 Bot 能力及其专属数据、公开接口；通过声明式 bundle 装配 | 后续按能力新增 |
 | `references`  | 固定提交的上游参考，供阅读与兼容性研究                                   | 只读参考           |
@@ -98,7 +100,7 @@ apps/host/src/
 
 参考 Gallery 的 [Standard APIs](../references/nsh/examples/gallery/demos/StandardActions.tsx)、[WebSocket 示例](../references/nsh/examples/gallery/demos/StandardWebSockets.tsx)及 [AI Chat CLI 调用](../references/nsh/examples/gallery/demos/chat/local.ts)：NSH 支持文件、子进程、HTTP / HTTPS、TCP 和两种 WebSocket 接口，权限由 [nsh.json](../references/nsh/examples/gallery/nsh.json) 声明。AI Chat 每轮启动 CLI、将历史拼成输入，停止或离开页面时杀掉子进程；这是页面生命周期示例，不用于本产品的常驻 dsh。Web 与移动端的该聊天示例是模拟流，不能视为真实多端执行验收。网络授权与握手认证的边界见第 7 节；当前保留原生适配的原因是标准接口不能设置 dsh 所需的认证 Cookie。
 
-初始化由 NSH 使用标准 API 创建产品目录、检查权限并解析 CLI 路径；宿主启动前复核路径、版本和数据根，再使用官方 CLI 首启装配 profile。不复制上游模板 patch、不另建供应商配置；产品插件经官方安装与声明式 bundle 流程另行装配。已有目录不会覆盖或重置。缺少 CLI、版本不符、目录不可写或 profile 装配失败均返回明确原因与修复入口，保留用户内容。
+初始化职责按对象划分：NSH 使用标准 API 管理 Bot 注册表、草稿与用户选择的工作区；dsh 运行目录及权限、CLI 路径与版本、登录环境、固定数据根和官方 profile 首启装配由宿主独占，客户端只请求启动并展示宿主返回的失败原因，不在调用前重做一套运行准备。不复制上游模板 patch、不另建供应商配置；产品插件经官方安装与声明式 bundle 流程另行装配。已有目录不会覆盖或重置。缺少 CLI、版本不符、目录不可写或 profile 装配失败均返回明确原因与修复入口，保留用户内容。
 
 环境沿用已验证的非交互登录 zsh 方案：读取已导出的登录环境后执行固定的 CLI 与参数，重新固定 `DSH_HOME`；不把密钥复制进 plist、发现记录、日志或客户端。shell 初始化输出与 dsh ready 输出隔离。启动、停止与重启串行化；并发 `ensure` 共享一次启动，客户端超时或关闭窗口不会取消宿主已开始的启动。
 
@@ -215,10 +217,10 @@ frontend/
 │   ├── bots/               # Bot 记录、注册表校验与字段更新、Bot 操作
 │   ├── conversation/       # 对话选择、初始化核对、草稿、输入与审批
 │   ├── models/             # 模型选择、共享设置 revision 与凭据操作
-│   └── backend/            # 连接换代、服务操作与临时旧入口策略
+│   └── backend/            # 连接换代、服务登记与明确启动策略
 └── infrastructure/
     ├── dsh/                # 官方 SDK、remote、认证连接与文本历史投影
-    ├── host/               # 原生控制协议、系统调用与旧入口文件/进程适配
+    ├── host/               # 原生控制通道、服务激活与旧服务冲突查询
     └── storage/            # 标准文件 API、工作区事实与单记录事务
 ```
 
@@ -272,11 +274,13 @@ apps/client/src/
 
 `frontend/application/backend/service.ts` 与 `host.ts` 负责服务登记、系统批准、旧服务冲突与明确启动的产品规则；`frontend/infrastructure/host/control.ts` 使用标准进程 API 查询旧服务与激活已登记宿主。原生 `HostControl` 只补足 Unix socket、状态订阅与 SMAppService 调用，返回 OS 状态，由 TypeScript 解释操作顺序和用户提示。
 
-`CookieWebSocket` 只连接回环地址的 `/api/remote.mux`，接收 TypeScript 取得的 Cookie，不提供通用 HTTP、普通 WebSocket、认证引导或凭据存储；`Socket` 与 `HostWatch` 各自拥有任务、队列和释放逻辑；控制通道的帧与响应校验复用宿主共享协议。原生 `HostControl.serviceAvailable` 只报告 App 内系统服务组件是否存在，由 TypeScript 结合显式开发 socket 决定使用哪条后台路径。
+服务登记与宿主激活不等于管理 dsh：客户端可查询系统状态、登记 App 辅助程序，并向宿主发送生命周期命令；只有宿主负责 dsh 的运行准备、启动、ready 解析、监控、重启预算与回收。`frontend/infrastructure/host/` 是宿主控制通道的调用侧，不再建立 dsh 监督器；客户端可核对宿主报告的运行版本是否兼容，但不另行调用 CLI 推断当前进程版本。NSH 标准进程 API 即使具备这些操作能力，也不改变生命周期的唯一所有者。
+
+`CookieWebSocket` 只连接回环地址的 `/api/remote.mux`，接收 TypeScript 取得的 Cookie，不提供通用 HTTP、普通 WebSocket、认证引导或凭据存储；`Socket` 与 `HostWatch` 各自拥有任务、队列和释放逻辑；控制通道的帧与响应校验复用宿主共享协议。原生 `HostControl.serviceAvailable` 只报告 App 内系统服务组件是否存在。显式 `DSH_HOST_SOCKET` 表示连接开发 Host；其他情况下使用 App 后台服务，组件缺失时报错，不选择另一套 dsh 管理实现。开发模式不登记或注销系统服务，退出开发 Host 终端时回收其子进程。
 
 原生适配以已验证的能力缺口为范围：Cookie 握手、Unix socket / 有界状态订阅与 `SMAppService` 调用。新增或扩张接口时记录所查标准能力、安装版与平台、不能满足的具体契约及资源释放方式；升级后重新核对这些缺口。标准能力满足原契约时同时迁移调用方并删除适配，避免保留两套实现；类型存在或权限放开本身不构成替代验证。
 
-旧 LaunchAgent 入口的产品策略暂留在 `frontend/application/backend/legacy-policy.ts`，标准系统适配放在 `frontend/infrastructure/host/legacy/`，不再保留 Rust `legacy_backend` 或原生 `probeUrl` / `startBackend`。该兼容模块通过 NSH 标准文件与进程 API 执行原有发现、版本核对、安装和明确启动；发现通过固定系统命令流式扫描旧日志，只接受当前 PID、固定版本与最近启动标记对应的 ready 行，避免整读日志的大小上限。启动脚本与版本从 `scripts/backend` 的同一份源生成并打入客户端 bundle，不在成品运行时查找源码目录。兼容入口保留到签名成品通过迁移验收，不新增规则或迁入宿主。
+旧客户端 `legacy-policy.ts`、`infrastructure/host/legacy/`、脚本资产生成和 `scripts/backend` 已删除；Host 支持的发行版唯一记录在 `apps/host/supported-dsh.json`，编译嵌入 Host 并复制到 App 资源。不恢复旧安装、启动、版本探测或历史日志发现回退。仅保留旧 plist 与已登记任务的只读冲突检测；系统查询失败按未知状态报错，不视为旧服务不存在。迁移须由用户先停止并卸载旧服务、确认进程已回收，保留数据与草稿，步骤见 README。签名与系统服务验收阻塞继续如实记录，不能通过保留第二套生命周期实现掩盖。
 
 ### 本机宿主控制通道
 
@@ -380,7 +384,7 @@ Bot 注册表采用方案 A：桌面独占写入，bridge 只读注册表并向�
 
 ## 10. 打包与交付
 
-下一轮单机交付包含 NSH 客户端、`.app` 内的 Rust 后台辅助程序及其服务配置，继续使用用户已安装的官方 `dsh`。客户端通过 `SMAppService` 注册、查询和注销后台服务；具体选用的服务配置、bundle 标识、嵌入路径及最低 macOS 版本在打包实现时核验。辅助程序按目标平台编译随包交付，不要求用户安装 Rust；不携带 Node，不自建执行运行时。服务入口为具有 App 身份和签名归属的辅助程序可执行文件，不能注册 shell 包装脚本；内部读取登录环境与服务入口身份分开处理。dsh 路径与固定数据根由宿主管理，模型密钥不写入 plist。
+单机交付包含 NSH 客户端、`.app` 内的 Rust 后台辅助程序及其服务配置，继续使用用户已安装的官方 `dsh`。`package:macos` 统一生成包含这些组件的 App，`test:package` 检查组件、服务入口、支持版本与签名，不登记或启动系统服务。客户端通过 `SMAppService` 注册、查询和注销后台服务；嵌入路径为 `Contents/Library/LaunchServices/dsh-host` 与 `Contents/Library/LaunchAgents/dev.dsh-bot.host.plist`，系统服务动态库位于 `Contents/Frameworks`，最低目标为 macOS 14.0，实际平台和服务启动仍待验收。辅助程序按目标平台编译随包交付，不要求用户安装 Rust；不携带 Node，不自建执行运行时。服务入口为具有 App 身份和签名归属的辅助程序可执行文件，不能注册 shell 包装脚本；内部读取登录环境与服务入口身份分开处理。dsh 路径与固定数据根由宿主管理，模型密钥不写入 plist。
 
 后台活动应在 macOS「登录项与扩展」的后台运行设置中归属于本 App，并显示可识别的应用名称和图标。修改 launchd Label 或仅把可执行文件放入 `.app` 不构成验收；注册方式、嵌入配置、签名归属及系统批准状态共同实测。不能承诺仅调用 `SMAppService` 就一定得到预期显示。
 
@@ -420,7 +424,7 @@ Lorca 补充提供系统服务独立常驻、设备信任和多端投递的机�
 
 ### 薄 Rust 宿主迁移
 
-上一轮单机实现的阶段记录保留在 README 与本地任务中，下一轮按以下顺序迁移，未通过验收不删除现有可运行入口：
+Host 与客户端已统一，旧 shell 管理链及其专属测试已删除；以下保留实施顺序和交付验收要求，未完成的系统服务验收不因代码清理而视为通过。
 
 | 顺序                  | 迁移内容                                                        | 验收要求                                                                                                 |
 | --------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -459,11 +463,11 @@ D、E 按实际需求推进，不预设彼此依赖。
 
 ### 单机阶段必须通过的实测
 
-1. **NSH 与实际发行版连通。** 使用 npm 公开产物验证 token 引导、Cookie、WebSocket、remote 事件流、审批、取消与重连，确定上游连接包在 NSH 中的可复用范围。通过前保留可运行旧链路。
+1. **NSH 与实际发行版连通。** 使用 npm 公开产物验证 token 引导、Cookie、WebSocket、remote 事件流、审批、取消与重连，确定上游连接包在 NSH 中的可复用范围。现已通过的范围见 README；升级发行版后重新核验，不恢复旧管理回退。
 2. **Session 初始化与注册表保存恢复。** 分别覆盖后台已创建但客户端未收到结果、客户端已收到结果但 `sessionId` 保存失败。上游接受客户端指定 Session ID，但只复用符合条件的空白 Session，返回 ID 也可能不同，不能把重复 `create` 当成通用恢复接口。发送创建前保存候选 ID、工作区与模板并串行初始化，结果不明先查询事实；正式指针保存成功后才允许输入。该流程须证明可以找回已创建的 Session，并处理工作区挂接失败等部分成功状态；创建结果不明与已有 Session 丢失不得混为一类自动重建。依据见 [创建契约](../references/deepseek-harness/packages/api/session-controller/src/types.ts)与[创建实现](../references/deepseek-harness/packages/api/session-controller/src/agent.ts)。
 3. **未确认输入的核对。** 上游由客户端提供 `requestId`，后台将其持久关联到消息来源；当前查重覆盖队列与部分历史，不构成并发重试下严格一次执行的保证。发送前保存 `(sessionId, requestId)` 与正文，重连后结合 inbox、入队/撤回事件和必要的历史分页核对，不能只看最近消息或因未查到就判为未接纳；未确认请求不自动重发。验证本地记录恢复、重新核对、复制内容与确认后清理。严格并发去重若成为要求，需上游补齐契约。依据见 [输入命令与查重](../references/deepseek-harness/packages/api/session-controller/src/commands.ts)。
 4. **审批连接与离线恢复。** 验证断线后 pending 审批补投、同一 Peer 的活动事件流答复校验，以及多个合格 owner 连接首个有效答复结算的行为；审批不能假定只属于提交输入的客户端，也不能假定无在线 UI 就立即拒绝。多端阶段再明确设备路由、撤销与竞争答复。依据见 [Gateway 实现](../references/deepseek-harness/packages/api/gateway/src/index.ts)与[审批服务](../references/deepseek-harness/packages/interaction/user-approval/src/index.ts)。
-5. **Rust 宿主进程发现与失败处理。** 覆盖私有控制通道、单实例锁、generation、重启预算、日志轮转、dsh 安装路径变化及异常退出；客户端不再扫描 ready 日志。验证旧 shell LaunchAgent 卸载与 App 辅助程序注册、guardian 与进程组清理，确保 UI 退出后继续执行、显式停止不拉起、启动失败可见且有效节流。用实际签名成品验证后台设置的 App 名称、图标和归属，以及首次明确启动才注册、系统批准与禁用后的恢复入口、注销、升级等待/中断/状态恢复、移动与卸载后的清理、重新登录不自启；最低 macOS 版本、服务类型、注册启动语义和签名要求在实现前核验。此为下一轮目标，既有 launchd 脚本或 ad-hoc 包验收不能替代。
+5. **Rust 宿主进程发现与失败处理。** 覆盖私有控制通道、单实例锁、generation、重启预算、日志轮转、dsh 安装路径变化及异常退出；客户端不再扫描 ready 日志。验证旧 shell LaunchAgent 卸载与 App 辅助程序注册、guardian 与进程组清理，确保 UI 退出后继续执行、显式停止不拉起、启动失败可见且有效节流。用实际签名成品验证后台设置的 App 名称、图标和归属，以及首次明确启动才注册、系统批准与禁用后的恢复入口、注销、升级等待/中断/状态恢复、移动与卸载后的清理、重新登录不自启；最低 macOS 版本、服务类型、注册启动语义和签名要求在实现前核验。这些仍是交付验收要求，代码已统一为 Host；既有脚本、注册成功或 ad-hoc 包验收不能替代。
 6. **模型配置与默认值。** 验证 Session 创建的 Workspace / `agentPreset` 入参、当前模型从下一步骤生效、切换异步保存后台默认值的副作用，以及 settings 字段支持、revision 冲突、凭据存储和分步保存失败恢复。覆盖目录读取失败和模型确实不可用，确保保留原选择、不静默回退。
 7. **排队、停止与归档。** 验证正常排队、领取和撤回竞争、取消接纳与停稳的差异、停止后保留队列、再次发送唤醒及取消期间新输入的竞争。归档后禁止新输入，但已接纳工作、排队与审批仍可观察和处理。
 8. **模板与故障恢复。** 验证运行期保留组合、重启按 ID 加载当前定义、模板缺失/无效、会话不存在和历史损坏；故障不清指针、不静默替换。覆盖初始化后模板与目录固定、未就绪修复、版本不兼容时保留草稿并阻止发送。

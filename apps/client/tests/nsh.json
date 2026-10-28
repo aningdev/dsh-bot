@@ -11,7 +11,7 @@
       "write": ["${homeDir}/.dsh-bot-e2e"]
     },
     "process": {
-      "execute": ["/bin/chmod", "/bin/sh", "/usr/bin/awk"],
+      "execute": [],
       "env": ["DSH_BOTS_HOME", "DSH_HOST_SOCKET", "DSH_E2E_FAULT", "DSH_SPIKE_URL"]
     }
   }

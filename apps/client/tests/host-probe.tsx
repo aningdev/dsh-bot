@@ -41,7 +41,9 @@ export default function HostProbe() {
       const catalog = await connection.modelCatalog()
       if (!Array.isArray(catalog.models)) throw new Error('Invalid catalog')
       if (!disposed) state.set('official-ready')
-    } catch { if (!disposed) state.set('official-failed') }
+    } catch (error) {
+      if (!disposed) state.set(`official-failed: ${String(error).replace(/https?:\/\/\S+/g, '<REDACTED>')}`)
+    }
   })()
   return <View style={{ flex: 1 }}><Text>{handshake()}</Text><Text>{state()}</Text></View>
 }

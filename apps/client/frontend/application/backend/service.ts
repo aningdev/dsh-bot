@@ -14,8 +14,8 @@ export class BackendService {
   constructor(private readonly access: ServiceAccess) {}
 
   async prepare(explicit: boolean): Promise<void> {
+    if (await this.access.legacyInstalled()) throw new Error('检测到旧后台服务，请先停止并移除 dev.dshbot.backend LaunchAgent，确认旧进程已退出后重试；迁移步骤见 README')
     if (this.access.development) return
-    if (await this.access.legacyInstalled()) throw new Error('旧后台服务仍已登记。请先通过旧后台管理入口停止并卸载旧 LaunchAgent，再启动新宿主；不会自动中断工作')
     let state = decodeServiceStatus(await this.access.service('status'))
     if (explicit && state.status === 'notRegistered') state = decodeServiceStatus(await this.access.service('register'))
     switch (state.status) {
@@ -37,6 +37,7 @@ export class BackendService {
   }
 
   async unregister(): Promise<void> {
+    if (this.access.development) throw new Error('开发宿主未登记 App 后台服务，请在宿主终端退出')
     // A missing endpoint is allowed; an unconfirmed stop must block unregister.
     if (await this.access.reachable()) await this.access.stop()
     checkServiceResult(await this.access.service('unregister'))

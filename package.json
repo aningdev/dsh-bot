@@ -13,19 +13,14 @@
     "dev": "bun run prepare:sdk && bun run --cwd apps/client dev",
     "check": "bun run prepare:sdk && bun run --cwd apps/client check",
     "build": "bun run prepare:sdk && bun run --cwd apps/client build",
-    "test": "bun run prepare:sdk && bun run test:backend && bun run test:host && bun run --cwd apps/client test",
+    "host:dev": "cargo run --manifest-path apps/host/Cargo.toml -- serve-app",
+    "test": "bun run prepare:sdk && bun run test:host && bun run --cwd apps/client test",
     "test:e2e": "bun run prepare:sdk && bun run --cwd apps/client test:e2e",
     "test:startup": "bun run prepare:sdk && bun scripts/test-client-startup.ts",
     "package:macos": "bun scripts/package-macos.ts",
-    "package:macos:host": "bun scripts/package-macos.ts --host-preview",
     "test:host": "cargo test --manifest-path apps/host/Cargo.toml",
     "test:host-client": "bun run prepare:sdk && bun scripts/test-host-client.ts",
-    "test:package": "bun scripts/smoke-package.ts",
-    "backend": "bun scripts/backend/cli.ts",
-    "backend:install": "bun scripts/backend/cli.ts install",
-    "backend:start": "bun scripts/backend/cli.ts start",
-    "backend:stop": "bun scripts/backend/cli.ts stop",
-    "test:backend": "bun test scripts/backend/launchd.test.ts"
+    "test:package": "bun scripts/smoke-package.ts"
   },
   "devDependencies": {
     "@types/node": "26.6.5",

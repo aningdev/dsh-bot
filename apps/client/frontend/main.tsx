@@ -1,7 +1,7 @@
 import { cleanup, View } from 'nsh'
 import { createNavStack, NavStack, NavPage } from 'nsh/base'
 import { Connection } from './infrastructure/dsh/connection'
-import { backendHost, usesHostControl } from './application/backend/host'
+import { backendHost, canUnregisterBackend } from './application/backend/host'
 import { createModelSettings } from './application/models/settings'
 import { BackendConnection, type BackendState } from './application/backend/connection'
 import { createConversation, type Workbench } from './application/conversation/controller'
@@ -13,7 +13,7 @@ type Route = { name: 'workbench' } | { name: 'settings' }
 function SettingsRoute(props: { connection: Connection; backend: BackendConnection; status(): BackendState; changed(): Promise<void>; close(): void }) {
   const model = createModelSettings(props.connection, props.changed)
   cleanup(model.dispose)
-  return <SettingsPage model={model} backend={props.backend} canUnregister={usesHostControl()} status={props.status} close={props.close} />
+  return <SettingsPage model={model} backend={props.backend} canUnregister={canUnregisterBackend()} status={props.status} close={props.close} />
 }
 
 export function ClientApp() {

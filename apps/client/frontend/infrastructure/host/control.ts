@@ -6,14 +6,20 @@ import { run } from 'process'
 import { decodeBackendInfo, decodeHostStatus, type HostStatus } from './protocol'
 import { launchTarget } from './launchd'
 // NSH dev bundles wrap default module imports; metadata belongs to the runtime global.
+const developmentSocket = globalThis.process.env.DSH_HOST_SOCKET
 export const hostAccess = {
-  development: !!globalThis.process.env.DSH_HOST_SOCKET,
+  development: !!developmentSocket,
   available: () => HostControl.serviceAvailable(),
   service: (operation: string) => HostControl.service(operation),
   reachable: () => HostControl.reachable(),
   legacyInstalled: async () => {
+    // An explicitly separate Host does not share the legacy product data root.
+    if (developmentSocket && developmentSocket !== join(homedir(), '.dsh-bot/host/control.sock')) return false
     if (await exists(join(homedir(), 'Library/LaunchAgents/dev.dshbot.backend.plist'))) return true
-    return (await run('/bin/launchctl', ['print', (await launchTarget('dev.dshbot.backend')).job], { timeoutMs: 10000 })).code === 0
+    const result = await run('/bin/launchctl', ['print', (await launchTarget('dev.dshbot.backend')).job], { timeoutMs: 10000 })
+    if (result.code === 0) return true
+    if (result.stderr.includes('Could not find service')) return false
+    throw new Error('无法确认旧后台的系统登记状态，请检查后重试')
   },
   activate: async () => {
     const result = await run('/bin/launchctl', ['kickstart', (await launchTarget('dev.dsh-bot.host')).job], { timeoutMs: 10000 })
