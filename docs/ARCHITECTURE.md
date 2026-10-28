@@ -96,7 +96,7 @@ apps/host/src/
 
 不设 `ProductService`：本地配置与产品交互由 NSH 直接完成，已有 dsh remote 由官方客户端调用，不为每个方法增加 Rust 包装。Rust 原生适配与常驻进程是两回事：仅为补足 NSH 标准 API 的缺口，可使用 NSH 进程内原生模块，无须另起后台。
 
-参考 Gallery 的 [Standard APIs](../references/nsh/examples/gallery/demos/StandardActions.tsx)、[WebSocket 示例](../references/nsh/examples/gallery/demos/StandardWebSockets.tsx)及 [AI Chat CLI 调用](../references/nsh/examples/gallery/demos/chat/local.ts)：NSH 支持文件、子进程、TCP 和两种 WebSocket 接口，权限由 [nsh.json](../references/nsh/examples/gallery/nsh.json) 声明。AI Chat 每轮启动 CLI、将历史拼成输入，停止或离开页面时杀掉子进程；这是页面生命周期示例，不用于本产品的常驻 dsh。Web 与移动端的该聊天示例是模拟流，不能视为真实多端执行验收。标准 WebSocket 仍[禁止调用方设置 Cookie / Authorization 握手头](../references/nsh/crates/nsh-core/src/runtime/websocket.rs)，无认证回显成功不代表 dsh 认证可直接复用，现有原生传输适配按缺口保留。
+参考 Gallery 的 [Standard APIs](../references/nsh/examples/gallery/demos/StandardActions.tsx)、[WebSocket 示例](../references/nsh/examples/gallery/demos/StandardWebSockets.tsx)及 [AI Chat CLI 调用](../references/nsh/examples/gallery/demos/chat/local.ts)：NSH 支持文件、子进程、HTTP / HTTPS、TCP 和两种 WebSocket 接口，权限由 [nsh.json](../references/nsh/examples/gallery/nsh.json) 声明。AI Chat 每轮启动 CLI、将历史拼成输入，停止或离开页面时杀掉子进程；这是页面生命周期示例，不用于本产品的常驻 dsh。Web 与移动端的该聊天示例是模拟流，不能视为真实多端执行验收。网络授权与握手认证的边界见第 7 节；当前保留原生适配的原因是标准接口不能设置 dsh 所需的认证 Cookie。
 
 初始化由 NSH 使用标准 API 创建产品目录、检查权限并解析 CLI 路径；宿主启动前复核路径、版本和数据根，再使用官方 CLI 首启装配 profile。不复制上游模板 patch、不另建供应商配置；产品插件经官方安装与声明式 bundle 流程另行装配。已有目录不会覆盖或重置。缺少 CLI、版本不符、目录不可写或 profile 装配失败均返回明确原因与修复入口，保留用户内容。
 
@@ -194,7 +194,11 @@ NSH 负责能力展示、插件启停与配置管理界面、操作反馈及修�
 
 ### 连接与传输
 
-NSH 复用精确锁定版本的官方客户端与生成的 remote；HTTP 与取消使用 NSH 的 `fetch`，原生 transport 补足携带 Cookie 的 WebSocket 握手和连接释放。token 引导、Cookie、Peer、订阅、游标、投影、审批答复和错误语义沿用上游。认证入口及返回状态按实际发行版验证，Cookie 按服务返回值管理，不硬编码名称。Waku 的手写 HTTP 信封、WebSocket 帧解析与统一 Driver 事件转换均不移植。
+NSH 标准 API 支持 HTTP、HTTPS、WS、WSS；`capabilities.network.hosts` 同时授权这些协议，`network.http` 可进一步限定 HTTP 请求及 WebSocket 握手。当前 `nsh.json` 的 `hosts: ["127.0.0.1"]` 已允许本机后台的 HTTP 与 WebSocket 及动态端口。`network.sockets` 仅授权原始 TCP，不是 WebSocket 的额外权限。
+
+NSH 复用精确锁定版本的官方客户端与生成的 remote。认证引导、HTTP 与取消使用标准 `fetch`；当前 NSH 0.3.0 的标准 WebSocket 虽支持附加 headers，却[拒绝 Cookie / Authorization 握手头](../references/nsh/crates/nsh-core/src/runtime/websocket.rs)，原生实现也不共享 `fetch` 的 Cookie 会话。官方 dsh 的 `/api/remote.mux` 需要已取得的 Cookie，因此仅这条连接使用原生 `CookieWebSocket`，补足握手并拥有后续 I/O 的有界队列、关闭和释放。普通 WebSocket 使用标准 API；增加网络授权不能解除认证头限制。升级 NSH 或官方认证契约后重新实测，标准 API 能完成认证连接时移除该适配。
+
+token 引导、Cookie、Peer、订阅、游标、投影、审批答复和错误语义沿用上游。认证入口及返回状态按实际发行版验证，Cookie 按服务返回值管理，不硬编码名称。Waku 的手写 HTTP 信封、WebSocket 帧解析与统一 Driver 事件转换均不移植。
 
 ### 客户端目录与页面
 
@@ -222,6 +226,32 @@ frontend/
 
 主页面只有工作台与设置，通过 NSH `createNavStack` / `NavStack` / `NavPage` 导航。工作台采用 Bot 列表、持续对话、只读检查栏三栏；新建、Bot 编辑与修复、模型选择、审批及供应商编辑使用 NSH `Dialog`。页面切换保留工作台模型与草稿，后台连接归窗口生命周期；关闭审批弹窗只收起界面，待审批请求继续保留。组件和弹窗按所属页面收拢，不按 Web URL 增设路由目录。
 
+### NSH 原生能力的选型与复用
+
+客户端按「原生组件与标准模块 → 产品语义与样式组合 → 已核实缺口的最小自定义实现」选型。elements 文档定义控件行为，modules 文档定义运行时能力；按需求查阅[根参考目录](../AGENTS.md#nsh-原生能力参考目录)，再核对安装版 `.nsh/types/` 与实际平台。参考提交的能力清单不等于当前发行版全部可用。
+
+| 客户端需求 | 优先复用的 NSH 能力 | 产品代码负责 |
+| --- | --- | --- |
+| 按钮、开关与单选 | `nsh/base` 的 `Button`、`Switch`、`Checkbox`、`RadioGroup` 等 | 操作文案、业务禁用条件与样式；键盘激活、焦点、可访问性与控件状态沿用原生契约 |
+| 编辑弹窗、简单确认、锚定菜单与提示 | `Dialog`、`AlertDialog`、`Popover`、`Menu` / `ContextMenu`、`Tooltip`、`Toast` | 按交互选择组件；审批内容、允许/拒绝及未决状态仍归应用层 |
+| 导航、设置分区与三栏布局 | `NavStack` / `NavPage`；页内分区用 `Tabs` / `Tab`，按需展开用 `Collapsible`；需要拖动分栏时用 `ResizablePanelGroup` / `ResizablePanel` | 两个主页面、分区选择与栏内内容；需要调整宽度时组合原生分栏，不自建拖拽和尺寸约束引擎 |
+| 对话列表、复制与文本选择 | `List`、`View selectable`、`Clipboard` | 稳定消息标识、用户滚动意图与复制动作；虚拟化、列表位置保持与选择行为沿用原生能力 |
+| 输入、快捷键与焦点 | `Input`、`keymap`、元素 focus / ref；移动端再按需用 `env(keyboard-inset-height)` / `env(safe-area-inset-*)` | 草稿、发送动作与业务快捷键作用域；绑定与订阅随所属界面释放 |
+| 外观、桌面窗口与菜单 | 主题 token、`colorScheme` / `setColorScheme`、`nsh/desktop` 的 `Window` / `titleBar` / `Menu` | 界面偏好与产品命令；窗口操作不接管后台进程生命周期 |
+| 文件、命令、HTTP 与普通 WebSocket | 标准模块与全局 API，详见本节连接与原生适配说明 | 产品规则、边界校验、异步归属与权限声明 |
+
+`ui/shared` 只集中复用的产品样式与组合，例如统一按钮外观、带标题和关闭动作的 `DialogFrame`；控件行为继续由 NSH 持有。无需给每个原生组件增加一层同名包装，也不建立平行的通用控件库、导航器、弹窗管理器或系统 API 门面。已有 `DialogFrame` 组合原生 `Dialog` 的方向保留。当前待收敛的实现差异是：共享 `Button` 由 `View role="button"` 改为组合 `nsh/base.Button`；新建 Bot 的模板与模型单选组合 `RadioGroup` / `Radio`；设置页分区按钮组合 `Tabs` / `Tab`。业务选择、不可用原因和错误提示仍由应用层持有，迁移时保留响应式绑定、测试标识与异步失败语义。
+
+首版继续用 `Text` 展示纯文本。后续蓝图增加 Markdown、代码或差异展示时再选 `TextView`、`Editor`、`DiffView`，不为原生已有的展示能力引入 WebView 或另建解析渲染栈；`RichEditor`、`Dock` 与附件 API 仅在对应产品需求成立时引入。
+
+### 状态、存储与宿主的能力边界
+
+NSH `signal` / `computed` / `effect` / `cleanup` 管理响应式与资源生命周期；应用层继续持有 Bot、连接换代、初始化核对、输入确认与设置 revision 等产品状态。原生组件内部的焦点、按压、弹层和布局状态不再复制一套通用状态机；组件的关闭、卸载与页面返回不能隐式停止后台或撤回已接纳工作。
+
+[`Storage`](../references/nsh/website/modules/nsh.md#storage) 适合主题、栏宽与上次选择等可恢复的非关键界面偏好。其文档契约是每 App 最多 5 MB、内存读取与后台批量落盘，损坏文件会保留后以空存储启动；不能据此承诺关键记录已持久保存。Bot 注册表、草稿、初始化记录及未确认输入继续使用现有标准文件 API 和单记录串行事务，保持 `~/.dsh-bot` 的明确路径、I/O 错误语义与后续 Bridge 读取边界，不迁入 `Storage`；密钥仍归上游 credentials。
+
+[`host`](../references/nsh/website/modules/nsh.md#host) 是 NSH 与嵌入它的原生 App 或 Web 页面之间的调用和事件通道，本身不提供后台服务登记、Unix socket 或跨进程常驻能力。它与本项目的 `apps/host` / `HostControl` 职责不同，不因名称相同替换现有控制通道，也不通过它扩张通用产品 RPC。`nsh/desktop.Window` 管理 UI 窗口，标准 `process` 管理调用方发起的普通命令；App 身份、UI 退出后的 dsh 所有权与后续 Bridge 仍由后台宿主持有。
+
 ### 客户端原生适配
 
 `apps/client/src/` 只承载 NSH 进程内的本地适配，按职责组织：
@@ -229,9 +259,9 @@ frontend/
 ```text
 apps/client/src/
 ├── lib.rs                  # 原生 Module / Class 注册与兼容导出
-├── transport/
-│   ├── mod.rs              # Transport Interface
-│   └── socket.rs           # 认证 WebSocket、有界队列与连接释放
+├── cookie_websocket/
+│   ├── mod.rs              # CookieWebSocket：仅携 Cookie 的本机 dsh WebSocket
+│   └── socket.rs           # 握手、有界队列与连接释放
 └── host_control/
     ├── mod.rs              # HostControl Interface、控制端点与请求
     ├── service.rs          # SMAppService 的动态库调用与 OS 状态返回
@@ -242,7 +272,9 @@ apps/client/src/
 
 `frontend/application/backend/service.ts` 与 `host.ts` 负责服务登记、系统批准、旧服务冲突与明确启动的产品规则；`frontend/infrastructure/host/control.ts` 使用标准进程 API 查询旧服务与激活已登记宿主。原生 `HostControl` 只补足 Unix socket、状态订阅与 SMAppService 调用，返回 OS 状态，由 TypeScript 解释操作顺序和用户提示。
 
-`Transport` 仅创建认证 WebSocket；`Socket` 与 `HostWatch` 各自拥有任务、队列和释放逻辑；控制通道的帧与响应校验复用宿主共享协议。原生 `HostControl.serviceAvailable` 只报告 App 内系统服务组件是否存在，由 TypeScript 结合显式开发 socket 决定使用哪条后台路径。
+`CookieWebSocket` 只连接回环地址的 `/api/remote.mux`，接收 TypeScript 取得的 Cookie，不提供通用 HTTP、普通 WebSocket、认证引导或凭据存储；`Socket` 与 `HostWatch` 各自拥有任务、队列和释放逻辑；控制通道的帧与响应校验复用宿主共享协议。原生 `HostControl.serviceAvailable` 只报告 App 内系统服务组件是否存在，由 TypeScript 结合显式开发 socket 决定使用哪条后台路径。
+
+原生适配以已验证的能力缺口为范围：Cookie 握手、Unix socket / 有界状态订阅与 `SMAppService` 调用。新增或扩张接口时记录所查标准能力、安装版与平台、不能满足的具体契约及资源释放方式；升级后重新核对这些缺口。标准能力满足原契约时同时迁移调用方并删除适配，避免保留两套实现；类型存在或权限放开本身不构成替代验证。
 
 旧 LaunchAgent 入口的产品策略暂留在 `frontend/application/backend/legacy-policy.ts`，标准系统适配放在 `frontend/infrastructure/host/legacy/`，不再保留 Rust `legacy_backend` 或原生 `probeUrl` / `startBackend`。该兼容模块通过 NSH 标准文件与进程 API 执行原有发现、版本核对、安装和明确启动；发现通过固定系统命令流式扫描旧日志，只接受当前 PID、固定版本与最近启动标记对应的 ready 行，避免整读日志的大小上限。启动脚本与版本从 `scripts/backend` 的同一份源生成并打入客户端 bundle，不在成品运行时查找源码目录。兼容入口保留到签名成品通过迁移验收，不新增规则或迁入宿主。
 

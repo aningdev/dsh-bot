@@ -3,6 +3,7 @@ import { join } from 'path'
 import { run as runProcess } from 'process'
 import { readLaunchLog } from './discovery'
 import { installLegacyBackend } from './installation'
+import { launchTarget } from '../launchd'
 export { expectedVersion } from './assets'
 
 const label = 'dev.dshbot.backend'
@@ -17,22 +18,15 @@ async function run(command: string, args: string[]) {
   return runProcess(command, args, { timeoutMs: 10000 })
 }
 
-async function target(): Promise<{ domain: string; job: string }> {
-  const user = await run('/usr/bin/id', ['-u'])
-  if (user.code !== 0 || !/^\d+$/.test(user.stdout.trim())) throw new Error('无法读取当前用户标识')
-  const domain = `gui/${user.stdout.trim()}`
-  return { domain, job: `${domain}/${label}` }
-}
-
 async function inspectJob(): Promise<string | undefined> {
-  const result = await run('/bin/launchctl', ['print', (await target()).job])
+  const result = await run('/bin/launchctl', ['print', (await launchTarget(label)).job])
   if (result.code === 0) return result.stdout
   if (result.stderr.includes('Could not find service')) return undefined
   throw new Error('无法查询旧后台的系统登记状态')
 }
 
 async function activate(): Promise<void> {
-  const { domain, job } = await target()
+  const { domain, job } = await launchTarget(label)
   const loaded = await inspectJob()
   if (loaded !== undefined && /^\s*pid = \d+\s*$/m.test(loaded)) return
   const result = loaded === undefined

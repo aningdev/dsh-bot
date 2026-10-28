@@ -23,7 +23,7 @@
 
 ## NSH 原生能力参考目录
 
-实现或调整客户端功能前，先按下表查阅 `references/nsh/website` 中对应的 elements 与 modules 文档，确认已有组件、行为、API 及平台边界后再选方案；优先组合 NSH 原生能力。新增自定义控件或 Rust 接口时，说明已核对的原生能力及具体缺口，并遵守[客户端约束](apps/client/AGENTS.md)中的安装版类型核对、权限与实际运行验证要求。以下是参考提交的文档索引，API 可用性以实际 CLI 生成的 `.nsh/types/` 与运行验证为准。
+实现或调整客户端功能前，先按下表查阅 `references/nsh/website` 中对应的 elements 与 modules 文档，确认已有组件、行为、API 及平台边界后再选方案；选型顺序为原生组件与标准模块 → 产品语义与样式组合 → 已核实缺口的最小自定义实现。新增自定义控件或 Rust 接口时，说明已核对的原生能力及具体缺口，并遵守[客户端约束](apps/client/AGENTS.md)中的安装版类型核对、权限与实际运行验证要求；具体职责及选型规则见[架构文档](docs/ARCHITECTURE.md#nsh-原生能力的选型与复用)。以下是参考提交的文档索引，API 可用性以实际 CLI 生成的 `.nsh/types/` 与运行验证为准。
 
 ### Elements：按界面需求查组件
 

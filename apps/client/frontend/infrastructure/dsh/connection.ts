@@ -114,7 +114,7 @@ export class Connection {
     } catch (error) {
       throw new Error(`认证请求失败：${readableError(error).replaceAll(token, '<已隐藏>')}`)
     }
-    const cookie = response.headers.get('set-cookie')?.split(';')[0]
+    const cookie = response.headers.getSetCookie().map(value => value.split(';', 1)[0]).filter(Boolean).join('; ')
     if (response.status !== 302 || !cookie) throw new Error(`认证失败：后台返回 ${response.status}，未取得 Cookie`)
     if (epoch !== this.epoch) throw new Error('连接已被新的宿主状态替代')
     const ctx: any = new Context()

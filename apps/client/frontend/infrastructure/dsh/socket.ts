@@ -1,27 +1,34 @@
-import { Transport, type Socket } from 'dsh-client/native'
+import { CookieWebSocket, type Socket } from 'dsh-client/native'
+import type { ConnectionWebSocket } from '@deepseek-ai/dsh-client-connection/client'
 
-// Browser-shaped carrier only; all Mux/RPC logic is the official client's.
-export class AuthenticatedSocket {
+// NSH supports ws/wss, but its standard handshake API rejects Cookie headers.
+// Adapt only that gap; HTTP uses fetch and all Mux/RPC logic stays in the official client.
+export class AuthenticatedSocket extends EventTarget {
+  declare addEventListener: EventTarget['addEventListener'] & ConnectionWebSocket['addEventListener']
+  declare removeEventListener: EventTarget['removeEventListener'] & ConnectionWebSocket['removeEventListener']
   readyState = 0
   private socket?: Socket
-  private listeners = new Map<string, Set<(event: any) => void>>()
   constructor(url: string, cookie: string) {
-    Transport.connect(url, cookie).then(async socket => {
+    super()
+    CookieWebSocket.connect(url, cookie).then(async socket => {
       if (this.readyState !== 0) { socket.close(); socket.dispose(); return }
       this.socket = socket
       this.readyState = 1
-      this.emit('open', {})
+      this.dispatchEvent(new Event('open'))
       try {
-        while (this.readyState === 1) this.emit('message', { data: await socket.read() })
+        while (this.readyState === 1) {
+          const data = await socket.read()
+          if (this.readyState === 1) this.dispatchEvent(Object.assign(new Event('message'), { data }))
+        }
       } catch {
-        if (this.readyState === 1) this.emit('error', {})
+        if (this.readyState === 1) this.dispatchEvent(new Event('error'))
       } finally {
         this.readyState = 3
         this.socket = undefined
         socket.dispose()
-        this.emit('close', {})
+        this.dispatchEvent(new Event('close'))
       }
-    }, () => { this.readyState = 3; this.emit('error', {}); this.emit('close', {}) })
+    }, () => { this.readyState = 3; this.dispatchEvent(new Event('error')); this.dispatchEvent(new Event('close')) })
   }
   send(data: string) {
     if (this.readyState !== 1 || !this.socket) throw new Error('Socket is not open')
@@ -32,10 +39,4 @@ export class AuthenticatedSocket {
     this.readyState = 2
     this.socket?.close()
   }
-  addEventListener(type: string, listener: (event: any) => void) {
-    if (!this.listeners.has(type)) this.listeners.set(type, new Set())
-    this.listeners.get(type)!.add(listener)
-  }
-  removeEventListener(type: string, listener: (event: any) => void) { this.listeners.get(type)?.delete(listener) }
-  private emit(type: string, event: any) { for (const listener of this.listeners.get(type) ?? []) listener(event) }
 }

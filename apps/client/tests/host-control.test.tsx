@@ -14,10 +14,13 @@ test('宿主经 NSH 提供连接；两个窗口共享进程，窗口关闭不停
     const before = JSON.parse(await HostControl.request('status', ''))
     expect(before.phase).toBe('ready')
     expect(before.url).toBe(undefined)
-    // Official authentication/model RPC run in a real network-enabled NSH app.
+    // Verify the standard Cookie-header restriction and official authentication
+    // in the same real network-enabled NSH app, before exercising host restarts.
     let probe = await open('./host-probe.tsx', options)
     windows.push(probe)
-    await probe.waitFor('text:official-ready', { timeout: 30000 }); probe.dispose()
+    await probe.waitFor('text:official-ready', { timeout: 30000 })
+    expect(probe.texts().includes('standard-cookie-header-blocked')).toBe(true)
+    probe.dispose()
     const first = await open('../App.tsx', options)
     windows.push(first)
     const second = await open('../App.tsx', options)
