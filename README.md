@@ -6,7 +6,7 @@
 
 ## 开发与运行
 
-需要 macOS、Bun、NSH 0.2.0，以及已安装的官方 dsh。当前仅支持经本机验证的 `0.2.1-rc.3`，精确值来自 [pinned-version.json](scripts/backend/pinned-version.json)，启动与实际进程发现都会检查版本，不自动升级或降级。Node 版本见 [`.node-version`](.node-version)。
+需要 macOS、Bun、NSH 0.3.0，以及已安装的官方 dsh。当前仅支持经本机验证的 `0.2.1-rc.3`，精确值来自 [pinned-version.json](scripts/backend/pinned-version.json)，启动与实际进程发现都会检查版本，不自动升级或降级。Node 版本见 [`.node-version`](.node-version)。
 
 ```sh
 bun install --frozen-lockfile
@@ -38,7 +38,7 @@ bun run package:macos:host
 
 预览与原入口使用同一 `~/.dsh-bot`，启动前会检查旧 `dev.dshbot.backend` 服务；若仍注册则拒绝接管。**实际服务启动验收通过后才能切换**：先退出旧客户端并显式卸载旧服务（`bun run backend -- uninstall`），不会自动迁移或同时启动第二套后台。需要回退时，在预览中点击「停止全部 Bot 并卸载后台服务」，关闭预览后再使用原入口；不要并行运行两种入口。
 
-`test:host-client` 在临时数据根使用真实官方 dsh 与真实 NSH，覆盖只读首次连接、明确启动、存活窗口跨宿主重启、generation 切换后重新认证，以及手动停止后重开不自动启动。该测试不注册实际系统服务；预览包只作 ad-hoc 签名，不代表系统批准、正式签名或升级验收。
+`test:host-client` 在临时数据根使用真实官方 dsh 与真实 NSH，覆盖只读首次连接、明确启动、存活窗口跨宿主重启、generation 切换后重新认证，以及手动停止后重开不自动启动。该测试同时验证标准 WebSocket 的 Cookie 握手限制和原生适配后的官方认证连接，不注册实际系统服务；预览包只作 ad-hoc 签名，不代表系统批准、正式签名或升级验收。
 
 ## 单机功能
 
@@ -68,7 +68,9 @@ bun run test:package
 
 `test:e2e` 在临时数据根启动真实官方 `dsh web`，使用真实 NSH 运行界面，并连接外部确定性 Messages 服务；不读取用户模型密钥，也不向后台注入测试插件。覆盖注册表、初始化与恢复、丢失响应、队列与审批、归档、设置和凭据。注册表与旧入口安装测试通过独立 NSH 夹具调用生产文件和进程 API，验证原子保存、官方 CLI 版本检查、日志权限、超过 64 MiB 的旧日志发现与启动资源打包，不登记系统服务；数据放在 `~/.dsh-bot-e2e/` 下的独立运行目录，并在结束后清理。`prepare:sdk` 从精确锁定的公开 npm 包生成客户端 SDK，同时从 `scripts/backend` 生成旧入口所需的版本与脚本资源，不导入参考子模块源码。
 
-macOS 成品为 `dist/macos/DSH Bot.app`，只包含 NSH 客户端与原生传输，使用用户安装的官方后台。构建提供本机 ad-hoc 签名；Developer ID 签名、公证、Intel macOS、真实供应商与移动端均需分别验收。本地任务和验收记录在 `.scratch/nsh-rebuild`，不发布 GitHub issue。
+NSH 标准 API 负责 HTTP / HTTPS 与普通 WS / WSS；当前 `127.0.0.1` 网络授权已覆盖本机后台。原生 `CookieWebSocket` 仅用于标准握手 API 不允许设置 Cookie 的认证连接，具体边界见[架构文档第 7 节](docs/ARCHITECTURE.md#7-通信与配置-ui)。
+
+macOS 成品为 `dist/macos/DSH Bot.app`，包含 NSH 客户端及必要的原生适配，使用用户安装的官方后台。构建提供本机 ad-hoc 签名；Developer ID 签名、公证、Intel macOS、真实供应商与移动端均需分别验收。本地任务和验收记录在 `.scratch/nsh-rebuild`，不发布 GitHub issue。
 
 ## 参考资料
 

@@ -21,6 +21,51 @@
 - 多端只经宿主内 Bridge 出站，Relay 独立放 `apps/relay`，只转发密文、不持 owner 凭据；后台保持本机访问。沿用官方协议与 transport 抽象，Bot 只读快照另设契约，不增加注册表同步或第二份权威执行状态。
 - 根目录用 Bun 管理 JS 工作区与唯一 `bun.lock`，Rust 依赖由 Cargo 管理。Harness 直接依赖精确锁定同一发行版，共享 Host 服务使用兼容 peer 契约。`references` 是固定提交的参考子模块；产品安装、导入、类型配置与打包消费公开产物，不依赖参考源码。
 
+## NSH 原生能力参考目录
+
+实现或调整客户端功能前，先按下表查阅 `references/nsh/website` 中对应的 elements 与 modules 文档，确认已有组件、行为、API 及平台边界后再选方案；优先组合 NSH 原生能力。新增自定义控件或 Rust 接口时，说明已核对的原生能力及具体缺口，并遵守[客户端约束](apps/client/AGENTS.md)中的安装版类型核对、权限与实际运行验证要求。以下是参考提交的文档索引，API 可用性以实际 CLI 生成的 `.nsh/types/` 与运行验证为准。
+
+### Elements：按界面需求查组件
+
+总入口：[元素与通用 props](references/nsh/website/elements/index.md)（样式、事件、焦点、无障碍与 ref 等公共契约）。
+
+| 实现需求 | 优先查阅 |
+| --- | --- |
+| 基础容器、文本、条件与循环 | [View](references/nsh/website/elements/view.md)、[Text](references/nsh/website/elements/text.md)、[If / Each](references/nsh/website/elements/control-flow.md) |
+| 滚动、长列表、跨文本选择 | [Scroll](references/nsh/website/elements/scroll.md)、[List](references/nsh/website/elements/list.md)、[Text selection](references/nsh/website/elements/text-selection.md) |
+| 输入、焦点、键盘避让与安全区 | [Input](references/nsh/website/elements/input.md)、[Keyboard](references/nsh/website/elements/keyboard.md)、[Safe area](references/nsh/website/elements/safe-area.md) |
+| 按钮、表单选择与数值调整 | [Button](references/nsh/website/elements/button.md)、[Checkbox](references/nsh/website/elements/checkbox.md)、[Radio](references/nsh/website/elements/radio.md)、[Switch](references/nsh/website/elements/switch.md)、[Slider](references/nsh/website/elements/slider.md) |
+| 页面导航、标签页与折叠区域 | [NavStack / NavPage](references/nsh/website/elements/nav-stack.md)、[Tabs](references/nsh/website/elements/tabs.md)、[Collapsible](references/nsh/website/elements/collapsible.md) |
+| 弹窗、系统确认与边缘面板 | [Dialog](references/nsh/website/elements/dialog.md)、[AlertDialog](references/nsh/website/elements/alert-dialog.md)、[Sheet](references/nsh/website/elements/sheet.md) |
+| 浮层、锚定弹出、菜单与提示 | [Overlay](references/nsh/website/elements/overlay.md)、[Popover](references/nsh/website/elements/popover.md)、[Menu / ContextMenu](references/nsh/website/elements/menu.md)、[Tooltip](references/nsh/website/elements/tooltip.md)、[Toast](references/nsh/website/elements/toast.md) |
+| Markdown / HTML 展示、代码、差异与富文本编辑 | [TextView](references/nsh/website/elements/text-view.md)、[Editor](references/nsh/website/elements/editor.md)、[DiffView](references/nsh/website/elements/diff-view.md)、[RichEditor](references/nsh/website/elements/rich-editor.md) |
+| 表格、图表与进度反馈 | [Table](references/nsh/website/elements/table.md)、[DataTable](references/nsh/website/elements/data-table.md)、[Plot](references/nsh/website/elements/plot.md)、[Progress](references/nsh/website/elements/progress.md) |
+| 图片、绘图、网页嵌入与视频 | [Image](references/nsh/website/elements/image.md)、[Canvas](references/nsh/website/elements/canvas.md)、[WebView](references/nsh/website/elements/web-view.md)、[Video](references/nsh/website/elements/video.md) |
+| 可调整分栏与停靠工作区 | [Resizable](references/nsh/website/elements/resizable.md)、[Dock](references/nsh/website/elements/dock.md) |
+
+### Modules：按运行时能力查 API
+
+总入口：[模块分层与导入位置](references/nsh/website/modules/index.md)。元素页查 props、事件与 ref；模块页查导出、函数签名与运行语义。
+
+| 实现需求 | 优先查阅 |
+| --- | --- |
+| 响应式、生命周期、上下文、动画、设备信息、手势、快捷键与无障碍 | [nsh](references/nsh/website/modules/nsh.md)：`signal`、`computed`、`effect`、`cleanup`、`context`、动画、`PanResponder`、`keymap` 等 |
+| 剪贴板、媒体选择、键值存储、宿主通道与原生扩展注册 | 同页的 [Clipboard](references/nsh/website/modules/nsh.md#clipboard)、[Picker](references/nsh/website/modules/nsh.md#picker)、[Storage](references/nsh/website/modules/nsh.md#storage)、[host](references/nsh/website/modules/nsh.md#host)、[nativeComponent / nativeModule](references/nsh/website/modules/nsh.md#nativecomponent-and-nativemodule) |
+| 基础组件、导航状态、系统弹窗与主题 | [nsh/base](references/nsh/website/modules/nsh-base.md)：组件行为、`createNavStack`、`AlertDialog` 等；具体组件同时查 elements 对应页 |
+| 桌面窗口、标题栏、应用菜单与系统上下文菜单 | [nsh/desktop](references/nsh/website/modules/nsh-desktop.md)：`Window`、`titleBar`、`Menu`（与 `nsh/base` 的菜单组件区分） |
+| 移动端标签栏、键盘附件与 Android 返回键 | [nsh/mobile](references/nsh/website/modules/nsh-mobile.md)：`TabBar`、`InputAccessoryView`、`BackHandler` |
+| 列表、图片、画布、网页与视频的专属 API | [List](references/nsh/website/modules/nsh-list.md)、[Image](references/nsh/website/modules/nsh-image.md)、[Canvas](references/nsh/website/modules/nsh-canvas.md)、[WebView](references/nsh/website/modules/nsh-webview.md)、[Video](references/nsh/website/modules/nsh-video.md) |
+| 文件、路径、进程、环境、TCP / WebSocket、编码、加密与压缩 | [标准模块](references/nsh/website/modules/standard-modules.md)：`fs/promises`、`path`、`process`、`os`、`net`、`websocket`、`buffer`、`crypto`、`url`、`zlib`、`console`；核对支持子集、权限与资源限制 |
+| HTTP、流、取消、URL、定时器与国际化 | [全局 API](references/nsh/website/modules/globals.md)：`fetch`、Streams、`AbortController`、`URL`、timers、`Intl` 等 |
+| 样式字段、主题与 Tailwind 支持范围 | [Style reference](references/nsh/website/modules/style-reference.md)、[Tailwind reference](references/nsh/website/modules/tailwind-reference.md) |
+
+### 配套指南：按实现环节补读
+
+- 组件与状态：[JSX 与组件](references/nsh/website/docs/jsx-and-components.md)、[响应式](references/nsh/website/docs/reactivity.md)、[编码指南](references/nsh/website/docs/coding-guides.md)。
+- 布局与交互：[布局](references/nsh/website/docs/layout.md)、[样式](references/nsh/website/docs/styling.md)、[滚动](references/nsh/website/docs/scrolling.md)、[列表](references/nsh/website/docs/lists.md)、[表单与键盘](references/nsh/website/docs/forms-and-keyboard.md)、[导航](references/nsh/website/docs/navigation.md)、[手势](references/nsh/website/docs/touch-and-gestures.md)、[无障碍](references/nsh/website/docs/accessibility.md)。
+- 系统接入与能力缺口核对：[网络](references/nsh/website/docs/networking.md)、[沙箱与 capabilities](references/nsh/website/docs/sandbox-and-capabilities.md)、[平台差异](references/nsh/website/docs/platform-specific.md)、[原生组件与模块](references/nsh/website/docs/native-components.md)。
+- 调试与交付：[测试与 trace](references/nsh/website/docs/testing-and-trace.md)、[开发与调试](references/nsh/website/docs/dev-server-and-debugging.md)、[CLI](references/nsh/website/docs/cli.md)、[打包](references/nsh/website/docs/packaging.md)。中文文档在同路径的 `website/zh-CN/` 下，交互示例在 [demos](references/nsh/website/demos/)。
+
 ## 异步、协议与持久化
 
 - 跨进程输入由接收端做运行时校验；TypeScript 类型和 Rust 类型不能替代边界校验。共享协议集中定义与校验，新增操作同时核对调用方、接收方和失败语义；公开状态与只读快照不携带认证 token。
