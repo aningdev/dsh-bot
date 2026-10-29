@@ -48,6 +48,26 @@ impl Drop for Host {
     }
 }
 #[test]
+fn device_control_pages_and_revokes_persistent_grants() {
+    use dsh_host::bridge::device_store::DeviceStore;
+    let mut host = Host::new("ready");
+    let store = DeviceStore::new(host.root.join("host/devices"));
+    for i in 0..65 { store.authorize([i; 32]).unwrap(); }
+    let socket = host.root.join("host/control.sock");
+    let list = |cursor| call(&socket, &json!({"version":1,"id":"devices","operation":"listDevices","cursor":cursor})).unwrap();
+    let first = list(0);
+    assert_eq!(first["devices"].as_array().unwrap().len(), 64);
+    assert_eq!(first["nextCursor"], 64);
+    assert_eq!(list(64)["devices"].as_array().unwrap().len(), 1);
+    let key = [5u8; 32];
+    call(&socket, &json!({"version":1,"id":"revoke","operation":"revokeDevice","deviceKey":key})).unwrap();
+    assert_eq!(list(0)["devices"][5]["revoked"], true);
+    assert!(call(&socket, &json!({"version":1,"id":"bad","operation":"revokeDevice","deviceKey":[1]})).is_err());
+    host.crash_host(); host.launch();
+    assert_eq!(list(0)["devices"][5]["revoked"], true);
+}
+
+#[test]
 fn attach_is_read_only_until_user_start_and_stop_survives_host_crash() {
     let mut host = Host::new("ready");
     assert_eq!(host.request("ensureDsh", Some("attach")).unwrap()["phase"], "stopped");

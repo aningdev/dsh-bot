@@ -21,6 +21,7 @@
         "@deepseek-ai/dsh-client-connection": "0.2.1-rc.3",
         "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
         "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.3",
+        "qrcode-generator": "2.0.4",
       },
     },
   },
@@ -240,6 +241,8 @@
     "node-addon-require-builtin-win32-ia32-msvc": ["node-addon-require-builtin-win32-ia32-msvc@0.1.9", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.9" }, "os": "win32", "cpu": "ia32" }, "sha512-N29P0kmIBT6hnkNNFYzxn+o9ydT6OYZe9RFAi8dSxV1rNSul1FlxtuKWYe8w2sQpbQGYuGDEtpOwdeFtq2iFTg=="],
 
     "node-addon-require-builtin-win32-x64-msvc": ["node-addon-require-builtin-win32-x64-msvc@0.1.9", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.9" }, "os": "win32", "cpu": "x64" }, "sha512-+i6N4A7m7txjbw8pDYESdWXiKO9EEVq0SzTzwPS0WZuV4F1MzQnaDJwJJnO7T6zAc0BvqHXBOkpharCrUjFhbQ=="],
+
+    "qrcode-generator": ["qrcode-generator@2.0.4", "", {}, "sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g=="],
 
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 

@@ -1,4 +1,5 @@
 //! Host lifecycle and local control. No Harness business calls or session state.
+pub mod bridge;
 mod config;
 pub mod dsh_process;
 pub mod host_control;

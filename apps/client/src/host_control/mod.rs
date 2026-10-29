@@ -47,6 +47,27 @@ impl HostControl {
         watch::open().await
     }
 
+    /// Transfer validated device-management requests to the same private Host socket.
+    /// Product decisions remain in TypeScript; neither this adapter nor `call`
+    /// retries an operation whose result is unknown.
+    pub async fn device_request(operation: String, args: String) -> Result<String, String> {
+        if !matches!(operation.as_str(), "listDevices" | "revokeDevice" | "startPairing" | "pairingStatus" | "decidePairing" | "cancelPairing") || args.len() > 4096 {
+            return Err("无效的设备管理请求".into());
+        }
+        let mut fields: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&args).map_err(|_| "无效的设备管理参数")?;
+        if fields.contains_key("version") || fields.contains_key("id") || fields.contains_key("operation") {
+            return Err("无效的设备管理参数".into());
+        }
+        fields.insert("version".into(), serde_json::json!(dsh_host::PROTOCOL));
+        fields.insert("id".into(), serde_json::json!(dsh_host::generation()?));
+        fields.insert("operation".into(), serde_json::json!(operation));
+        let socket = socket_path()?;
+        tokio::task::spawn_blocking(move || {
+            dsh_host::call(&socket, &serde_json::Value::Object(fields))
+                .and_then(|value| serde_json::to_string(&value).map_err(|e| e.to_string()))
+        }).await.map_err(|_| "设备管理任务中断，结果未确认".to_string())?
+    }
+
     /// Issue one validated lifecycle request. Unconfirmed requests are not retried.
     pub async fn request(operation: String, source: String) -> Result<String, String> {
         let socket = socket_path()?;

@@ -2,7 +2,7 @@
 
 基于 NSH 与 DeepSeek Harness 的本机 Bot 工作台。桌面客户端管理 Bot、持续对话、审批和模型设置；`apps/host` 的 Rust 宿主独占官方 `dsh web` 的生命周期，NSH 通过官方客户端直连 dsh。
 
-产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。开发与成品统一使用同一个 Host 实现，旧客户端 LaunchAgent 管理链和 `scripts/backend` 已删除。App 内的辅助程序通过 `SMAppService` 登记后台服务，原生适配仅补足 Cookie WebSocket、Unix socket 和系统服务调用；不设 Rust `ProductService`。Bridge、Relay 与移动端尚未实现。
+产品规则见[产品蓝图](docs/BLUEPRINT.md)，组件边界见[架构文档](docs/ARCHITECTURE.md)，概念见[术语表](GLOSSARY.md)。开发与成品统一使用同一个 Host 实现，旧客户端 LaunchAgent 管理链和 `scripts/backend` 已删除。App 内的辅助程序通过 `SMAppService` 登记后台服务，原生适配仅补足 Cookie WebSocket、Unix socket 和系统服务调用；不设 Rust `ProductService`。多端连接尚未完成；当前已有实验性的 Host 配对与设备授权、只读快照、部分请求校验和双向认证加密通道，以及 Rust Relay 在线帧转发。手机接入和 Bridge 业务链尚未实现，不能用于真实远程访问。未完成事项及验收条件见 [多端接入待办](docs/MULTI_DEVICE_TODO.md)，Relay 的运行与限制见 [apps/relay/README.md](apps/relay/README.md)。
 
 ## 开发与运行
 
@@ -10,13 +10,10 @@
 
 ```sh
 bun install --frozen-lockfile
-# 终端一：启动开发 Host，监听 ~/.dsh-bot/host/control.sock
-bun run host:dev
-# 终端二：启动客户端，显式连接开发 Host
 bun run dev
 ```
 
-开发 Host 不登记系统服务；退出 Host 终端会回收它管理的 dsh，关闭客户端窗口则不会。`bun run dev` 默认设置 `DSH_HOST_SOCKET=$HOME/.dsh-bot/host/control.sock`，也可显式指定其他开发 socket；没有 Host 或 App 服务组件时报告错误，不回退启动另一套后台。开发 Host 与成品使用同一数据根，不并行运行；Host 的单实例锁阻止两个新宿主同时接管，旧服务则须先按下文迁移。
+`bun run dev` 会启动或复用监听 `~/.dsh-bot/host/control.sock` 的开发 Host，再启动客户端；不会自动启动 dsh，仍需在界面中明确启动。关闭客户端窗口后，本次命令启动的 Host 继续运行；按 Ctrl+C 退出命令并回收该 Host 管理的 dsh。已存在的 Host 由其原有启动方管理，不由本次命令停止。开发 Host 不登记系统服务。显式指定 `DSH_HOST_SOCKET` 时须先启动对应 Host，命令只连接该端点。开发 Host 与成品使用同一数据根，不并行运行；Host 的单实例锁阻止两个新宿主同时接管，旧服务则须先按下文迁移。
 
 客户端包含三栏工作台与独立设置页。在「设置 → 后台」点击「启动官方后台」，随后在工作台新建 Bot、选择模板、工作区和默认模型；Bot 编辑、模型选择和工具审批通过弹窗完成。
 
@@ -64,7 +61,7 @@ bun run package:macos
 bun run test:package
 ```
 
-`test` 包含 Rust 宿主生命周期与控制协议、客户端连接竞态、注册表 I/O、服务登记与开发模式策略及 NSH 基础界面测试；不再执行旧后台安装或日志发现测试。连接竞态覆盖认证中换代、旧读取结果丢弃、关闭时清理及连接完成前断流；Host 测试覆盖并发启动失败与失败清理期间的请求归并。
+`test` 包含 Rust 宿主生命周期与控制协议、Relay 在线转发、客户端连接竞态、注册表 I/O、服务登记与开发模式策略及 NSH 基础界面测试；不再执行旧后台安装或日志发现测试。连接竞态覆盖认证中换代、旧读取结果丢弃、关闭时清理及连接完成前断流；Host 测试覆盖并发启动失败与失败清理期间的请求归并。
 
 `test:host-client` 在临时数据根使用真实官方 dsh 与真实 NSH，覆盖只读首次连接、明确启动、存活窗口跨宿主重启、generation 切换后重新认证，以及手动停止后重开不自动启动。它同时验证标准 WebSocket 的 Cookie 握手限制和原生适配后的官方认证连接，不登记实际系统服务，不能证明签名成品的系统批准或后台服务启动。
 

@@ -88,6 +88,11 @@ pub struct Request {
     pub id: String,
     pub operation: String,
     pub source: Option<String>,
+    pub device_key: Option<[u8; 32]>,
+    pub cursor: Option<usize>,
+    pub relay: Option<String>,
+    pub attempt_id: Option<String>,
+    pub approve: Option<bool>,
 }
 impl Request {
     pub fn validate(&self) -> Result<()> {
@@ -97,14 +102,106 @@ impl Request {
         if self.id.is_empty() || self.id.len() > 128 {
             return Err("Invalid request ID".into());
         }
-        match (self.operation.as_str(), self.source.as_deref()) {
-            ("ensureDsh", Some("attach" | "userStart")) => Ok(()),
-            ("status" | "watchStatus" | "connectionInfo" | "stopDsh" | "restartDsh", None) => {
-                Ok(())
-            }
-            _ => Err("Invalid lifecycle operation or source".into()),
+        let pairing_args_empty = self.relay.is_none() && self.attempt_id.is_none() && self.approve.is_none();
+        match (
+            self.operation.as_str(),
+            self.source.as_deref(),
+            self.device_key,
+            self.cursor,
+        ) {
+            ("ensureDsh", Some("attach" | "userStart"), None, None) if pairing_args_empty => Ok(()),
+            ("status" | "watchStatus" | "connectionInfo" | "stopDsh" | "restartDsh", None, None, None) if pairing_args_empty => Ok(()),
+            ("listDevices", None, None, Some(cursor)) if pairing_args_empty && cursor <= 256 => Ok(()),
+            ("revokeDevice", None, Some(_), None) if pairing_args_empty => Ok(()),
+            ("startPairing", None, None, None) if self.relay.as_ref().is_some_and(|v| v.len() <= 2048) && self.attempt_id.is_none() && self.approve.is_none() => Ok(()),
+            ("pairingStatus", None, None, None) if pairing_args_empty => Ok(()),
+            ("decidePairing", None, Some(_), None) if self.relay.is_none() && self.approve.is_some() && self.attempt_id.as_deref().is_some_and(valid_id) => Ok(()),
+            ("cancelPairing", None, None, None) if self.relay.is_none() && self.approve.is_none() && self.attempt_id.as_deref().is_some_and(valid_id) => Ok(()),
+            _ => Err("Invalid host operation or arguments".into()),
         }
     }
+}
+
+fn valid_id(value: &str) -> bool {
+    use base64::Engine;
+    value.len() == 43 && base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(value).is_ok_and(|bytes| bytes.len() == 32)
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DevicePage {
+    pub devices: Vec<crate::bridge::device_store::Device>,
+    pub next_cursor: Option<usize>,
+}
+
+fn decode_device_response(text: &str, request: &Request) -> Result<serde_json::Value> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Response {
+        version: u32,
+        id: String,
+        ok: bool,
+        value: Option<serde_json::Value>,
+        error: Option<String>,
+    }
+    let response: Response = serde_json::from_str(text).map_err(|_| "Invalid host response")?;
+    if response.version != PROTOCOL || response.id != request.id {
+        return Err("Invalid host response".into());
+    }
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "Host operation failed".into()));
+    }
+    let value = response.value.ok_or("Host response value missing")?;
+    if request.operation == "revokeDevice" {
+        if value.as_object().is_none_or(|object| !object.is_empty()) {
+            return Err("Invalid device response".into());
+        }
+    } else if request.operation == "listDevices" {
+        let page: DevicePage =
+            serde_json::from_value(value.clone()).map_err(|_| "Invalid device response")?;
+        let cursor = request.cursor.ok_or("Invalid device cursor")?;
+        let mut keys = std::collections::HashSet::new();
+        if page.devices.len() > 64
+            || cursor + page.devices.len() > 256
+            || page.devices.iter().any(|device| !keys.insert(device.key))
+            || page
+                .next_cursor
+                .is_some_and(|next| page.devices.len() != 64 || next != cursor + 64 || next > 256)
+        {
+            return Err("Invalid device response".into());
+        }
+    } else {
+        use crate::bridge::pairing_manager::{PairingOffer, PairingStatus};
+        use sha2::{Digest, Sha256};
+        let check_status = |status: PairingStatus| -> Result<()> {
+            if !valid_id(&status.attempt_id) || request.attempt_id.as_ref().is_some_and(|id| id != &status.attempt_id)
+                || !matches!(status.phase.as_str(), "waiting" | "approval" | "saving" | "rejecting" | "cancelling" | "paired" | "rejected" | "expired" | "cancelled" | "uncertain" | "incomplete" | "failed")
+                || status.fingerprint != status.candidate.map(|key| format!("{:x}", Sha256::digest(key)))
+                || (matches!(status.phase.as_str(), "approval" | "saving" | "rejecting" | "paired" | "uncertain" | "incomplete") && status.candidate.is_none()) {
+                return Err("Invalid pairing response".into());
+            }
+            Ok(())
+        };
+        match request.operation.as_str() {
+            "startPairing" => {
+                let offer: PairingOffer = serde_json::from_value(value.clone()).map_err(|_| "Invalid pairing response")?;
+                if offer.version != 1 || !valid_id(&offer.attempt_id) || !valid_id(&offer.room) || !valid_id(&offer.host_key) || !valid_id(&offer.nonce) || offer.expires_at == 0 || Some(&offer.relay) != request.relay.as_ref()
+                    || crate::bridge::relay::relay_url(&offer.relay, &offer.room, &crate::bridge::relay::Side::Host).is_err() { return Err("Invalid pairing response".into()); }
+            }
+            "pairingStatus" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Current { current: Option<PairingStatus> }
+                let current: Current = serde_json::from_value(value.clone()).map_err(|_| "Invalid pairing response")?;
+                if let Some(status) = current.current { check_status(status)?; }
+            }
+            "decidePairing" | "cancelPairing" => check_status(serde_json::from_value(value.clone()).map_err(|_| "Invalid pairing response")?)?,
+            _ => return Err("Invalid host operation".into()),
+        }
+    }
+    Ok(value)
 }
 
 pub fn read_frame(reader: &mut impl BufRead) -> Result<String> {
@@ -155,6 +252,9 @@ pub fn call(socket: &Path, request: &serde_json::Value) -> Result<serde_json::Va
         .map_err(|e| e.to_string())?;
     writeln!(stream, "{request}").map_err(|e| e.to_string())?;
     let text = read_frame(&mut BufReader::new(stream))?;
+    if matches!(validated.operation.as_str(), "listDevices" | "revokeDevice" | "startPairing" | "pairingStatus" | "decidePairing" | "cancelPairing") {
+        return decode_device_response(&text, &validated);
+    }
     let status = decode_response(
         &text,
         &validated.id,

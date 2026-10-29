@@ -1,6 +1,8 @@
 //! Private socket listener, peer checks, request dispatch and status subscriptions.
-use super::{MAX_FRAME, PROTOCOL, Request, Status, read_frame};
-use crate::{Config, Result, dsh_process::Lifecycle, private_file};
+use super::{DevicePage, MAX_FRAME, PROTOCOL, Request, read_frame};
+use crate::{
+    Config, Result, bridge::{device_access::DeviceAccess, pairing_manager::PairingManager}, dsh_process::Lifecycle, private_file,
+};
 use fs2::FileExt;
 use std::{
     fs,
@@ -45,7 +47,11 @@ fn same_user(stream: &UnixStream) -> bool {
         }
     }
 }
-fn response(stream: &mut UnixStream, id: &str, value: Result<Status>) -> Result<()> {
+fn response<T: serde::Serialize>(
+    stream: &mut UnixStream,
+    id: &str,
+    value: Result<T>,
+) -> Result<()> {
     let value = match value {
         Ok(value) => serde_json::json!({"version":PROTOCOL,"id":id,"ok":true,"value":value}),
         Err(error) => serde_json::json!({"version":PROTOCOL,"id":id,"ok":false,"error":error}),
@@ -59,7 +65,13 @@ fn response(stream: &mut UnixStream, id: &str, value: Result<Status>) -> Result<
         .and_then(|_| stream.write_all(b"\n"))
         .map_err(|e| e.to_string())
 }
-fn handle(mut stream: UnixStream, lifecycle: Lifecycle, exit: &AtomicBool) -> Result<()> {
+fn handle(
+    mut stream: UnixStream,
+    lifecycle: Lifecycle,
+    devices: Arc<DeviceAccess>,
+    pairing: Arc<PairingManager>,
+    exit: &AtomicBool,
+) -> Result<()> {
     if !same_user(&stream) {
         return Err("Peer user rejected".into());
     }
@@ -77,6 +89,33 @@ fn handle(mut stream: UnixStream, lifecycle: Lifecycle, exit: &AtomicBool) -> Re
     match request.operation.as_str() {
         "status" => response(&mut stream, &request.id, Ok(lifecycle.snapshot())),
         "connectionInfo" => response(&mut stream, &request.id, lifecycle.connection_info()),
+        "listDevices" => {
+            let result = devices
+                .list()
+                .map_err(|_| "设备列表不可用".to_string())
+                .map(|all| {
+                    let cursor = request.cursor.unwrap();
+                    let page: Vec<_> = all.iter().skip(cursor).take(64).cloned().collect();
+                    let next_cursor =
+                        (cursor + page.len() < all.len()).then_some(cursor + page.len());
+                    DevicePage {
+                        devices: page,
+                        next_cursor,
+                    }
+                });
+            response(&mut stream, &request.id, result)
+        }
+        "revokeDevice" => {
+            let result = devices
+                .revoke(request.device_key.unwrap())
+                .map(|_| serde_json::json!({}))
+                .map_err(|_| "撤销设备结果未确认，请重新检查".to_string());
+            response(&mut stream, &request.id, result)
+        }
+        "startPairing" => response(&mut stream, &request.id, pairing.start(request.relay.unwrap())),
+        "pairingStatus" => response(&mut stream, &request.id, pairing.status().map(|current| serde_json::json!({"current": current}))),
+        "decidePairing" => response(&mut stream, &request.id, pairing.decide(&request.attempt_id.unwrap(), request.device_key.unwrap(), request.approve.unwrap())),
+        "cancelPairing" => response(&mut stream, &request.id, pairing.cancel(&request.attempt_id.unwrap())),
         "watchStatus" => {
             let mut previous = String::new();
             while !exit.load(Ordering::Acquire) {
@@ -128,6 +167,8 @@ pub fn serve(config: Config, exit: &'static AtomicBool) -> Result<()> {
     let listener = UnixListener::bind(&socket).map_err(|e| e.to_string())?;
     fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let devices = Arc::new(DeviceAccess::new(config.runtime().join("devices")));
+    let pairing = Arc::new(PairingManager::new(config.runtime(), devices.clone())?);
     let lifecycle = Lifecycle::new(config)?;
     let active = Arc::new(AtomicUsize::new(0));
     let monitor_lifecycle = lifecycle.clone();
@@ -149,8 +190,10 @@ pub fn serve(config: Config, exit: &'static AtomicBool) -> Result<()> {
                 }
                 let active = active.clone();
                 let lifecycle = lifecycle.clone();
+                let devices = devices.clone();
+                let pairing = pairing.clone();
                 thread::spawn(move || {
-                    let _ = handle(stream, lifecycle, exit);
+                    let _ = handle(stream, lifecycle, devices, pairing, exit);
                     active.fetch_sub(1, Ordering::AcqRel);
                 });
             }
@@ -163,6 +206,7 @@ pub fn serve(config: Config, exit: &'static AtomicBool) -> Result<()> {
     // Do not record a user stop for system termination; guardian still reaps dsh.
     drop(listener);
     let _ = fs::remove_file(socket);
+    pairing.shutdown();
     let _ = monitor.join();
     drop(lifecycle);
     drop(lock);
