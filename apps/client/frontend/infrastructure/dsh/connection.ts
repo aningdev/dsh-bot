@@ -15,12 +15,23 @@ export interface ApprovalRequest {
   signal?: AbortSignal
 }
 
+export interface CatalogReasoningEffort {
+  id: string
+  name: string
+  description?: string
+}
+
 export interface CatalogModel {
   provider: string
   providerName: string
   model: string
   name: string
   description?: string
+  /** Present when the provider advertises adjustable reasoning effort for this model. */
+  reasoning?: {
+    efforts: CatalogReasoningEffort[]
+    defaultEffort?: string
+  }
 }
 
 export interface CatalogPreset {
@@ -209,6 +220,16 @@ export class Connection {
           model: model.id,
           name: model.name,
           ...(model.description ? { description: model.description } : {}),
+          ...(model.reasoning?.efforts?.length ? {
+            reasoning: {
+              efforts: model.reasoning.efforts.map((effort: any) => ({
+                id: String(effort.id),
+                name: String(effort.name ?? effort.id),
+                ...(effort.description ? { description: String(effort.description) } : {}),
+              })),
+              ...(model.reasoning.defaultEffort ? { defaultEffort: String(model.reasoning.defaultEffort) } : {}),
+            },
+          } : {}),
         }))),
       failures: (value.failures ?? []).map((failure: any) => ({ name: failure.name, message: failure.message })),
     }

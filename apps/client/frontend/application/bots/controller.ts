@@ -55,5 +55,20 @@ export function createBotCommands(state: ConversationState, hooks: {
     } catch (error) { hooks.report(error) }
   }
 
-  return { saveNew, saveRename, toggleArchive, repair }
+  /** Template (“指令”) may change only before the Session pointer exists. */
+  async function changePreset(presetId: string) {
+    const bot = current()
+    const preset = presetId.trim()
+    if (!bot || !preset || bot.sessionId || bot.initializing || bot.archived) return
+    try {
+      const next = await updateBot(bot.id, latest => latest.sessionId || latest.initializing ? latest : { ...latest, preset })
+      hooks.replace(next)
+      formPreset.set(preset)
+      problem.set(''); unrecoverable.set(false)
+      note.set('模板已保存')
+      if (online()) await hooks.initialize(next)
+    } catch (error) { hooks.report(error) }
+  }
+
+  return { saveNew, saveRename, toggleArchive, repair, changePreset }
 }

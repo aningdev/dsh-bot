@@ -8,11 +8,12 @@ import { createInitialization } from './initialization'
 import { createApprovals } from './approvals'
 import { createBotCommands } from '../bots/controller'
 import { fault } from './fault'
-import { modelKey, projectedModel, splitModel } from '../models/selection'
+import { modelKey, projectedModel, projectedReasoningEffort, splitModel } from '../models/selection'
+import type { BotModel } from '../bots/types'
 
 export function createConversation(connection: Connection, backend: BackendConnection) {
   const state = createConversationState()
-  const { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, approvalDetails, unrecoverable } = state
+  const { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable } = state
   let selectionEpoch = 0, polling = false, disposed = false
   let stopFollow: (() => void) | undefined
   let draftWrites: Promise<unknown> = Promise.resolve()
@@ -99,6 +100,8 @@ export function createConversation(connection: Connection, backend: BackendConne
     formPreset.set(bot.preset)
     formWorkspace.set(bot.workspace)
     formModel.set(modelKey(bot.model))
+    currentModel.set(modelKey(bot.model))
+    currentReasoningEffort.set(bot.model.reasoningEffort)
     rename.set(bot.name)
     input.set(bot.draft?.text ?? '')
     if (bot.draft?.state === 'unknown' || bot.draft?.state === 'pending') {
@@ -120,6 +123,7 @@ export function createConversation(connection: Connection, backend: BackendConne
       const projection = await connection.projections(bot.sessionId!)
       if (disposed || epoch !== selectionEpoch) return
       currentModel.set(projectedModel(projection))
+      currentReasoningEffort.set(projectedReasoningEffort(projection))
       if (!projection) {
         unrecoverable.set(true)
         problem.set('对话无法恢复：后台找不到这段对话。登记指针已保留，不会自动重建；可另建 Bot。')
@@ -286,22 +290,40 @@ export function createConversation(connection: Connection, backend: BackendConne
   const visible = () => bots().filter(item => item.archived === archivedView())
   // Derived values stay functions: the component body runs once, only signal
   // reads inside JSX are re-evaluated when state changes.
-  async function changeModel(key: string) {
+  function resolveModelSelection(key: string, reasoningEffort?: string): BotModel {
+    const parts = splitModel(key)
+    const catalog = models().find(item => modelKey(item) === key)
+    const effort = reasoningEffort
+      ?? catalog?.reasoning?.defaultEffort
+      ?? (catalog && currentReasoningEffort() && catalog.reasoning?.efforts.some(item => item.id === currentReasoningEffort())
+        ? currentReasoningEffort()
+        : undefined)
+    return { ...parts, ...(effort ? { reasoningEffort: effort } : {}) }
+  }
+
+  async function changeModel(key: string, reasoningEffort?: string) {
     const bot = current()
-    if (!bot || !online() || bot.initializing || running() || pendingApproval()) return
+    if (!bot || !online() || bot.initializing || running() || pendingApproval() || bot.archived) return
     try {
-      const model = splitModel(key)
+      const model = resolveModelSelection(key, reasoningEffort)
       if (bot.sessionId) {
         await connection.selectModel({ sessionId: bot.sessionId, ...model })
         const projections = await connection.projections(bot.sessionId)
-        if (current()?.id === bot.id) currentModel.set(projectedModel(projections))
+        if (current()?.id === bot.id) {
+          currentModel.set(projectedModel(projections))
+          currentReasoningEffort.set(projectedReasoningEffort(projections) ?? model.reasoningEffort)
+        }
       } else {
         await draftWrites
         const fresh = await loadBot(bot.id)
         if (!fresh || fresh.sessionId || fresh.initializing) return
         const next = await updateBot(bot.id, latest => latest.sessionId || latest.initializing ? latest : { ...latest, model })
         replace(next)
-        if (current()?.id === bot.id) formModel.set(key)
+        if (current()?.id === bot.id) {
+          formModel.set(key)
+          currentModel.set(key)
+          currentReasoningEffort.set(model.reasoningEffort)
+        }
         if (!await initialize(next)) return
       }
       note.set('模型已保存')

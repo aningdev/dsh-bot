@@ -23,7 +23,6 @@ test('无凭据时明确引导配置，保存后可在原 Bot 选模型并发送
     await app.press('id:provider-close')
     await app.press('id:settings-close')
     expect(app.value('id:message-input')).toBe('你好')
-    await app.press('id:model-picker')
     await app.waitFor('id:select-model-deepseek-official-deepseek-flash', { timeout: 15000 })
     await app.press('id:select-model-deepseek-official-deepseek-flash')
     await app.waitUntil(() => visible(app, '对话标识：sess_'), { timeout: 15000 })

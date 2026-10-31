@@ -24,9 +24,9 @@ export function createConversationState() {
   const pendingApproval = signal<ApprovalRequest | undefined>(undefined)
   const approvalSessions = signal<string[]>([])
   const approvals = new Map<string, { request: ApprovalRequest; resolve: (value: ApprovalDecision) => void }>()
-  const queue = signal<any[]>([]), currentModel = signal('')
+  const queue = signal<any[]>([]), currentModel = signal(''), currentReasoningEffort = signal<string | undefined>(undefined)
   const approvalDetails = signal(false)
   const unrecoverable = signal(false)
-  return { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, creation, backendStatus, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, approvalDetails, unrecoverable }
+  return { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, creation, backendStatus, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable }
 }
 export type ConversationState = ReturnType<typeof createConversationState>

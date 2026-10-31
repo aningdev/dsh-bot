@@ -12,7 +12,6 @@ test('切换当前模型写入后台，不改 Bot 默认模型；重开仍显示
     await app.type('id:message-input', '测试当前模型'); await app.press('id:send')
     await app.waitFor('text:Fixture session', { timeout: 15000 })
     const before = JSON.parse(await readRecord((await listRecords())[0]!))
-    await app.press('id:model-picker')
     await app.press('label:DeepSeek-V4-Pro（DeepSeek）')
     await app.waitUntil(() => visible(app, '模型已保存'), { timeout: 15000 })
     expect(visible(app, '模型：DeepSeek-V4-Pro')).toBe(true)
