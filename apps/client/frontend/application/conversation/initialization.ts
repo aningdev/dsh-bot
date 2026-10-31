@@ -9,7 +9,7 @@ import { modelKey } from '../models/selection'
 export function createInitialization(connection: Connection, state: ConversationState, hooks: {
   waitDrafts(): Promise<unknown>; disposed(): boolean; watch(bot: BotRecord): void; replace(bot: BotRecord): void
 }) {
-  const { selectedId, models, presets, unrecoverable, problem, note, currentModel } = state
+  const { selectedId, models, presets, unrecoverable, problem, note, currentModel, currentReasoningEffort } = state
   let initLock: Promise<unknown> = Promise.resolve()
   /** Serializes Session initialization for this client; never two creates at once. */
   async function serialized<T>(work: () => Promise<T>): Promise<T> {
@@ -44,7 +44,12 @@ export function createInitialization(connection: Connection, state: Conversation
       })).then(pending => { hooks.replace(pending); return false }, () => false)
     }
     try {
-      await connection.selectModel({ sessionId, provider: intent.model.provider, model: intent.model.model })
+      await connection.selectModel({
+        sessionId,
+        provider: intent.model.provider,
+        model: intent.model.model,
+        ...(intent.model.reasoningEffort ? { reasoningEffort: intent.model.reasoningEffort } : {}),
+      })
     } catch (error) {
       return keep(`对话已创建，但设置默认模型失败：${readableError(error)}。修复前不能发送。`)
     }
@@ -67,6 +72,7 @@ export function createInitialization(connection: Connection, state: Conversation
       unrecoverable.set(false)
       note.set('对话已就绪')
       currentModel.set(modelKey(next.model))
+      currentReasoningEffort.set(next.model.reasoningEffort)
     }
     hooks.watch(next)
     return true

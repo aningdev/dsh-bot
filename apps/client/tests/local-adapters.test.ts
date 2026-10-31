@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { BackendService, type ServiceAccess } from '../frontend/application/backend/service'
 import { loadBot, loadBots, saveBot, updateBot } from '../frontend/application/bots/registry'
-import { listRecords, readRecord, writeRecord } from '../frontend/infrastructure/storage/records'
+import { defaultBotWorkspace, listRecords, readRecord, writeRecord } from '../frontend/infrastructure/storage/records'
+import { mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 
 let root: string
 let previous: string | undefined
@@ -45,6 +47,24 @@ test('overlapping draft, rename, archive and Session updates preserve each other
   expect((await loadBot('bot_a'))?.draft?.text).toBe('new draft')
   await expect(updateBot('missing', latest => latest)).rejects.toThrow('不存在或已损坏')
   expect(await readdir(root)).toEqual(['bot_a.json'])
+})
+
+test('defaultBotWorkspace is stable under the data root and unique per Bot', async () => {
+  expect(defaultBotWorkspace('bot_alpha')).toBe(join(root, '..', 'workspaces', 'bot_alpha'))
+  expect(defaultBotWorkspace('bot_beta')).not.toBe(defaultBotWorkspace('bot_alpha'))
+  expect(() => defaultBotWorkspace('../escape')).toThrow('标识不合法')
+  const workspace = defaultBotWorkspace('bot_stable')
+  await mkdir(workspace, { recursive: true })
+  await saveBot({
+    id: 'bot_stable', name: 'Stable', preset: 'default',
+    model: { provider: 'deepseek', model: 'flash', reasoningEffort: 'high' },
+    workspace, archived: false, createdAt: '2026-01-01T00:00:00Z',
+  })
+  expect(await loadBot('bot_stable')).toMatchObject({
+    workspace,
+    model: { provider: 'deepseek', model: 'flash', reasoningEffort: 'high' },
+  })
+  expect(existsSync(workspace)).toBe(true)
 })
 
 test('registry distinguishes missing records, corrupt JSON and filesystem failures', async () => {

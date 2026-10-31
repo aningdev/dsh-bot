@@ -28,6 +28,12 @@ export function botsRoot(): string {
   return root
 }
 
+/** Stable per-Bot default cwd next to the registry: `…/workspaces/<botId>`. */
+export function defaultBotWorkspace(botId: string): string {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(botId)) throw new Error('Bot 标识不合法')
+  return join(botsRoot(), '..', 'workspaces', botId)
+}
+
 /** Every record file name, sorted; a missing root is an empty registry. */
 export async function listRecords(): Promise<string[]> {
   try { return (await readdir(botsRoot())).filter(name => name.endsWith('.json')).sort() }

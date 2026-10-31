@@ -1,7 +1,7 @@
-import { homedir } from 'os'
 import { Connection, readableError } from '../../infrastructure/dsh/connection'
 import { TextHistory } from '../../infrastructure/dsh/history'
-import { loadBot, loadBots, updateBot, newRequestId, type BotRecord, type Draft } from '../bots/registry'
+import { loadBot, loadBots, updateBot, newBotId, newRequestId, type BotRecord, type Draft } from '../bots/registry'
+import { defaultBotWorkspace } from '../../infrastructure/storage/records'
 import type { BackendConnection, BackendState } from '../backend/connection'
 import { createConversationState } from './state'
 import { createInitialization } from './initialization'
@@ -22,7 +22,7 @@ export function createConversation(connection: Connection, backend: BackendConne
   const { initialize, ensurePreset } = createInitialization(connection, state, {
     waitDrafts: () => draftWrites, disposed: () => disposed, replace, watch,
   })
-  const botCommands = createBotCommands(state, { select, initialize, replace, report })
+  const botCommands = createBotCommands(state, { select, initialize, replace, report, resolveModel: resolveModelSelection })
   function backendChanged(status: BackendState) {
     state.backendStatus.set(status)
     online.set(status.phase === 'connected')
@@ -341,10 +341,14 @@ export function createConversation(connection: Connection, backend: BackendConne
 
   function beginCreate() {
     creating.set(true)
+    const id = newBotId()
+    state.creation.id.set(id)
     state.creation.name.set('')
     state.creation.preset.set(presets().find(item => item.isDefault)?.id ?? presets()[0]?.id ?? '')
-    state.creation.model.set(models().length ? modelKey(models()[0]!) : '')
-    state.creation.workspace.set(homedir())
+    const first = models()[0]
+    state.creation.model.set(first ? modelKey(first) : '')
+    state.creation.reasoningEffort.set(first?.reasoning?.defaultEffort)
+    state.creation.workspace.set(defaultBotWorkspace(id))
   }
   return { ...state, ...botCommands, selected, visible, blocked, modelKey, modelLabel, presetLabel,
     select, send, stop, persistDraft, recheck, changeModel, decide, refreshModels, beginCreate,

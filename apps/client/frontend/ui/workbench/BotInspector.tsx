@@ -9,7 +9,7 @@ const field = 'rounded-md border border-border bg-background p-2 text-sm text-fo
 export function BotInspector(props: { model: Workbench; edit(): void }) {
   const {
     damaged, online, problem, running, pendingApproval, currentModel, currentReasoningEffort,
-    selected, models, presets, rename, modelLabel, presetLabel, saveRename, changeModel, changePreset, recheck,
+    selected, models, presets, rename, formWorkspace, modelLabel, presetLabel, saveRename, changeModel, changePreset, changeWorkspace, recheck,
   } = props.model
 
   const activeKey = () => {
@@ -26,6 +26,8 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
   }
   const modelLocked = () => running() || !!pendingApproval() || !!selected()?.archived || !!selected()?.initializing || !online()
   const presetLocked = () => !!selected()?.sessionId || !!selected()?.initializing || !!selected()?.archived || !online()
+  const workspaceLocked = () => !!selected()?.sessionId || !!selected()?.initializing || !!selected()?.archived
+  const modelSectionTitle = () => selected()?.sessionId ? '当前对话模型' : '默认模型'
 
   return <Scroll class="w-80 border-l border-border bg-background">
     <View class="p-4 gap-4">
@@ -35,7 +37,6 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
             <Text class="flex-1 text-lg font-semibold text-foreground">{selected()!.name}</Text>
             <Button id="bot-settings" label="Bot 设置" onPress={props.edit} />
           </View>
-          <Text class="text-xs text-muted-foreground">工作区：{selected()!.workspace}</Text>
         </View>
 
         <View class="gap-2">
@@ -44,6 +45,22 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
           <Button id="bot-rename-save" label="保存名称"
             disabled={!rename().trim() || rename().trim() === selected()!.name}
             onPress={() => { void saveRename() }} />
+        </View>
+
+        <View class="gap-2">
+          <Text class="text-sm font-semibold text-foreground">工作区</Text>
+          {workspaceLocked()
+            ? <View class="gap-1 rounded-md bg-muted p-3">
+              <Text class="text-sm text-foreground">{selected()!.workspace}</Text>
+              <Text class="text-xs text-muted-foreground">初始化后工作区固定；需要不同目录请新建 Bot。工作区不是权限沙箱。</Text>
+            </View>
+            : <View class="gap-2">
+              <Input testID="inspector-workspace" class={field} accessibilityLabel="工作区" value={formWorkspace()} onChange={value => formWorkspace.set(value)} />
+              <Text class="text-xs text-muted-foreground">初始化前可指向外部项目目录；默认是每 Bot 的稳定目录。</Text>
+              <Button id="inspector-workspace-save" label="保存工作区"
+                disabled={!formWorkspace().trim() || formWorkspace().trim() === selected()!.workspace || !online()}
+                onPress={() => { void changeWorkspace(formWorkspace()) }} />
+            </View>}
         </View>
 
         <View class="gap-2">
@@ -63,8 +80,9 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
         </View>
 
         <View class="gap-2">
-          <Text class="text-sm font-semibold text-foreground">供应商与模型</Text>
+          <Text class="text-sm font-semibold text-foreground">{modelSectionTitle()}</Text>
           <Text class="text-xs text-muted-foreground">模型：{modelLabel(activeKey())}</Text>
+          <Text class="text-xs text-muted-foreground">切换从下一个执行步骤生效；已准备的步骤继续使用原模型。</Text>
           {models().length ? <View class="gap-1">
             {models().map(item => <Button id={`select-model-${item.provider}-${item.model}`}
               label={`${item.name}（${item.providerName}）`}
@@ -76,6 +94,7 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
 
         {efforts().length ? <View class="gap-2">
           <Text class="text-sm font-semibold text-foreground">推理强度</Text>
+          <Text class="text-xs text-muted-foreground">与模型选择一样，从下一个执行步骤生效。</Text>
           <RadioGroup class="gap-1">
             {efforts().map(effort => <Radio checked={effortValue() === effort.id} disabled={modelLocked()}
               testID={`reasoning-${effort.id}`} accessibilityLabel={effort.name}

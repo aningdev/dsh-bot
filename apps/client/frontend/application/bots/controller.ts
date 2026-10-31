@@ -1,23 +1,44 @@
-import { homedir } from 'os'
+import { mkdir } from 'fs/promises'
 import { readableError } from '../../infrastructure/dsh/connection'
+import { defaultBotWorkspace } from '../../infrastructure/storage/records'
 import { saveBot, updateBot, newBotId, type BotRecord } from './registry'
 import type { ConversationState } from '../conversation/state'
 import { splitModel } from '../models/selection'
+import type { BotModel } from './types'
 
 export function createBotCommands(state: ConversationState, hooks: {
   select(id: string): Promise<void>; initialize(bot: BotRecord): Promise<boolean>; replace(bot: BotRecord): void; report(error: unknown): void
+  resolveModel?(key: string, reasoningEffort?: string): BotModel
 }) {
-  const { bots, selectedId, creation, formPreset, formModel, formWorkspace, creating, rename, note, problem, unrecoverable, online } = state
+  const { bots, selectedId, creation, formPreset, formModel, formWorkspace, creating, rename, note, problem, unrecoverable, online, currentReasoningEffort } = state
   const current = () => bots().find(item => item.id === selectedId())
+
+  function modelFromForm(): BotModel {
+    const key = formModel()
+    if (hooks.resolveModel) return hooks.resolveModel(key, currentReasoningEffort())
+    return splitModel(key)
+  }
+
+  async function ensureOwnedWorkspace(botId: string, workspace: string): Promise<void> {
+    // Only auto-create the product-owned default; user-chosen paths must already exist.
+    if (workspace === defaultBotWorkspace(botId)) await mkdir(workspace, { recursive: true })
+  }
+
   async function saveNew() {
     const name = creation.name().trim()
     if (!name) { note.set('请填写 Bot 名称'); return }
     if (!creation.preset().trim()) { note.set('请选择模板'); return }
+    const id = creation.id().trim() || newBotId()
+    const workspace = creation.workspace().trim() || defaultBotWorkspace(id)
+    const model = hooks.resolveModel
+      ? hooks.resolveModel(creation.model(), creation.reasoningEffort())
+      : splitModel(creation.model())
     const record: BotRecord = {
-      id: newBotId(), name, preset: creation.preset().trim(), model: splitModel(creation.model()),
-      workspace: creation.workspace().trim() || homedir(), archived: false, createdAt: new Date().toISOString(),
+      id, name, preset: creation.preset().trim(), model,
+      workspace, archived: false, createdAt: new Date().toISOString(),
     }
     try {
+      await ensureOwnedWorkspace(id, workspace)
       await saveBot(record)
       bots.set([...bots(), record])
       creating.set(false)
@@ -47,7 +68,9 @@ export function createBotCommands(state: ConversationState, hooks: {
     const bot = current()
     if (!bot || bot.sessionId || bot.initializing) return
     try {
-      const changes = { preset: formPreset().trim(), workspace: formWorkspace().trim(), model: splitModel(formModel()) }
+      const workspace = formWorkspace().trim()
+      const changes = { preset: formPreset().trim(), workspace, model: modelFromForm() }
+      if (workspace) await ensureOwnedWorkspace(bot.id, workspace)
       const next = await updateBot(bot.id, latest => ({ ...latest, ...changes }))
       hooks.replace(next)
       problem.set(''); unrecoverable.set(false)
@@ -70,5 +93,21 @@ export function createBotCommands(state: ConversationState, hooks: {
     } catch (error) { hooks.report(error) }
   }
 
-  return { saveNew, saveRename, toggleArchive, repair, changePreset }
+  /** Workspace may change only before the Session pointer exists. */
+  async function changeWorkspace(path: string) {
+    const bot = current()
+    const workspace = path.trim()
+    if (!bot || !workspace || bot.sessionId || bot.initializing || bot.archived) return
+    try {
+      await ensureOwnedWorkspace(bot.id, workspace)
+      const next = await updateBot(bot.id, latest => latest.sessionId || latest.initializing ? latest : { ...latest, workspace })
+      hooks.replace(next)
+      formWorkspace.set(workspace)
+      problem.set(''); unrecoverable.set(false)
+      note.set('工作区已保存')
+      if (online()) await hooks.initialize(next)
+    } catch (error) { hooks.report(error) }
+  }
+
+  return { saveNew, saveRename, toggleArchive, repair, changePreset, changeWorkspace }
 }

@@ -1,5 +1,4 @@
 import { signal } from 'nsh'
-import { homedir } from 'os'
 import type { BotRecord } from '../bots/types'
 import type { BackendState } from '../backend/connection'
 import type { Message } from '../../infrastructure/dsh/history'
@@ -16,9 +15,16 @@ export function createConversationState() {
   const messages = signal<Message[]>([]), running = signal(false)
   const input = signal(''), sending = signal(false)
   const creating = signal(false)
-  const creation = { name: signal(''), preset: signal(''), model: signal(''), workspace: signal(homedir()) }
+  const creation = {
+    id: signal(''),
+    name: signal(''),
+    preset: signal(''),
+    model: signal(''),
+    reasoningEffort: signal<string | undefined>(undefined),
+    workspace: signal(''),
+  }
   const backendStatus = signal<BackendState>({ phase: 'unavailable', ready: false, message: '尚未连接后台' })
-  const formPreset = signal(''), formModel = signal(''), formWorkspace = signal(homedir())
+  const formPreset = signal(''), formModel = signal(''), formWorkspace = signal('')
   const rename = signal('')
   const models = signal<CatalogModel[]>([]), presets = signal<CatalogPreset[]>([]), catalogError = signal('')
   const pendingApproval = signal<ApprovalRequest | undefined>(undefined)
