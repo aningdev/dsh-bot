@@ -1,0 +1,46 @@
+{
+  "name": "@dsh-bot/dsh-plugin-bot-composition",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./remote": "./src/remote.ts",
+    "./composition": "./src/composition.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && bun scripts/rewrite-imports.ts",
+    "test": "bun test src/composition.test.ts src/store.test.ts",
+    "smoke:remote": "bun src/live-remote.smoke.ts",
+    "prepare": "bun run build",
+    "verify": "bun run test && bun run smoke:remote"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/cordis-plugin-include": "*",
+    "@deepseek-ai/cordis-plugin-loader": "*",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "bun-types": "^1.4.4",
+    "typescript": "5.8.3"
+  }
+}

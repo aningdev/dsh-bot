@@ -44,7 +44,7 @@ flowchart LR
 | `apps/host`   | 随 App 打包的 Rust 后台辅助程序：dsh 进程、控制与发现；后续内置 Bridge | 已实现，系统服务待签名验收 |
 | `scripts`     | 构建、macOS 组装与验收；不管理另一套 dsh 进程 | 已统一 Host 入口 |
 | `apps/relay`  | 设备连接路由、密文转发及有界投递队列                                     | 多端，本地实验帧转发     |
-| `packages/dsh-plugin-*` | 按需实现 Bot 能力及其专属数据、公开接口；通过声明式 bundle 装配 | 后续按能力新增 |
+| `packages/dsh-plugin-*` | 按需实现 Bot 能力及其专属数据、公开接口；通过声明式 bundle / `--patch` 装配 | 已开始：`dsh-plugin-bot-composition` |
 | `references`  | 固定提交的上游参考，供阅读与兼容性研究                                   | 只读参考           |
 
 旧 `apps/runner` 与 `packages/harness-runtime` 保持移除。允许按需求新增 `packages/dsh-plugin-*` 能力插件及其声明式 bundle，不预建空包。Bun 管理 JS 工作区和唯一 `bun.lock`；`apps/host` 由 Cargo 构建并锁定 Rust 依赖，不在 Rust 中重新实现 Harness。运行使用用户安装的官方 `dsh`；客户端与能力插件依赖消费 npm 公开产物，Harness 直接依赖精确锁定同一发行版，共享 Host 服务以兼容 peer 契约复用。参考源码不参与产品安装、源码导入、类型配置或打包。
@@ -146,7 +146,7 @@ dsh 意外退出时先撤销连接候选并通知客户端，再在同一宿主�
 
 模板复用上游 agent preset。`dsh-web-app` 当前内置 `standard`、`ptc`、`minimal`、`cordis`，由 `agent-preset-registry` 提供标识与展示信息；产品不维护另一份模板定义。
 
-新建 Bot 时选择模板，初始化 Session 时传入 `agentPreset`。首版 NSH 只列举、读取和选择已安装的内置或用户模板，提供自建流程说明，不实现模板编辑器。自建模板通过上游声明式 bundle 安装到共享 profile；preset 注册表没有接受模板 YAML 写回的 remote，不能把 settings 动态字段表单当作模板编辑接口。模板决定指令与工具选择，插件代码装配仍属于共享 profile，不提供每 Bot 独立插件运行环境。
+新建 Bot 时选择基模板，初始化 Session 时传入 `agentPreset`。NSH 列举、读取已安装模板；可在初始化前经 `dsh-plugin-bot-composition` 关闭部分可切换顶层子插件，由插件调用 `agentPresets.register` 派生稳定 preset ID 并持久化到 `$DSH_HOME`，启动时重放。自建完整模板仍通过上游声明式 bundle；preset 注册表没有接受任意 YAML 写回的 remote，不能把 settings 动态字段表单当作模板编辑器。指令仍来自模板子插件与工作区 `AGENTS.md`，不在客户端编辑。插件代码包仍装在共享 profile；每 Bot 差异只体现在派生 preset 的子插件列表，不得用 `plugin_manager.setPluginEnabled` 伪装。
 
 首版接受上游重启语义：运行中的 Agent 保留已装配的旧组合；后台重启后，恢复按 Session 保存的 preset ID 加载当前定义。缺失或无效时报错，不自动替换模板，也不持久保存旧代际的插件实现。模板 ID 固定不等于跨重启冻结模板内容。依据见 [preset 注册表说明](../references/deepseek-harness/packages/preset/agent-preset-registry/README.zh.md)。
 
@@ -165,8 +165,8 @@ NSH 负责能力展示、插件启停与配置管理界面、操作反馈及修�
 插件管理区分三种作用域：
 
 - profile 插件或 bundle 的安装、启用与停用属于共享 `web` profile 管理，可能影响全部 Bot，操作前说明影响。
-- Bot 能力组合使用上游 preset；初始化后仍固定模板 ID，不能把全局开关伪装成每 Bot 开关。
-- 每 Bot 或 Session 独立开关，只在插件明确提供并校验该作用域时展示；当前步骤、后续步骤或重启生效按插件契约说明。
+- Bot 能力组合使用上游 preset，或经 `dsh-plugin-bot-composition` 派生的 preset；初始化后仍固定模板 ID，不能把全局开关伪装成每 Bot 开关。
+- 每 Bot 子插件开关由 composition 插件提供并校验（仅可切换顶层工具类条目）；其他每 Bot/Session 开关只在对应插件明确提供时展示，生效时机按该插件契约说明。
 
 配置与激活状态以 dsh 插件侧为准，Host 和 Bot 文件不另存通用 `enabled` 副本。界面区分已安装、配置已启用、实际激活、需要重启及加载失败；保存成功不等于能力生效。HMR 与重启按上游结果分别呈现，不承诺所有插件即时生效，也不自动重启承载工作的后台。禁用不承诺撤回已开始的工具或副作用；停用、卸载和删除数据分别设计。
 
@@ -461,7 +461,7 @@ D、E 按实际需求推进，不预设彼此依赖。
 
 ### 已确认的重建边界
 
-首版接受模板按 ID 在重启后重新装配，初始化后固定模板与工作区；Session 恢复失败保留指针，模型不可用保留选择，均不静默替换。审批展示操作信息并允许离线等待，普通发送排队，停止保留未领取输入。独立指令、Bot 记忆、附件、独立目标管理、模板编辑器与永久删除不属于首版。规则分别见前文与蓝图；以下保留需要实际证明的技术契约。
+首版接受模板按 ID 在重启后重新装配（含派生 preset 的 ensure 重放），初始化后固定模板与工作区；Session 恢复失败保留指针，模型不可用保留选择，均不静默替换。审批展示操作信息并允许离线等待，普通发送排队，停止保留未领取输入。独立指令、Bot 记忆、附件、独立目标管理、完整模板编辑器与永久删除不属于首版。规则分别见前文与蓝图；以下保留需要实际证明的技术契约。
 
 ### 单机阶段必须通过的实测
 

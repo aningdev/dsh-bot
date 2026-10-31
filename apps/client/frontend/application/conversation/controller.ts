@@ -13,7 +13,7 @@ import type { BotModel } from '../bots/types'
 
 export function createConversation(connection: Connection, backend: BackendConnection) {
   const state = createConversationState()
-  const { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable } = state
+  const { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, formPreset, formModel, formWorkspace, formDisabledPlugins, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable } = state
   let selectionEpoch = 0, polling = false, disposed = false
   let stopFollow: (() => void) | undefined
   let draftWrites: Promise<unknown> = Promise.resolve()
@@ -22,7 +22,46 @@ export function createConversation(connection: Connection, backend: BackendConne
   const { initialize, ensurePreset } = createInitialization(connection, state, {
     waitDrafts: () => draftWrites, disposed: () => disposed, replace, watch,
   })
-  const botCommands = createBotCommands(state, { select, initialize, replace, report, resolveModel: resolveModelSelection })
+  const botCommands = createBotCommands(state, {
+    select, initialize, replace, report, resolveModel: resolveModelSelection,
+    connection: () => connection,
+    refreshCreationPlugins: loadCreationPlugins,
+    refreshFormPlugins: loadFormPlugins,
+  })
+
+  async function loadCreationPlugins(basePreset: string) {
+    if (!basePreset.trim() || !online()) {
+      state.creation.toggleablePlugins.set([])
+      return
+    }
+    try {
+      const preview = await connection.compositionPreview(basePreset)
+      const disabled = new Set(state.creation.disabledPlugins())
+      state.creation.toggleablePlugins.set(preview.plugins.map(item => ({
+        ...item,
+        enabled: !disabled.has(item.id),
+      })))
+    } catch {
+      state.creation.toggleablePlugins.set([])
+    }
+  }
+
+  async function loadFormPlugins(basePreset: string) {
+    if (!basePreset.trim() || !online()) {
+      state.formToggleablePlugins.set([])
+      return
+    }
+    try {
+      const preview = await connection.compositionPreview(basePreset)
+      const disabled = new Set(state.formDisabledPlugins())
+      state.formToggleablePlugins.set(preview.plugins.map(item => ({
+        ...item,
+        enabled: !disabled.has(item.id),
+      })))
+    } catch {
+      state.formToggleablePlugins.set([])
+    }
+  }
   function backendChanged(status: BackendState) {
     state.backendStatus.set(status)
     online.set(status.phase === 'connected')
@@ -97,12 +136,14 @@ export function createConversation(connection: Connection, backend: BackendConne
     unrecoverable.set(false)
     const bot = bots().find(item => item.id === id)
     if (!bot) return
-    formPreset.set(bot.preset)
+    formPreset.set(bot.basePreset || bot.preset)
     formWorkspace.set(bot.workspace)
     formModel.set(modelKey(bot.model))
+    formDisabledPlugins.set(bot.disabledPlugins ?? [])
     currentModel.set(modelKey(bot.model))
     currentReasoningEffort.set(bot.model.reasoningEffort)
     rename.set(bot.name)
+    void loadFormPlugins(bot.basePreset || bot.preset)
     input.set(bot.draft?.text ?? '')
     if (bot.draft?.state === 'unknown' || bot.draft?.state === 'pending') {
       note.set('上次发送结果待确认，请重新核对；不会自动重发。')
@@ -344,14 +385,45 @@ export function createConversation(connection: Connection, backend: BackendConne
     const id = newBotId()
     state.creation.id.set(id)
     state.creation.name.set('')
-    state.creation.preset.set(presets().find(item => item.isDefault)?.id ?? presets()[0]?.id ?? '')
+    const preset = presets().find(item => item.isDefault)?.id ?? presets()[0]?.id ?? ''
+    state.creation.preset.set(preset)
+    state.creation.disabledPlugins.set([])
     const first = models()[0]
     state.creation.model.set(first ? modelKey(first) : '')
     state.creation.reasoningEffort.set(first?.reasoning?.defaultEffort)
     state.creation.workspace.set(defaultBotWorkspace(id))
+    void loadCreationPlugins(preset)
   }
+
+  async function selectCreationPreset(presetId: string) {
+    state.creation.preset.set(presetId)
+    state.creation.disabledPlugins.set([])
+    await loadCreationPlugins(presetId)
+  }
+
+  function toggleCreationPlugin(entryId: string, enabled: boolean) {
+    const current = new Set(state.creation.disabledPlugins())
+    if (enabled) current.delete(entryId)
+    else current.add(entryId)
+    state.creation.disabledPlugins.set([...current])
+    state.creation.toggleablePlugins.set(state.creation.toggleablePlugins().map(item => (
+      item.id === entryId ? { ...item, enabled } : item
+    )))
+  }
+
+  function toggleFormPlugin(entryId: string, enabled: boolean) {
+    const current = new Set(state.formDisabledPlugins())
+    if (enabled) current.delete(entryId)
+    else current.add(entryId)
+    state.formDisabledPlugins.set([...current])
+    state.formToggleablePlugins.set(state.formToggleablePlugins().map(item => (
+      item.id === entryId ? { ...item, enabled } : item
+    )))
+  }
+
   return { ...state, ...botCommands, selected, visible, blocked, modelKey, modelLabel, presetLabel,
     select, send, stop, persistDraft, recheck, changeModel, decide, refreshModels, beginCreate,
+    selectCreationPreset, toggleCreationPlugin, toggleFormPlugin, loadCreationPlugins, loadFormPlugins,
     withdraw, backendChanged, connected, start, dispose,
   }
 }

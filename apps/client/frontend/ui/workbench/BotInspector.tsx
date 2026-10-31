@@ -9,8 +9,11 @@ const field = 'rounded-md border border-border bg-background p-2 text-sm text-fo
 export function BotInspector(props: { model: Workbench; edit(): void }) {
   const {
     damaged, online, problem, running, pendingApproval, currentModel, currentReasoningEffort,
-    selected, models, presets, rename, formWorkspace, modelLabel, presetLabel, saveRename, changeModel, changePreset, changeWorkspace, recheck,
+    selected, models, presets, rename, formWorkspace, formToggleablePlugins, formDisabledPlugins,
+    modelLabel, presetLabel, saveRename, changeModel, changePreset, changeWorkspace, changeDisabledPlugins,
+    toggleFormPlugin, recheck,
   } = props.model
+  const basePresetId = () => selected()?.basePreset || selected()?.preset || ''
 
   const activeKey = () => {
     const bot = selected()
@@ -67,17 +70,33 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
           <Text class="text-sm font-semibold text-foreground">指令（模板）</Text>
           {presetLocked()
             ? <View class="gap-1 rounded-md bg-muted p-3">
-              <Text class="text-sm text-foreground">{presetLabel(selected()!.preset)}</Text>
+              <Text class="text-sm text-foreground">{presetLabel(basePresetId())}</Text>
+              {selected()!.disabledPlugins?.length
+                ? <Text class="text-xs text-muted-foreground">已关闭：{selected()!.disabledPlugins!.join('、')}</Text>
+                : null}
               <Text class="text-xs text-muted-foreground">初始化后模板固定；需要不同指令请新建 Bot。</Text>
             </View>
             : <View class="gap-1">
               {presets().map(item => <Button id={`preset-${item.id}`} label={`${item.name}${item.isDefault ? '（默认）' : ''}${item.broken ? ` · 不可用` : ''}`}
                 disabled={!!item.broken || presetLocked()}
-                selected={selected()!.preset === item.id}
+                selected={basePresetId() === item.id}
                 onPress={() => { void changePreset(item.id) }} />)}
               {!presets().length ? <Text class="text-xs text-muted-foreground">尚未读取后台模板目录</Text> : null}
             </View>}
         </View>
+
+        {!presetLocked() && formToggleablePlugins().length ? <View class="gap-2">
+          <Text class="text-sm font-semibold text-foreground">子插件（可关闭）</Text>
+          <Text class="text-xs text-muted-foreground">组合写入后台派生模板；不是共享 profile 全局开关。</Text>
+          {formToggleablePlugins().map(item =>
+            <Button id={`inspector-plugin-${item.id}`} label={`${item.label}${item.enabled ? '' : ' · 已关闭'}`}
+              selected={item.enabled}
+              disabled={!online()}
+              onPress={() => toggleFormPlugin(item.id, !item.enabled)} />)}
+          <Button id="inspector-plugins-save" label="保存插件组合"
+            disabled={!online()}
+            onPress={() => { void changeDisabledPlugins(formDisabledPlugins()) }} />
+        </View> : null}
 
         <View class="gap-2">
           <Text class="text-sm font-semibold text-foreground">{modelSectionTitle()}</Text>

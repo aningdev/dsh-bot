@@ -103,7 +103,10 @@ export function createInitialization(connection: Connection, state: Conversation
           problem.set(models().length ? '请选择默认模型，选定后会初始化对话。' : '请先配置供应商与凭据，再选择默认模型。草稿已保留。')
           return false
         }
-        try { await ensurePreset(stored) }
+        try {
+          if (stored.preset.startsWith('dshbot_')) await connection.ensureComposition(stored.preset)
+          await ensurePreset(stored)
+        }
         catch (error) { problem.set(readableError(error)); return false }
       }
       const candidateSessionId = stored.initializing?.candidateSessionId ?? newSessionId()

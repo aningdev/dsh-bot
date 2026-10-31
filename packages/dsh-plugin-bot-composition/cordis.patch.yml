@@ -1,0 +1,6 @@
+# Product overlay when this package is installed into a profile via `dsh plugin add`.
+# Dev/Host/e2e prefer an absolute `lib/index.js` path in a launcher `--patch`.
+- insert:
+    - id: bot-composition
+      name: '@dsh-bot/dsh-plugin-bot-composition'
+      inject: [agentPresets]

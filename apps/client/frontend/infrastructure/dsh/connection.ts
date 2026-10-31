@@ -2,7 +2,25 @@
 // custom endpoints. Everything the UI needs is projected to plain values.
 import { AuthenticatedSocket } from './socket'
 import { Context, installConnection, TypertRegistry, Gateway, sessionRemote } from './sdk.js'
-import { agentPresetsRemote, settingsRemote, llmRemote } from './presets.js'
+import { agentPresetsRemote, settingsRemote, llmRemote, botCompositionRemote } from './presets.js'
+
+export interface ToggleablePlugin {
+  id: string
+  name: string
+  label: string
+  enabled: boolean
+}
+
+export interface CompositionPreview {
+  basePreset: string
+  plugins: ToggleablePlugin[]
+}
+
+export interface CompositionResult {
+  agentPreset: string
+  basePreset: string
+  disabledEntryIds: string[]
+}
 
 export type ApprovalDecision = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable'
 
@@ -59,6 +77,9 @@ const messages: Record<string, string> = {
   'agent-preset/not-found': '后台不存在该模板。',
   'agent-preset/invalid': '该模板无法在当前后台组合。',
   'agent-preset/locked': '对话已初始化，不能更换模板。',
+  'bot-composition/base-unavailable': '无法读取基模板组成。',
+  'bot-composition/not-found': '找不到已保存的派生模板。',
+  'bot-composition/invalid': '模板组合无效。',
 }
 
 /** Turn a Remote failure into one readable Chinese sentence. */
@@ -159,6 +180,7 @@ export class Connection {
       await ctx.remote.$mount(agentPresetsRemote)
       await ctx.remote.$mount(settingsRemote)
       await ctx.remote.$mount(llmRemote)
+      await ctx.remote.$mount(botCompositionRemote)
       const owner = this
       ctx.remote.$on('approval/request', function (this: any, request: any) {
         return owner.answerApproval(request.agent?.[agentTag] ?? this?.[agentTag], request)
@@ -244,6 +266,18 @@ export class Connection {
       ...(preset.broken ? { broken: String(preset.broken) } : {}),
       isDefault: preset.isDefault === true,
     }))
+  }
+
+  async compositionPreview(basePreset: string): Promise<CompositionPreview> {
+    return unwrap(await this.remote.botComposition.preview(basePreset))
+  }
+
+  async composePreset(request: { basePreset: string; disabledEntryIds?: string[]; name?: string }): Promise<CompositionResult> {
+    return unwrap(await this.remote.botComposition.compose(request))
+  }
+
+  async ensureComposition(agentPreset: string): Promise<CompositionResult> {
+    return unwrap(await this.remote.botComposition.ensure(agentPreset))
   }
 
   async createSession(request: { cwd: string; agentPreset: string; sessionId?: string; workspaceId?: string }): Promise<{ sessionId: string; agentPreset?: string }> {

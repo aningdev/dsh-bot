@@ -1,0 +1,4 @@
+- insert:
+    - id: bot-composition
+      name: "/Users/zhuxining/Code/dsh-bot/packages/dsh-plugin-bot-composition"
+      inject: [agentPresets]

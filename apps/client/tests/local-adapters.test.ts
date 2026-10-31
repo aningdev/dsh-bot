@@ -67,6 +67,33 @@ test('defaultBotWorkspace is stable under the data root and unique per Bot', asy
   expect(existsSync(workspace)).toBe(true)
 })
 
+test('registry round-trips derived preset echo fields', async () => {
+  await saveBot({
+    id: 'bot_composed',
+    name: 'Composed',
+    preset: 'dshbot_abcdef0123456789',
+    basePreset: 'standard',
+    disabledPlugins: ['tool-web', 'tool-bash'],
+    model: { provider: 'deepseek', model: 'flash' },
+    workspace: root,
+    archived: false,
+    createdAt: '2026-01-01T00:00:00Z',
+  })
+  expect(await loadBot('bot_composed')).toMatchObject({
+    preset: 'dshbot_abcdef0123456789',
+    basePreset: 'standard',
+    disabledPlugins: ['tool-web', 'tool-bash'],
+  })
+  await updateBot('bot_composed', latest => {
+    const { basePreset: _b, disabledPlugins: _d, ...rest } = latest
+    return { ...rest, preset: 'standard' }
+  })
+  const cleared = await loadBot('bot_composed')
+  expect(cleared?.preset).toBe('standard')
+  expect(cleared?.basePreset).toBeUndefined()
+  expect(cleared?.disabledPlugins).toBeUndefined()
+})
+
 test('registry distinguishes missing records, corrupt JSON and filesystem failures', async () => {
   expect(await readRecord('missing.json')).toBe('')
   await writeRecord('broken.json', '{')

@@ -8,8 +8,14 @@ import { DialogFrame } from '../shared/DialogFrame'
 const field = 'rounded-md border border-border bg-background p-2 text-sm text-foreground'
 
 export function CreateBotDialog(props: { model: Workbench }) {
-  const { note, creating, creation, models, presets, catalogError, saveNew } = props.model
-  const { name: formName, preset: formPreset, model: formModel, reasoningEffort, workspace: formWorkspace } = creation
+  const {
+    note, creating, creation, models, presets, catalogError, saveNew,
+    selectCreationPreset, toggleCreationPlugin,
+  } = props.model
+  const {
+    name: formName, preset: formPreset, model: formModel, reasoningEffort,
+    workspace: formWorkspace, toggleablePlugins,
+  } = creation
   const activeCatalog = () => models().find(item => modelKey(item) === formModel())
   const efforts = () => activeCatalog()?.reasoning?.efforts ?? []
 
@@ -22,9 +28,19 @@ export function CreateBotDialog(props: { model: Workbench }) {
       <Button id={`create-preset-${item.id}`} label={`${item.name}${item.isDefault ? '（默认）' : ''}${item.broken ? ' · 不可用' : ''}`}
         disabled={!!item.broken}
         selected={formPreset() === item.id}
-        onPress={() => formPreset.set(item.id)} />)}</View>
+        onPress={() => { void selectCreationPreset(item.id) }} />)}</View>
       : <Text class="text-xs text-muted-foreground">{catalogError() || '尚未读取后台模板目录，可手动填写模板标识'}</Text>}
-    <Input testID="bot-preset" class={field} accessibilityLabel="模板标识" value={formPreset()} onChange={value => formPreset.set(value)} />
+    <Input testID="bot-preset" class={field} accessibilityLabel="模板标识" value={formPreset()}
+      onChange={value => { void selectCreationPreset(value) }} />
+
+    {toggleablePlugins().length ? <View class="gap-2">
+      <Text class="text-sm text-foreground">子插件（可关闭）</Text>
+      <Text class="text-xs text-muted-foreground">关闭项会写入后台派生模板，不影响共享 profile 全局开关。指令仍来自模板与工作区 AGENTS.md。</Text>
+      {toggleablePlugins().map(item =>
+        <Button id={`create-plugin-${item.id}`} label={`${item.label}${item.enabled ? '' : ' · 已关闭'}`}
+          selected={item.enabled}
+          onPress={() => toggleCreationPlugin(item.id, !item.enabled)} />)}
+    </View> : null}
 
     <Text class="text-sm text-foreground">默认模型</Text>
     {models().length ? <View class="gap-1">{models().map(item =>

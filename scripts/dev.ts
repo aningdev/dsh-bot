@@ -64,7 +64,12 @@ async function main() {
     const afterBuild = await probe()
     if (afterBuild === 'invalid') throw new Error('宿主控制端点不可用或协议不兼容')
     if (afterBuild === 'missing') {
-      host = run(join(root, 'target/debug/dsh-host'), ['serve-app'])
+      host = run(join(root, 'target/debug/dsh-host'), ['serve-app'], {
+        env: {
+          ...process.env,
+          DSH_BOT_COMPOSITION_PLUGIN: join(root, 'packages/dsh-plugin-bot-composition'),
+        },
+      })
       const exit = completed(host)
       let exited = false
       void exit.then(() => { exited = true })

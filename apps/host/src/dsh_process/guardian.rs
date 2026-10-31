@@ -62,6 +62,34 @@ impl Drop for GuardedChild {
     }
 }
 
+/// Optional product overlay for `@dsh-bot/dsh-plugin-bot-composition`.
+/// Set `DSH_BOT_COMPOSITION_PLUGIN` to the absolute package directory.
+fn composition_patch(config: &Config) -> Result<Option<std::path::PathBuf>> {
+    let Some(plugin) = std::env::var_os("DSH_BOT_COMPOSITION_PLUGIN") else {
+        return Ok(None);
+    };
+    let plugin = std::path::PathBuf::from(plugin);
+    if !plugin.is_absolute() {
+        return Err("DSH_BOT_COMPOSITION_PLUGIN must be absolute".into());
+    }
+    if !plugin.is_dir() {
+        return Err("DSH_BOT_COMPOSITION_PLUGIN is not a directory".into());
+    }
+    let patch = config.runtime().join("bot-composition.patch.yml");
+    // Node ESM rejects directory imports; point at the built entry.
+    let entry = plugin.join("lib").join("index.js");
+    if !entry.is_file() {
+        return Err("DSH_BOT_COMPOSITION_PLUGIN is missing lib/index.js (run prepare:plugins)".into());
+    }
+    let name = serde_json::to_string(&entry.display().to_string())
+        .map_err(|error| error.to_string())?;
+    let body = format!(
+        "- insert:\n    - id: bot-composition\n      name: {name}\n      inject: [agentPresets]\n"
+    );
+    std::fs::write(&patch, body).map_err(|error| error.to_string())?;
+    Ok(Some(patch))
+}
+
 pub fn run(config: &Config) -> Result<()> {
     let lock = private_file(&config.runtime().join("lifecycle.lock"))?;
     // Do not block indefinitely or force-unlock an old guardian's cleanup barrier.
@@ -86,9 +114,22 @@ pub fn run(config: &Config) -> Result<()> {
     if rx.try_recv().is_ok() {
         return Ok(());
     }
+    let composition_patch = composition_patch(config)?;
     let mut command = Command::new(cli);
+    let mut args = vec!["--profile".into(), "web".into()];
+    if let Some(patch) = &composition_patch {
+        args.push("--patch".into());
+        args.push(patch.display().to_string());
+    }
+    args.extend([
+        "--host".into(),
+        "127.0.0.1".into(),
+        "--port".into(),
+        "0".into(),
+        "--no-open".into(),
+    ]);
     command
-        .args(["web", "--host", "127.0.0.1", "--port", "0", "--no-open"])
+        .args(&args)
         .env_clear()
         .envs(env)
         .current_dir(&config.root)

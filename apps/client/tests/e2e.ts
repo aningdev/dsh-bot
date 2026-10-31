@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startModelFixture } from './model-fixture'
@@ -56,7 +56,10 @@ await mkdir(testWorkspace, { recursive: true })
 
 const onboarding = process.argv.includes('--onboarding')
 const model = await startModelFixture()
-const backend = spawn('dsh', ['web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
+const compositionEntry = join(clientDir, '..', '..', 'packages', 'dsh-plugin-bot-composition', 'lib', 'index.js')
+const compositionPatch = join(root, 'bot-composition.patch.yml')
+await writeFile(compositionPatch, `- insert:\n    - id: bot-composition\n      name: ${JSON.stringify(compositionEntry)}\n      inject: [agentPresets]\n`)
+const backend = spawn('dsh', ['--profile', 'web', '--patch', compositionPatch, '--host', '127.0.0.1', '--port', '0', '--no-open'], {
   cwd: workspace,
   env: {
     ...process.env,
@@ -92,6 +95,7 @@ try {
     { label: '审批跨客户端重开恢复', file: 'tests/reconnect-approval.test.tsx', fault: '' },
     { label: '发送结果未知的后台核对', file: 'tests/unknown-send.test.tsx', fault: 'drop-prompt-result' },
     { label: '当前模型切换与恢复', file: 'tests/models.test.tsx', fault: '' },
+    { label: '每 Bot 子插件组合', file: 'tests/composition.test.tsx', fault: '' },
     { label: '供应商设置和凭据', file: 'tests/settings.test.tsx', fault: '' },
     { label: '配置成功但凭据存储失败', file: 'tests/credentials-failure.test.tsx', fault: '' },
   ]

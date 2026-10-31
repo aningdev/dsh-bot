@@ -31,11 +31,16 @@ export interface Draft {
 export interface BotRecord {
   id: string
   name: string
+  /** Session-bound agent preset id (base or derived `dshbot_*`). */
   preset: string
   model: BotModel
   workspace: string
   archived: boolean
   createdAt: string
+  /** Base template when `preset` is a derived composition; UI echo only. */
+  basePreset?: string
+  /** Disabled top-level plugin entry ids for a derived composition; UI echo only. */
+  disabledPlugins?: string[]
   /** The official Session pointer; absent until initialization committed. */
   sessionId?: string
   initializing?: Initializing

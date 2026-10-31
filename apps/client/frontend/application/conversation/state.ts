@@ -22,7 +22,11 @@ export function createConversationState() {
     model: signal(''),
     reasoningEffort: signal<string | undefined>(undefined),
     workspace: signal(''),
+    disabledPlugins: signal<string[]>([]),
+    toggleablePlugins: signal<{ id: string; name: string; label: string; enabled: boolean }[]>([]),
   }
+  const formDisabledPlugins = signal<string[]>([])
+  const formToggleablePlugins = signal<{ id: string; name: string; label: string; enabled: boolean }[]>([])
   const backendStatus = signal<BackendState>({ phase: 'unavailable', ready: false, message: '尚未连接后台' })
   const formPreset = signal(''), formModel = signal(''), formWorkspace = signal('')
   const rename = signal('')
@@ -33,6 +37,6 @@ export function createConversationState() {
   const queue = signal<any[]>([]), currentModel = signal(''), currentReasoningEffort = signal<string | undefined>(undefined)
   const approvalDetails = signal(false)
   const unrecoverable = signal(false)
-  return { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, creation, backendStatus, formPreset, formModel, formWorkspace, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable }
+  return { bots, damaged, selectedId, archivedView, online, ready, connecting, note, problem, messages, running, input, sending, creating, creation, backendStatus, formPreset, formModel, formWorkspace, formDisabledPlugins, formToggleablePlugins, rename, models, presets, catalogError, pendingApproval, approvalSessions, approvals, queue, currentModel, currentReasoningEffort, approvalDetails, unrecoverable }
 }
 export type ConversationState = ReturnType<typeof createConversationState>

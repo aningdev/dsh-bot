@@ -14,6 +14,9 @@ function parse(value: unknown): BotRecord | undefined {
   if (typeof record.preset !== 'string' || typeof record.workspace !== 'string') return undefined
   const model = record.model
   if (!model || typeof model.provider !== 'string' || typeof model.model !== 'string') return undefined
+  const disabledPlugins = Array.isArray(record.disabledPlugins)
+    ? record.disabledPlugins.filter((item): item is string => typeof item === 'string')
+    : undefined
   return {
     id: record.id,
     name: record.name,
@@ -22,6 +25,8 @@ function parse(value: unknown): BotRecord | undefined {
     workspace: record.workspace,
     archived: record.archived === true,
     createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
+    ...(typeof record.basePreset === 'string' ? { basePreset: record.basePreset } : {}),
+    ...(disabledPlugins?.length ? { disabledPlugins } : {}),
     ...(typeof record.sessionId === 'string' ? { sessionId: record.sessionId } : {}),
     ...(record.initializing ? { initializing: record.initializing } : {}),
     ...(record.draft ? { draft: record.draft } : {}),
