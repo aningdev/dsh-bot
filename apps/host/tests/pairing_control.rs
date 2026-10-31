@@ -18,7 +18,7 @@ impl Host {
     }
     fn spawn(root: &Path) -> Child {
         Command::new(env!("CARGO_BIN_EXE_dsh-host")).arg("serve").arg("--data-root").arg(root)
-            .arg("--dsh").arg(root.join("unused-dsh")).arg("--logs").arg(root.join("logs"))
+            .arg("--dsh").arg(root.join("unused-dsh"))
             .args(["--version", "fixture", "--startup-ms", "3000"])
             .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()
     }

@@ -23,7 +23,7 @@ impl Host {
     }
     fn launch(&mut self) {
         self.child = Some(Command::new(env!("CARGO_BIN_EXE_dsh-host")).arg("serve").arg("--data-root").arg(&self.root)
-            .arg("--dsh").arg(self.root.join("dsh")).arg("--logs").arg(self.root.join("logs"))
+            .arg("--dsh").arg(self.root.join("dsh"))
             .args(["--version", "fixture-1", "--startup-ms", "3000"])
             .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap());
         self.until(|| self.request("status", None).is_ok(), 5);

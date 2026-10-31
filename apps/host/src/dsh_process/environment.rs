@@ -82,20 +82,21 @@ pub(super) fn environment(
         "DSH_AGENTS_HOME".into(),
         config.root.join("agents").to_string_lossy().into_owned(),
     );
-    let cli = if config.cli.is_absolute() {
-        config.cli.clone()
-    } else {
-        use std::os::unix::fs::PermissionsExt;
-        std::env::split_paths(env.get("PATH").ok_or("登录环境缺少 PATH")?)
-            .map(|path| path.join("dsh"))
-            .find(|path| {
-                path.is_absolute()
-                    && path
-                        .metadata()
-                        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            })
-            .and_then(|path| std::fs::canonicalize(path).ok())
-            .ok_or("请先安装官方 dsh CLI；登录环境中找不到可执行文件")?
+    let cli = match &config.cli {
+        crate::CliSource::Executable(path) => path.clone(),
+        crate::CliSource::Official => {
+            use std::os::unix::fs::PermissionsExt;
+            std::env::split_paths(env.get("PATH").ok_or("登录环境缺少 PATH")?)
+                .map(|path| path.join("dsh"))
+                .find(|path| {
+                    path.is_absolute()
+                        && path
+                            .metadata()
+                            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+                })
+                .and_then(|path| std::fs::canonicalize(path).ok())
+                .ok_or("请先安装官方 dsh CLI；登录环境中找不到可执行文件")?
+        }
     };
     let mut command = Command::new(&cli);
     command.arg("--version").env_clear().envs(&env);

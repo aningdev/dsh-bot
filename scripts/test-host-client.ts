@@ -18,7 +18,7 @@ await mkdir(fixtureParent, { recursive: true })
 const fixtureRoot = await mkdtemp(join(fixtureParent, 'host-client-'))
 const bots = join(fixtureRoot, 'bots')
 await mkdir(join(root, 'logs'), { recursive: true })
-const child = spawn(resolve('target/debug/dsh-host'), ['serve', '--data-root', root, '--dsh', await realpath(cliPath), '--logs', join(root, 'logs'), '--version', version, '--startup-ms', '30000'], { stdio: ['ignore', 'ignore', 'inherit'] })
+const child = spawn(resolve('target/debug/dsh-host'), ['serve', '--data-root', root, '--dsh', await realpath(cliPath), '--version', version, '--startup-ms', '30000'], { stdio: ['ignore', 'ignore', 'inherit'] })
 const exited = new Promise<void>(resolve => child.once('exit', () => resolve()))
 try {
   const socket = join(root, 'host/control.sock')

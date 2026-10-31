@@ -134,16 +134,7 @@ impl DshProcess {
         let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
         command
             .arg("guardian")
-            .args(["--data-root"])
-            .arg(&self.config.root)
-            .arg("--dsh")
-            .arg(&self.config.cli)
-            .arg("--logs")
-            .arg(&self.config.logs)
-            .arg("--version")
-            .arg(&self.config.version)
-            .arg("--startup-ms")
-            .arg(self.config.startup_timeout.as_millis().to_string())
+            .args(self.config.arguments())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
