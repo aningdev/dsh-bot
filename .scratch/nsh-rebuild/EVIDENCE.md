@@ -4,22 +4,22 @@
 
 ## 环境与依赖
 
-- 官方后台：`dsh 0.2.1-rc.3`，由用户安装的官方 CLI 提供；客户端公开 npm 依赖精确锁定同一发行版。
+- 官方后台：`dsh 0.2.1-rc.5`，由用户安装的官方 CLI 提供；客户端公开 npm 依赖精确锁定同一发行版。
 - NSH：本机 `0.2.0`；客户端运行于 NSH，通过 Rust 原生 HTTP/WebSocket 传输复用公开 npm 客户端协议。
 - 根目录唯一 `bun.lock`；`bun install --frozen-lockfile` 通过且未产生更改。
 - `references/` 仅供研究；未修改子模块，不进入产品安装、导入或打包。
 
 ## 最终检查结果
 
-| 检查 | 结果与范围 |
-| --- | --- |
-| `bun run check` | 通过，包含原生 crate 与 NSH 客户端检查 |
-| `bun run test` | 通过：后台生命周期 7 项，NSH 基础与历史投影 2 项 |
-| `bun run test:e2e` | 通过：11 组场景、17 项测试，真实 NSH + 真实官方后台 + 外部确定性 Messages 服务 |
-| `bun run package:macos` | 通过，生成 `dist/macos/DSH Bot.app` |
-| `bun run test:package` | 通过：成品结构、无旧 Runner/runtime/npm 运行时、`codesign --verify --deep --strict` |
-| `git diff --check` | 通过 |
-| 原生窗口启动 | 实际成品进程成功创建 `DSH Bot` 窗口；系统锁屏，自动化返回 `degraded_reason=screen_locked`，未执行 GUI 输入 |
+| 检查                    | 结果与范围                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `bun run check`         | 通过，包含原生 crate 与 NSH 客户端检查                                                                     |
+| `bun run test`          | 通过：后台生命周期 7 项，NSH 基础与历史投影 2 项                                                           |
+| `bun run test:e2e`      | 通过：11 组场景、17 项测试，真实 NSH + 真实官方后台 + 外部确定性 Messages 服务                             |
+| `bun run package:macos` | 通过，生成 `dist/macos/DSH Bot.app`                                                                        |
+| `bun run test:package`  | 通过：成品结构、无旧 Runner/runtime/npm 运行时、`codesign --verify --deep --strict`                        |
+| `git diff --check`      | 通过                                                                                                       |
+| 原生窗口启动            | 实际成品进程成功创建 `DSH Bot` 窗口；系统锁屏，自动化返回 `degraded_reason=screen_locked`，未执行 GUI 输入 |
 
 NSH 端到端测试采用实际界面入口与原生传输。确定性服务只替代外部模型响应，不向官方后台加载测试插件，不读取用户真实模型密钥。故障注入仅在显式测试环境变量设置时生效。
 

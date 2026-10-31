@@ -6,14 +6,14 @@
 
 ## 任务与依赖
 
-| 编号 | 任务 | 阻塞于 | 可验证交付 |
-| --- | --- | --- | --- |
-| 01 | [NSH 与官方 dsh web 连通](issues/01-connectivity.md) | 无 | 在真实 NSH 中完成认证、Remote HTTP、认证 WebSocket、事件流、审批、取消及重连 |
-| 02 | [Bot 与唯一对话](issues/02-bot-conversation.md) | 01 | 创建未就绪 Bot、补齐配置、初始化、纯文本流、关闭重开和故障恢复 |
-| 03 | [输入与审批生命周期](issues/03-input-approval.md) | 02 | 排队撤回、未知结果核对、停止保留队列、审批与归档中的既有工作 |
-| 04 | [模型与凭据设置](issues/04-model-settings.md) | 02 | 共享设置、revision 冲突、密钥提交、默认/当前模型区分与切换 |
-| 05 | [launchd 生命周期](issues/05-launchd.md) | 01 | 托管官方后台、识别当前 ready 日志、版本检查、显式停止和异常恢复 |
-| 06 | [默认入口与成品交付](issues/06-macos-integration.md) | 03、04、05 | 切换新入口、移除旧 Runner/runtime、更新构建并完成 macOS 成品闭环 |
+| 编号 | 任务                                                 | 阻塞于     | 可验证交付                                                                   |
+| ---- | ---------------------------------------------------- | ---------- | ---------------------------------------------------------------------------- |
+| 01   | [NSH 与官方 dsh web 连通](issues/01-connectivity.md) | 无         | 在真实 NSH 中完成认证、Remote HTTP、认证 WebSocket、事件流、审批、取消及重连 |
+| 02   | [Bot 与唯一对话](issues/02-bot-conversation.md)      | 01         | 创建未就绪 Bot、补齐配置、初始化、纯文本流、关闭重开和故障恢复               |
+| 03   | [输入与审批生命周期](issues/03-input-approval.md)    | 02         | 排队撤回、未知结果核对、停止保留队列、审批与归档中的既有工作                 |
+| 04   | [模型与凭据设置](issues/04-model-settings.md)        | 02         | 共享设置、revision 冲突、密钥提交、默认/当前模型区分与切换                   |
+| 05   | [launchd 生命周期](issues/05-launchd.md)             | 01         | 托管官方后台、识别当前 ready 日志、版本检查、显式停止和异常恢复              |
+| 06   | [默认入口与成品交付](issues/06-macos-integration.md) | 03、04、05 | 切换新入口、移除旧 Runner/runtime、更新构建并完成 macOS 成品闭环             |
 
 ```mermaid
 flowchart LR
@@ -38,7 +38,7 @@ flowchart LR
 
 - 核对 GitHub tracker、标签与领域文档配置均已存在，不重复 setup。
 - 读取现有 spec #1，确认它及现存任务描述旧 Runner/插件/随包运行时路线；保留原记录，准备新 spec。
-- 读取当前实际 CLI；本机检测 dsh 为 `0.2.1-rc.3`，NSH 为 `0.2.0 (68531fb)`。dsh 可执行入口指向已安装的 DeepSeek Harness 应用运行时；这里只记录候选环境，不宣称整套受支持。
+- 读取当前实际 CLI；本机检测 dsh 为 `0.2.1-rc.5`，NSH 为 `0.2.0 (68531fb)`。dsh 可执行入口指向已安装的 DeepSeek Harness 应用运行时；这里只记录候选环境，不宣称整套受支持。
 - 在全新临时 DSH_HOME 启动官方 dsh web，回环随机端口就绪；未认证 Session Remote 为 401，根页面 token 换 Cookie 为 303，API connect 为 302，带 API Cookie 的 Session 列表 Remote 为 200。临时进程与数据已清理，凭据未写入本草案。
 - 核对上游和 NSH 公开接口：NSH HTTP 可以携带 Cookie；现有 WebSocket 接口无法直接携带该认证 Cookie，仍需实际验证原生传输适配。官方客户端可注入 fetch/createWebSocket，但 QuickJS 执行兼容性尚未证实。
 

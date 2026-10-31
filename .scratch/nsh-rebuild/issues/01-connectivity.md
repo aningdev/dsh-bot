@@ -18,7 +18,7 @@
 
 ## 验证记录
 
-实测环境：官方 `dsh 0.2.1-rc.3`（用户安装，npm `@deepseek-ai/*` 同版本）、`nsh 0.2.0 (68531fb)`、macOS。隔离程序在 `.scratch/nsh-transport/`，运行入口 `bun .scratch/nsh-transport/run.ts`，最近一次退出码 0。
+实测环境：官方 `dsh 0.2.1-rc.5`（用户安装，npm `@deepseek-ai/*` 同版本）、`nsh 0.2.0 (68531fb)`、macOS。隔离程序在 `.scratch/nsh-transport/`，运行入口 `bun .scratch/nsh-transport/run.ts`，最近一次退出码 0。
 
 - 数据根为临时目录（`DSH_HOME` 隔离），官方进程监听 `127.0.0.1:0`，只从受控 stdout 解析 `dsh web: http://127.0.0.1:<port>/?token=…` 就绪行。
 - 认证：`/connect?token=…` 返回 302 并下发 Cookie（根页面是 303，两者不混用）；无效 token 返回 401 且不下发 Cookie，失败显式可见。Cookie 只存在内存。

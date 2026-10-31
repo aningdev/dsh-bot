@@ -6,7 +6,7 @@
 
 ## 开发与运行
 
-需要 macOS、Bun、Rust 工具链、NSH 0.3.0，以及已安装的官方 dsh。当前仅支持经本机验证的 `0.2.1-rc.3`，精确值来自 [supported-dsh.json](apps/host/supported-dsh.json)；Host 启动时检查实际 CLI 版本，不自动升级或降级。Node 版本见 [`.node-version`](.node-version)。
+需要 macOS、Bun、Rust 工具链、NSH 0.3.0，以及已安装的官方 dsh。当前仅支持经本机验证的 `0.2.1-rc.5`，精确值来自 [supported-dsh.json](apps/host/supported-dsh.json)；Host 启动时检查实际 CLI 版本，不自动升级或降级。Node 版本见 [`.node-version`](.node-version)。
 
 ```sh
 bun install --frozen-lockfile
