@@ -11,12 +11,31 @@ import { SettingsPage } from './ui/settings/SettingsPage'
 
 type Route = { name: 'workbench' } | { name: 'settings' }
 
-function SettingsRoute(props: { connection: Connection; backend: BackendConnection; status(): BackendState; changed(): Promise<void>; close(): void }) {
+function SettingsRoute(props: {
+  workbench: Workbench
+  connection: Connection
+  backend: BackendConnection
+  status(): BackendState
+  changed(): Promise<void>
+  close(): void
+}) {
   const model = createModelSettings(props.connection, props.changed)
   const devices = createDeviceSettings()
   cleanup(model.dispose)
   cleanup(devices.dispose)
-  return <SettingsPage model={model} devices={devices} backend={props.backend} canUnregister={canUnregisterBackend()} status={props.status} close={props.close} />
+  return <SettingsPage
+    model={model}
+    devices={devices}
+    backend={props.backend}
+    canUnregister={canUnregisterBackend()}
+    status={props.status}
+    close={props.close}
+    archived={props.workbench.archived}
+    openArchived={(id) => { void props.workbench.select(id); props.close() }}
+    unarchive={(id) => {
+      void props.workbench.select(id).then(() => props.workbench.toggleArchive())
+    }}
+  />
 }
 
 export function ClientApp() {
@@ -31,7 +50,7 @@ export function ClientApp() {
     {route => <NavPage title={route.name === 'workbench' ? 'DSH Bot' : '设置'}>
       {route.name === 'workbench'
         ? <WorkbenchPage model={model} openSettings={() => nav.push({ name: 'settings' })} />
-        : <SettingsRoute connection={connection} backend={backend} status={model.backendStatus} changed={model.refreshModels} close={() => nav.pop()} />}
+        : <SettingsRoute workbench={model} connection={connection} backend={backend} status={model.backendStatus} changed={model.refreshModels} close={() => nav.pop()} />}
     </NavPage>}
   </NavStack></View>
 }

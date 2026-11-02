@@ -6,9 +6,10 @@ import type { deviceControl, PairingOffer } from './frontend/infrastructure/host
 test('shows the three product areas while the backend is unavailable', async () => {
   const app = await open('./App.tsx', { width: 1200, height: 800, platform: 'macos', network: {} })
   expect(app.texts()).toContain('新建 Bot')
-  expect(app.texts()).toContain('归档区')
+  expect(app.texts()).toContain('设置')
   expect(app.texts()).toContain('选择或新建 Bot')
   expect(app.texts()).toContain('后台未连接')
+  expect(app.texts()).not.toContain('归档区')
   app.dispose()
 })
 
