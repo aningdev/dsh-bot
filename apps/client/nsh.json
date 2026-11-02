@@ -10,7 +10,12 @@
     },
     "fs": {
       "read": ["/"],
-      "write": ["${homeDir}/.dsh-bot/bots", "${homeDir}/.dsh-bot-e2e", "${dataDir}"]
+      "write": [
+        "${homeDir}/.dsh-bot/bots",
+        "${homeDir}/.dsh-bot/workspaces",
+        "${homeDir}/.dsh-bot-e2e",
+        "${dataDir}"
+      ]
     },
     "process": {
       "execute": ["/usr/bin/id", "/bin/launchctl"],
