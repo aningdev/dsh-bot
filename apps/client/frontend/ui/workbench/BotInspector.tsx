@@ -1,10 +1,11 @@
 import { View, Text, Scroll } from 'nsh'
-import { Input, Radio, RadioGroup } from 'nsh/base'
+import { Input } from 'nsh/base'
 import { Button } from '../shared/Button'
+import { Select } from '../shared/Select'
 import type { Workbench } from '../../application/conversation/controller'
 import { modelKey } from '../../application/models/selection'
 
-const field = 'rounded-md border border-border bg-background p-2 text-sm text-foreground'
+const field = 'rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground'
 
 export function BotInspector(props: { model: Workbench; edit(): void }) {
   const {
@@ -32,22 +33,24 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
   const workspaceLocked = () => !!selected()?.sessionId || !!selected()?.initializing || !!selected()?.archived
   const modelSectionTitle = () => selected()?.sessionId ? '当前对话模型' : '默认模型'
 
-  return <Scroll class="w-80 border-l border-border bg-background">
+  return <Scroll class="flex-1 bg-background">
     <View class="p-4 gap-4">
       {selected() ? <View class="gap-4">
-        <View class="gap-2">
-          <View class="flex-row items-center gap-2">
-            <Text class="flex-1 text-lg font-semibold text-foreground">{selected()!.name}</Text>
-            <Button id="bot-settings" label="Bot 设置" onPress={props.edit} />
-          </View>
+        <View class="flex-row items-center gap-2">
+          <Text class="flex-1 text-lg font-semibold text-foreground">{selected()!.name}</Text>
+          <Button id="bot-settings" label="Bot 设置" onPress={props.edit} />
         </View>
 
         <View class="gap-2">
           <Text class="text-sm font-semibold text-foreground">名称</Text>
-          <Input testID="bot-rename" class={field} accessibilityLabel="Bot 名称" value={rename()} onChange={value => rename.set(value)} />
-          <Button id="bot-rename-save" label="保存名称"
-            disabled={!rename().trim() || rename().trim() === selected()!.name}
-            onPress={() => { void saveRename() }} />
+          <Input testID="bot-rename" class={field} accessibilityLabel="Bot 名称" value={rename()}
+            onChange={value => rename.set(value)}
+            onBlur={() => {
+              const next = rename().trim()
+              if (!next || next === selected()!.name) return
+              void saveRename()
+            }} />
+          <Text class="text-xs text-muted-foreground">修改后失焦即保存</Text>
         </View>
 
         <View class="gap-2">
@@ -76,11 +79,15 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
                 : null}
               <Text class="text-xs text-muted-foreground">初始化后模板固定；需要不同指令请新建 Bot。</Text>
             </View>
-            : <View class="gap-1">
-              {presets().map(item => <Button id={`preset-${item.id}`} label={`${item.name}${item.isDefault ? '（默认）' : ''}${item.broken ? ` · 不可用` : ''}`}
-                disabled={!!item.broken || presetLocked()}
-                selected={basePresetId() === item.id}
-                onPress={() => { void changePreset(item.id) }} />)}
+            : <View class="gap-2">
+              <Select id="inspector-preset" label="选择模板" value={basePresetId()}
+                placeholder="选择模板"
+                options={presets().map(item => ({
+                  value: item.id,
+                  label: `${item.name}${item.isDefault ? '（默认）' : ''}${item.broken ? ' · 不可用' : ''}`,
+                  disabled: !!item.broken,
+                }))}
+                onChange={value => { void changePreset(value) }} />
               {!presets().length ? <Text class="text-xs text-muted-foreground">尚未读取后台模板目录</Text> : null}
             </View>}
         </View>
@@ -102,26 +109,30 @@ export function BotInspector(props: { model: Workbench; edit(): void }) {
           <Text class="text-sm font-semibold text-foreground">{modelSectionTitle()}</Text>
           <Text class="text-xs text-muted-foreground">模型：{modelLabel(activeKey())}</Text>
           <Text class="text-xs text-muted-foreground">切换从下一个执行步骤生效；已准备的步骤继续使用原模型。</Text>
-          {models().length ? <View class="gap-1">
-            {models().map(item => <Button id={`select-model-${item.provider}-${item.model}`}
-              label={`${item.name}（${item.providerName}）`}
-              disabled={modelLocked()}
-              selected={activeKey() === modelKey(item)}
-              onPress={() => { void changeModel(modelKey(item)) }} />)}
-          </View> : <Text class="text-xs text-muted-foreground">尚未读取后台模型目录</Text>}
+          {models().length
+            ? <Select id="inspector-model" label="选择模型" value={activeKey()} disabled={modelLocked()}
+              placeholder="选择模型"
+              options={models().map(item => ({
+                value: modelKey(item),
+                label: `${item.name}（${item.providerName}）`,
+                id: `select-model-${item.provider}-${item.model}`,
+              }))}
+              onChange={value => { void changeModel(value) }} />
+            : <Text class="text-xs text-muted-foreground">尚未读取后台模型目录</Text>}
         </View>
 
         {efforts().length ? <View class="gap-2">
           <Text class="text-sm font-semibold text-foreground">推理强度</Text>
           <Text class="text-xs text-muted-foreground">与模型选择一样，从下一个执行步骤生效。</Text>
-          <RadioGroup class="gap-1">
-            {efforts().map(effort => <Radio checked={effortValue() === effort.id} disabled={modelLocked()}
-              testID={`reasoning-${effort.id}`} accessibilityLabel={effort.name}
-              onChange={() => { void changeModel(activeKey(), effort.id) }}
-              class="rounded-md px-3 py-2 hover:bg-muted checked:bg-accent">
-              <Text class="text-sm text-foreground">{effort.name}</Text>
-            </Radio>)}
-          </RadioGroup>
+          <Select id="inspector-reasoning" label="选择推理强度" value={effortValue() ?? ''}
+            disabled={modelLocked()}
+            placeholder="选择强度"
+            options={efforts().map(effort => ({
+              value: effort.id,
+              label: effort.name,
+              id: `reasoning-${effort.id}`,
+            }))}
+            onChange={value => { void changeModel(activeKey(), value) }} />
         </View> : null}
 
         <Text testID="session-pointer" class="text-xs text-muted-foreground">

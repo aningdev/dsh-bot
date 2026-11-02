@@ -328,7 +328,8 @@ export function createConversation(connection: Connection, backend: BackendConne
     } catch (error) { if (!disposed) note.set(readableError(error)) }
   }
 
-  const visible = () => bots().filter(item => item.archived === archivedView())
+  const visible = () => bots().filter(item => !item.archived)
+  const archived = () => bots().filter(item => item.archived)
   // Derived values stay functions: the component body runs once, only signal
   // reads inside JSX are re-evaluated when state changes.
   function resolveModelSelection(key: string, reasoningEffort?: string): BotModel {
@@ -421,7 +422,7 @@ export function createConversation(connection: Connection, backend: BackendConne
     )))
   }
 
-  return { ...state, ...botCommands, selected, visible, blocked, modelKey, modelLabel, presetLabel,
+  return { ...state, ...botCommands, selected, visible, archived, blocked, modelKey, modelLabel, presetLabel,
     select, send, stop, persistDraft, recheck, changeModel, decide, refreshModels, beginCreate,
     selectCreationPreset, toggleCreationPlugin, toggleFormPlugin, loadCreationPlugins, loadFormPlugins,
     withdraw, backendChanged, connected, start, dispose,

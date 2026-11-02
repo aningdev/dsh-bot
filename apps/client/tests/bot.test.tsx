@@ -123,7 +123,7 @@ test('c) 关闭重开恢复同一对话与未发送草稿，且不重放 prompt'
   // 初始化后模板与工作区固定，改名不影响对话指针
   await second.clear('id:bot-rename')
   await second.type('id:bot-rename', '改名后的 Bot')
-  await second.press('id:bot-rename-save')
+  await second.press('id:recheck')
   await eventually(second, async () => (await record('改名后的 Bot')).sessionId === before.sessionId)
   const renamed = await record('改名后的 Bot')
   expect(renamed.preset).toBe(before.preset)
